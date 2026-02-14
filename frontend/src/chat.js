@@ -17,7 +17,7 @@ let currentRole = null;
 let currentRoom = null;
 let lastMessageId = 0;
 let websocket = null;
-let adminPollInterval = null;
+
 let isLoadingMessages = false;
 let reconnectAttempts = 0;
 let maxReconnectAttempts = 5;
@@ -25,7 +25,7 @@ let reconnectTimeout = null;
 let userColors = {};  // Cache of username -> color mappings
 let userNicknames = {};  // Cache of username -> nickname (null if not set)
 let serverColor = '#6366f1';  // Cached server color for theme reset
-let currentRegMode = 'closed';  // Current registration mode
+
 let roomMeta = {};  // Cache of room_id -> { room_type, display_name, members }
 let roomsWs = null;  // WebSocket subscription for room list updates
 let roomsWsReconnectTimeout = null;
@@ -497,11 +497,6 @@ async function initializeChatView() {
         badge.textContent = currentRole === 'admin' ? 'ADMIN' : 'MOD';
         badge.classList.remove('hidden');
         document.getElementById('adminPanelBtn').classList.remove('hidden');
-        // Hide admin-only sections for moderators
-        if (currentRole === 'moderator') {
-            document.querySelectorAll('.admin-only').forEach(el => el.style.display = 'none');
-        }
-        loadAdminSettings();
     }
 
     await loadRooms();
@@ -548,53 +543,9 @@ function logout() {
     }
     if (reconnectTimeout) clearTimeout(reconnectTimeout);
     if (roomsWsReconnectTimeout) clearTimeout(roomsWsReconnectTimeout);
-    if (adminPollInterval) clearInterval(adminPollInterval);
 
     history.replaceState(null, '', window.location.pathname);
     window.location.href = '/login.html';
-}
-
-function toggleAdminPanel() {
-    document.getElementById('adminPanel').classList.toggle('open');
-    updatePendingPoll();
-}
-
-function updatePendingPoll() {
-    const panelOpen = document.getElementById('adminPanel').classList.contains('open');
-    const shouldPoll = panelOpen && currentRegMode === 'approval_required';
-
-    if (shouldPoll && !adminPollInterval) {
-        loadPendingUsers();
-        adminPollInterval = setInterval(loadPendingUsers, 5000);
-    } else if (!shouldPoll && adminPollInterval) {
-        clearInterval(adminPollInterval);
-        adminPollInterval = null;
-    }
-}
-
-async function loadAdminSettings() {
-    try {
-        const resp = await fetch(`${API_URL}/server`, {
-            headers: { 'Authorization': `Bearer ${sessionToken}` }
-        });
-        const data = await resp.json();
-
-        updateRegModeSlider(data.registration_mode);
-        loadPendingUsers();
-        loadAllUsers();
-        loadUserPreferences();
-        if (data.registration_mode === 'invite_only') {
-            loadInviteTokens();
-        }
-        // Set server color picker
-        const serverColorPicker = document.getElementById('serverColorPicker');
-        if (serverColorPicker && data.server_color) {
-            serverColorPicker.value = data.server_color;
-            serverColor = data.server_color;
-        }
-    } catch (error) {
-        console.error('Failed to load admin settings:', error);
-    }
 }
 
 async function loadUserColors() {
@@ -756,399 +707,6 @@ async function updateUserNickname() {
 async function clearUserNickname() {
     document.getElementById('userNickname').value = '';
     await updateUserNickname();
-}
-
-async function updateServerColor() {
-    const color = document.getElementById('serverColorPicker').value;
-    try {
-        const response = await fetch(`${API_URL}/server/color`, {
-            method: 'PUT',
-            headers: {
-                'Authorization': `Bearer ${sessionToken}`,
-                'Content-Type': 'application/json'
-            },
-            body: JSON.stringify({ server_color: color })
-        });
-        if (response.ok) {
-            serverColor = color;
-            // Apply immediately if user has no override
-            const themeInput = document.getElementById('userThemeColor');
-            if (themeInput && themeInput.value === serverColor) {
-                applyThemeColor(color);
-            }
-        }
-    } catch (error) {
-        console.error('[HTTP] Error updating server color:', error);
-        alert('Failed to update server color');
-    }
-}
-
-const REG_MODES = ['closed', 'invite_only', 'approval_required', 'open'];
-const REG_MODE_DESCRIPTIONS = {
-    closed: 'No new registrations allowed',
-    invite_only: 'Users can register with an invite link',
-    approval_required: 'Users register and wait for admin approval',
-    open: 'Anyone can register and immediately join'
-};
-
-function updateRegModeSlider(mode) {
-    const slider = document.getElementById('regModeSlider');
-    const index = REG_MODES.indexOf(mode);
-    if (index >= 0) {
-        slider.value = index;
-    }
-    currentRegMode = mode;
-    updateRegModeLabel();
-    updateInviteSectionVisibility(mode);
-    updatePendingPoll();
-}
-
-function updateRegModeLabel() {
-    const slider = document.getElementById('regModeSlider');
-    const desc = document.getElementById('regModeDescription');
-    const mode = REG_MODES[slider.value];
-    desc.textContent = REG_MODE_DESCRIPTIONS[mode];
-
-    // Update label highlighting
-    const labels = document.querySelectorAll('.reg-mode-labels span');
-    labels.forEach((label, i) => {
-        label.classList.toggle('active', i == slider.value);
-    });
-}
-
-async function setRegistrationMode() {
-    const slider = document.getElementById('regModeSlider');
-    const mode = REG_MODES[slider.value];
-
-    try {
-        const resp = await fetch(`${API_URL}/server/registration`, {
-            method: 'PUT',
-            headers: {
-                'Content-Type': 'application/json',
-                'Authorization': `Bearer ${sessionToken}`
-            },
-            body: JSON.stringify({ mode })
-        });
-        const data = await resp.json();
-        updateRegModeSlider(data.mode);
-    } catch (error) {
-        console.error('Failed to set registration mode:', error);
-    }
-}
-
-function updateInviteSectionVisibility(mode) {
-    const section = document.getElementById('inviteSection');
-    if (mode === 'invite_only') {
-        section.classList.remove('hidden');
-        loadInviteTokens();
-    } else {
-        section.classList.add('hidden');
-    }
-}
-
-async function generateInviteLink() {
-    try {
-        const resp = await fetch(`${API_URL}/server/invites`, {
-            method: 'POST',
-            headers: {
-                'Authorization': `Bearer ${sessionToken}`
-            }
-        });
-        const data = await resp.json();
-        loadInviteTokens();
-    } catch (error) {
-        console.error('Failed to generate invite:', error);
-    }
-}
-
-async function loadInviteTokens() {
-    try {
-        const resp = await fetch(`${API_URL}/server/invites`, {
-            headers: { 'Authorization': `Bearer ${sessionToken}` }
-        });
-        const data = await resp.json();
-
-        const inviteList = document.getElementById('inviteList');
-
-        if (data.invites.length === 0) {
-            inviteList.innerHTML = '<p style="color: #999; font-size: 13px;">No invite links yet</p>';
-        } else {
-            inviteList.innerHTML = data.invites.map(inv => {
-                const inviteUrl = `${window.location.origin}/register.html?invite=${inv.token}`;
-                const status = inv.used_by
-                    ? `<span class="invite-used">Used by ${escapeHtml(inv.used_by)}</span>`
-                    : `<span class="invite-available">Available</span>`;
-                return `
-                    <div class="invite-item">
-                        <div class="invite-info">
-                            <div class="invite-url" onclick="copyInviteLink('${inviteUrl}')" title="Click to copy">${inviteUrl}</div>
-                            <div class="invite-meta">${status} &middot; by ${escapeHtml(inv.created_by)}</div>
-                        </div>
-                        ${!inv.used_by ? `<button class="delete-btn invite-delete-btn" onclick="deleteInvite('${inv.token}')">✕</button>` : ''}
-                    </div>
-                `;
-            }).join('');
-        }
-    } catch (error) {
-        console.error('Failed to load invites:', error);
-    }
-}
-
-function copyInviteLink(url) {
-    navigator.clipboard.writeText(url).then(() => {
-        // Brief visual feedback
-        const el = event.target;
-        const original = el.textContent;
-        el.textContent = 'Copied!';
-        setTimeout(() => { el.textContent = original; }, 1500);
-    });
-}
-
-async function deleteInvite(token) {
-    try {
-        await fetch(`${API_URL}/server/invites/${encodeURIComponent(token)}`, {
-            method: 'DELETE',
-            headers: { 'Authorization': `Bearer ${sessionToken}` }
-        });
-        loadInviteTokens();
-    } catch (error) {
-        console.error('Failed to delete invite:', error);
-    }
-}
-
-async function loadPendingUsers() {
-    try {
-        const resp = await fetch(`${API_URL}/users/pending`, {
-            headers: { 'Authorization': `Bearer ${sessionToken}` }
-        });
-        const data = await resp.json();
-
-        const pendingList = document.getElementById('pendingList');
-        const pendingCount = document.getElementById('pendingCount');
-
-        pendingCount.textContent = data.pending.length;
-
-        if (data.pending.length === 0) {
-            pendingList.innerHTML = '<p style="color: #999;">No pending approvals</p>';
-        } else {
-            pendingList.innerHTML = data.pending.map(user => `
-                <div class="pending-user">
-                    <h4>👤 ${user.username}</h4>
-                    <div class="code">Code: ${user.approval_code}</div>
-                    <div style="font-size: 12px; color: #666;">${new Date(user.registered_at).toLocaleString()}</div>
-                    <div class="pending-user-actions">
-                        <button class="approve-btn" onclick="window.approveUser('${user.approval_code}')">✓ Approve</button>
-                        <button class="reject-btn" onclick="window.rejectUser('${user.approval_code}')">✕ Reject</button>
-                    </div>
-                </div>
-            `).join('');
-        }
-    } catch (error) {
-        console.error('Failed to load pending users:', error);
-    }
-}
-
-async function approveUser(code) {
-    try {
-        const resp = await fetch(`${API_URL}/users/pending/approve`, {
-            method: 'POST',
-            headers: {
-                'Content-Type': 'application/json',
-                'Authorization': `Bearer ${sessionToken}`
-            },
-            body: JSON.stringify({ approval_code: code })
-        });
-
-        if (resp.ok) {
-            loadPendingUsers();
-            loadAllUsers();
-        }
-    } catch (error) {
-        console.error('Failed to approve user:', error);
-    }
-}
-
-async function rejectUser(code) {
-    try {
-        const resp = await fetch(`${API_URL}/users/pending/reject`, {
-            method: 'POST',
-            headers: {
-                'Content-Type': 'application/json',
-                'Authorization': `Bearer ${sessionToken}`
-            },
-            body: JSON.stringify({ approval_code: code })
-        });
-
-        if (resp.ok) {
-            loadPendingUsers();
-        }
-    } catch (error) {
-        console.error('Failed to reject user:', error);
-    }
-}
-
-async function loadAllUsers() {
-    try {
-        const resp = await fetch(`${API_URL}/users`, {
-            headers: { 'Authorization': `Bearer ${sessionToken}` }
-        });
-        const data = await resp.json();
-
-        const usersList = document.getElementById('usersList');
-        const userCount = document.getElementById('userCount');
-
-        userCount.textContent = data.users.length;
-
-        if (data.users.length === 0) {
-            usersList.innerHTML = '<p style="color: #999;">No users</p>';
-        } else {
-            const isAdmin = currentRole === 'admin';
-            usersList.innerHTML = data.users.map(user => {
-                let actions = '';
-                if (isAdmin && user.username !== currentUsername) {
-                    if (user.role === 'user') {
-                        actions += `<button class="promote-btn" onclick="window.setUserRole('${user.username}', 'moderator')">Make Mod</button>`;
-                        actions += `<button class="promote-btn" onclick="window.setUserRole('${user.username}', 'admin')">Make Admin</button>`;
-                    } else if (user.role === 'moderator') {
-                        actions += `<button class="demote-btn" onclick="window.setUserRole('${user.username}', 'user')">Remove Mod</button>`;
-                        actions += `<button class="promote-btn" onclick="window.setUserRole('${user.username}', 'admin')">Make Admin</button>`;
-                    } else {
-                        actions += `<button class="demote-btn" onclick="window.setUserRole('${user.username}', 'user')">Remove Admin</button>`;
-                    }
-                    actions += `<button class="delete-btn" onclick="window.deleteUser('${user.username}')">Delete</button>`;
-                }
-                return `
-                    <div class="user-item">
-                        <div class="user-info">
-                            <span class="user-name">${user.username}</span>
-                            <span class="user-role ${user.role}">${user.role.toUpperCase()}</span>
-                        </div>
-                        <div class="user-actions">${actions}</div>
-                    </div>
-                `;
-            }).join('');
-        }
-    } catch (error) {
-        console.error('Failed to load users:', error);
-    }
-}
-
-async function setUserRole(username, role) {
-    const action = role === 'user' ? 'demote' : 'promote';
-    if (!confirm(`Are you sure you want to ${action} ${username} to ${role}?`)) {
-        return;
-    }
-
-    try {
-        const resp = await fetch(`${API_URL}/users/${encodeURIComponent(username)}/role`, {
-            method: 'PUT',
-            headers: {
-                'Content-Type': 'application/json',
-                'Authorization': `Bearer ${sessionToken}`
-            },
-            body: JSON.stringify({ role })
-        });
-
-        if (resp.ok) {
-            loadAllUsers();
-        } else {
-            const data = await resp.json();
-            alert(`Failed: ${data.detail || 'Unknown error'}`);
-        }
-    } catch (error) {
-        console.error('Failed to set user role:', error);
-        alert('Failed to change user role');
-    }
-}
-
-async function deleteUser(username) {
-    if (!confirm(`Are you sure you want to delete user "${username}"? This cannot be undone.`)) {
-        return;
-    }
-
-    try {
-        const resp = await fetch(`${API_URL}/users/${encodeURIComponent(username)}`, {
-            method: 'DELETE',
-            headers: { 'Authorization': `Bearer ${sessionToken}` }
-        });
-
-        if (resp.ok) {
-            loadAllUsers();
-        } else {
-            const data = await resp.json();
-            alert(`Failed: ${data.detail || 'Unknown error'}`);
-        }
-    } catch (error) {
-        console.error('Failed to delete user:', error);
-        alert('Failed to delete user');
-    }
-}
-
-async function loadUserPreferences() {
-    try {
-        const response = await fetch(`${API_URL}/users`, {
-            headers: {
-                'Authorization': `Bearer ${sessionToken}`
-            }
-        });
-        if (!response.ok) return;
-
-        const data = await response.json();
-        const preferencesList = document.getElementById('userPreferencesList');
-
-        // Fetch preferences for each user
-        const prefsPromises = data.users.map(async (user) => {
-            const prefsResponse = await fetch(`${API_URL}/users/${user.username}/preferences`, {
-                headers: {
-                    'Authorization': `Bearer ${sessionToken}`
-                }
-            });
-            if (prefsResponse.ok) {
-                const prefs = await prefsResponse.json();
-                return { ...user, color: prefs.color };
-            }
-            return { ...user, color: '#1976d2' };
-        });
-
-        const usersWithPrefs = await Promise.all(prefsPromises);
-
-        preferencesList.innerHTML = usersWithPrefs.map(user => `
-            <div class="preference-item">
-                <span class="user-name" style="color: ${user.color};">${user.username}</span>
-                <input type="color"
-                       id="color-${user.username}"
-                       value="${user.color}"
-                       onchange="updateUserColorAdmin('${user.username}')">
-            </div>
-        `).join('');
-
-    } catch (error) {
-        console.error('[HTTP] Error loading user preferences:', error);
-    }
-}
-
-async function updateUserColorAdmin(username) {
-    const color = document.getElementById(`color-${username}`).value;
-    try {
-        const response = await fetch(`${API_URL}/users/${username}/preferences`, {
-            method: 'PUT',
-            headers: {
-                'Authorization': `Bearer ${sessionToken}`,
-                'Content-Type': 'application/json'
-            },
-            body: JSON.stringify({ color })
-        });
-        if (response.ok) {
-            userColors[username] = color;
-            // Refresh messages if this user has messages in current room
-            if (currentRoom) {
-                await loadMessages();
-            }
-        }
-    } catch (error) {
-        console.error('[HTTP] Error updating user color:', error);
-        alert('Failed to update user color');
-    }
 }
 
 async function loadRooms() {
@@ -1755,24 +1313,12 @@ async function startDM(targetUsernames) {
 
 // Expose functions to window for inline event handlers
 window.logout = logout;
-window.toggleAdminPanel = toggleAdminPanel;
 window.toggleSettingsPanel = toggleSettingsPanel;
-window.updateRegModeLabel = updateRegModeLabel;
-window.setRegistrationMode = setRegistrationMode;
-window.generateInviteLink = generateInviteLink;
-window.copyInviteLink = copyInviteLink;
-window.deleteInvite = deleteInvite;
-window.approveUser = approveUser;
-window.rejectUser = rejectUser;
-window.setUserRole = setUserRole;
-window.deleteUser = deleteUser;
 window.updateUserColor = updateUserColor;
 window.updateUserThemeColor = updateUserThemeColor;
 window.resetUserThemeColor = resetUserThemeColor;
 window.updateUserNickname = updateUserNickname;
 window.clearUserNickname = clearUserNickname;
-window.updateServerColor = updateServerColor;
-window.updateUserColorAdmin = updateUserColorAdmin;
 window.openCreateRoomModal = openCreateRoomModal;
 window.closeCreateRoomModal = closeCreateRoomModal;
 window.createRoom = createRoom;

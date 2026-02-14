@@ -1,0 +1,66 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Admin - Mini Chat</title>
+</head>
+<body>
+    <div class="admin-page">
+        <div class="admin-page-header">
+            <div style="display: flex; align-items: center; gap: 12px;">
+                <h1>Admin Panel</h1>
+            </div>
+            <a href="/chat.html" class="admin-back-btn">Back to Chat</a>
+        </div>
+
+        <div class="admin-page-content">
+            <div class="admin-section admin-only">
+                <h3>Server Theme</h3>
+                <div class="preference-item">
+                    <label for="serverColorPicker">Server color:</label>
+                    <input type="color" id="serverColorPicker" value="#6366f1" onchange="updateServerColor()">
+                </div>
+            </div>
+
+            <div class="admin-section admin-only">
+                <h3>Registration Mode</h3>
+                <div class="reg-mode-slider">
+                    <input type="range" id="regModeSlider" min="0" max="3" step="1" value="0"
+                           oninput="updateRegModeLabel()" onchange="setRegistrationMode()">
+                    <div class="reg-mode-labels">
+                        <span>Closed</span>
+                        <span>Invite</span>
+                        <span>Approval</span>
+                        <span>Open</span>
+                    </div>
+                    <p id="regModeDescription" class="reg-mode-description">Registration is closed</p>
+                </div>
+            </div>
+
+            <div id="inviteSection" class="admin-section admin-only hidden">
+                <h3>Invite Links</h3>
+                <button class="invite-generate-btn" onclick="generateInviteLink()">Generate Invite Link</button>
+                <div id="inviteList"></div>
+            </div>
+
+            <div class="admin-section">
+                <h3>Pending Approvals (<span id="pendingCount">0</span>)</h3>
+                <div id="pendingList"></div>
+            </div>
+
+            <div class="admin-section">
+                <h3>All Users (<span id="userCount">0</span>)</h3>
+                <div id="usersList"></div>
+            </div>
+
+            <div class="admin-section admin-only">
+                <h3>User Preferences</h3>
+                <div id="userPreferencesList"></div>
+            </div>
+        </div>
+    </div>
+
+    <script type="module" src="/src/admin.js"></script>
+</body>
+</html>
