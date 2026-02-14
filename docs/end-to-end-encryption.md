@@ -130,104 +130,188 @@ async function decryptMessage(roomKey, encryptedData) {
 }
 ```
 
-### 3. Room Key Distribution
+### 3. Database Schema
 
-```python
-# Backend: Store encrypted room keys (Python)
-# Each user gets the room key encrypted with their public key
+```sql
+CREATE TABLE user_public_keys (
+    user_id TEXT PRIMARY KEY,
+    public_key TEXT NOT NULL,  -- JWK format
+    created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+);
 
-import json
-from base64 import b64encode, b64decode
-
-# When user joins room:
-# 1. Generate room key (done in JS, sent encrypted)
-# 2. For each member, encrypt room key with their public key
-# 3. Store encrypted keys in DB
-
-# Database schema addition:
-"""
 CREATE TABLE room_keys (
     room_id TEXT NOT NULL,
     user_id TEXT NOT NULL,
-    encrypted_key TEXT NOT NULL,  -- Room key encrypted with user's public key
+    key_epoch INTEGER NOT NULL DEFAULT 0,  -- increments on key rotation
+    encrypted_key TEXT NOT NULL,            -- room key encrypted with user's public key
     created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
-    PRIMARY KEY (room_id, user_id)
+    PRIMARY KEY (room_id, user_id, key_epoch)
 );
-
-CREATE TABLE user_public_keys (
-    user_id TEXT PRIMARY KEY,
-    public_key TEXT NOT NULL,  -- PEM or JWK format
-    created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
-);
-"""
 ```
 
-### 4. Client-Side Flow
+Messages store which epoch they were encrypted under:
+
+```sql
+-- Addition to existing messages table
+key_epoch INTEGER NOT NULL DEFAULT 0
+```
+
+### 4. Room Key Distribution
+
+```python
+# Backend: Store encrypted room keys
+# Each user gets the room key encrypted with their public key
+# Server never sees the plaintext room key
+
+# When room is created:
+# 1. Creator generates AES room key (in JS)
+# 2. Creator encrypts room key with each member's public key
+# 3. Server stores encrypted keys in room_keys table
+
+# When a new member is invited:
+# 1. Inviter fetches new member's public key
+# 2. Inviter encrypts room key with new member's public key
+# 3. Server stores the encrypted key blob
+```
+
+### 5. Client-Side Flow
 
 ```javascript
+// Room keys indexed by room + epoch
+// roomKeys[roomId] = { [epoch]: CryptoKey }
+const roomKeys = {};
+
 // When joining a room:
 async function joinRoom(roomId) {
-    // 1. Fetch your encrypted room key from server
-    const response = await fetch(`/api/rooms/${roomId}/key`);
-    const { encrypted_key } = await response.json();
+    // 1. Fetch all your encrypted room keys (all epochs) from server
+    const response = await fetch(`/api/rooms/${roomId}/keys`);
+    const { keys } = await response.json();
+    // keys = [{ key_epoch: 0, encrypted_key: "..." }, ...]
 
-    // 2. Decrypt with your private key
-    const roomKey = await decryptRoomKey(encrypted_key);
+    // 2. Decrypt each epoch's key with your private key
+    roomKeys[roomId] = {};
+    for (const entry of keys) {
+        roomKeys[roomId][entry.key_epoch] = await decryptRoomKey(entry.encrypted_key);
+    }
 
-    // 3. Store in memory (never localStorage!)
-    roomKeys[roomId] = roomKey;
-
-    // 4. Now you can decrypt messages
+    // 3. Decrypt messages using the epoch stored on each message
     socket.on('message', async (data) => {
-        const decrypted = await decryptMessage(roomKey, data.encrypted);
+        const key = roomKeys[roomId][data.key_epoch];
+        const decrypted = await decryptMessage(key, data.encrypted);
         displayMessage(decrypted);
     });
 }
 
-// When sending a message:
+// When sending a message, always use the latest epoch:
 async function sendMessage(roomId, message) {
-    const roomKey = roomKeys[roomId];
+    const epochs = Object.keys(roomKeys[roomId]).map(Number);
+    const latestEpoch = Math.max(...epochs);
+    const roomKey = roomKeys[roomId][latestEpoch];
     const encrypted = await encryptMessage(roomKey, message);
 
-    // Server only sees encrypted data
     await fetch(`/api/rooms/${roomId}/messages`, {
         method: 'POST',
-        body: JSON.stringify({ encrypted })
+        body: JSON.stringify({ encrypted, key_epoch: latestEpoch })
     });
 }
 ```
 
-## Simple Implementation Strategy
+## Inviting a User to an Encrypted Room
+
+Only an existing member (who has the plaintext room key) can invite. The server cannot do this.
+
+**Flow:**
+
+1. Inviter's client fetches new member's public key from `GET /users/{username}/public-key`
+2. Inviter's client encrypts the current room key with the new member's RSA public key
+3. Inviter's client sends the encrypted key blob to `POST /rooms/{room_id}/keys/{username}`
+4. Server stores it in `room_keys` (server never sees the plaintext key)
+5. New member joins, fetches their encrypted room key from `GET /rooms/{room_id}/keys`, decrypts with their private key
+
+**Constraint:** Invitations require an existing member to be online. If no members are online, the server queues the invite and the next online member's client processes it.
+
+**API endpoints:**
+
+| Method | Endpoint                           | Description                               |
+| ------ | ---------------------------------- | ----------------------------------------- |
+| GET    | `/rooms/{room_id}/keys`            | Get your encrypted room keys (all epochs) |
+| POST   | `/rooms/{room_id}/keys/{username}` | Store an encrypted room key for a user    |
+| GET    | `/users/{username}/public-key`     | Get a user's public key (JWK)             |
+
+## Key Rotation When a Member Leaves
+
+When a member leaves (or is removed), rotate the key **forward**. Historical messages are not re-encrypted.
+
+**Flow:**
+
+1. Any remaining online member generates a **new** AES room key
+2. That member encrypts the new key for each **remaining** member's public key
+3. Uploads all the new encrypted key blobs to the server
+4. Server increments `key_epoch` on the room
+5. All new messages are encrypted with the new key and tagged with the new epoch
+6. Departed user never receives the new epoch key and cannot decrypt future messages
+
+### Why historical messages are NOT re-encrypted
+
+- The departed user already **had** the old key while they were a member
+- They could have saved plaintext copies of every message they decrypted
+- Re-encrypting server-side ciphertext doesn't revoke knowledge already gained
+- It would be expensive (decrypt + re-encrypt every historical message) for no security benefit
+
+This is the same approach used by Signal, Matrix, and WhatsApp: rotate forward, accept that past access is past access.
+
+### Key epoch behavior
+
+- Old members retain access to old epoch keys (so they can read history they were part of)
+- Departed members never receive new epoch keys
+- Each message is tagged with its `key_epoch` so clients know which key to decrypt with
+- Clients hold all epoch keys for rooms they belong to in memory
+
+## Implementation Strategy
 
 **Phase 1: Public Key Storage**
 
 1. When user registers, generate RSA key pair in browser
-2. Export public key, send to server
+2. Export public key, send to server (`POST /users/{username}/public-key`)
 3. Store private key in IndexedDB (encrypted with WebAuthn-derived key)
 
 **Phase 2: Room Keys**
 
-1. First user in room generates AES room key
+1. Room creator generates AES room key (epoch 0)
 2. For each member, encrypt room key with their public key
 3. Server stores encrypted keys (can't decrypt them)
 
 **Phase 3: Message Encryption**
 
-1. Client encrypts with room key before sending
-2. Server stores encrypted blobs
-3. Clients decrypt locally when receiving
+1. Client encrypts with room key before sending, tags message with `key_epoch`
+2. Server stores encrypted blobs + epoch
+3. Clients decrypt locally using the correct epoch key
+
+**Phase 4: Member Invite**
+
+1. Existing member encrypts room key for new member's public key
+2. Server stores encrypted key, new member decrypts on join
+
+**Phase 5: Key Rotation**
+
+1. On member departure, remaining member generates new key (epoch N+1)
+2. Encrypts for all remaining members, uploads to server
+3. Future messages use new epoch
 
 ## Trade-offs
 
 **Pros:**
 
 - True E2EE: Server never sees plaintext
-- Perfect forward secrecy possible
-- Works with your WebAuthn setup
+- Key rotation on member departure limits forward exposure
+- Works with existing WebAuthn setup
+- Epoch-based keys allow reading historical messages you were present for
 
 **Cons:**
 
-- Can't search messages on server
-- Key management complexity
+- Can't search messages on server (server only has ciphertext)
+- Key management complexity (multiple epochs per room)
 - Users lose messages if they lose keys
-- Can't decrypt on new devices without key sharing
+- Can't decrypt on new devices without key transfer/backup
+- Inviting requires an existing member to be online
+- Past messages can't be "un-known" by departed members

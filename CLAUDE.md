@@ -17,15 +17,16 @@ Read these files on demand when working on specific areas:
 ```
 backend/mini_chat/       # FastAPI app
   auth/                  # WebAuthn registration/login
-  rooms/                 # Chat rooms & WebSocket
+  rooms/                 # Chat rooms, DMs & WebSocket
   messages/              # Message search
   admin/                 # User management, settings
   database.py            # SQLite + WAL mode
   dependencies.py        # Auth middleware
+  subscriptions.py       # ListSubscriptionManager (WS push for list endpoints)
   main.py                # App entry & router registration
 
 frontend/src/            # Vanilla JS (Vite build)
-  chat.js                # Main chat (WebSocket, rooms, messages)
+  chat.js                # Main chat (WebSocket, rooms, DMs, messages)
   login.js / register.js # Auth pages
   utils.js               # Shared utilities
   style.css              # All styles
@@ -40,6 +41,19 @@ frontend/src/            # Vanilla JS (Vite build)
 - Messages use `?since={lastMessageId}` for deduplication (exclusive, returns id > since)
 - Rooms use soft-delete (`deleted` flag)
 - First registered user is auto-approved as admin
+
+## Room Types
+
+- **Channels**: `room_type='channel'`, names must be lowercase + hyphens (regex `^[a-z0-9]+(-[a-z0-9]+)*$`), displayed with `#` prefix
+- **DMs**: `room_type='dm'`, auto-generated `room_id` as `dm-{sorted-usernames}`, membership tracked in `room_members` table
+- `GET /rooms` returns both channels (all) and DMs (only where user is a member), with `display_name` field
+- Room list is subscribable: same `/rooms` path serves both HTTP GET and WebSocket (upgrade). WS pushes `{"type": "update"}` when rooms change
+
+## List Subscriptions
+
+- `ListSubscriptionManager` (in `subscriptions.py`) provides per-user WebSocket push for any list endpoint
+- Pattern: HTTP GET returns data, WebSocket on same path subscribes to changes
+- Currently used for `/rooms`; extensible to `/users` for presence/typing
 
 ## Running
 

@@ -32,12 +32,17 @@ let currentUsername = null;      // Logged-in username
 let currentRole = null;          // 'user' or 'admin'
 let currentRoom = null;          // Selected room ID
 let lastMessageId = 0;           // Last seen message ID (for dedup)
-let websocket = null;            // WebSocket connection
+let websocket = null;            // Per-room WebSocket connection
+let roomsWs = null;             // Room list subscription WebSocket
+let roomMeta = {};              // Cache of room_id -> { room_type, display_name, members }
 let reconnectAttempts = 0;       // Reconnection counter
 let maxReconnectAttempts = 5;    // Max reconnect tries
+let userColors = {};             // Cache of username -> color mappings
 ```
 
-## WebSocket Message Protocol
+## WebSocket Connections
+
+### Per-room chat (`/api/rooms/{room_id}/ws?token=...`)
 
 ```javascript
 // Client -> Server
@@ -49,10 +54,23 @@ let maxReconnectAttempts = 5;    // Max reconnect tries
 { type: "error", message: "Invalid JSON" }
 ```
 
+### Room list subscription (`/api/rooms?token=...`)
+
+Same path as `GET /api/rooms`, upgraded to WebSocket. Pushes updates when the user's room list changes (new DM, channel created/deleted).
+
+```javascript
+// Server -> Client
+{ type: "update" }  // Client should reload room list
+```
+
 ## Key Behaviors
 
 - **Session Check**: Auto-redirects to login if not authenticated
+- **Room List**: Sidebar split into Channels (`#name`) and Direct Messages (other user's name)
 - **Room Selection**: Clears messages, loads history via HTTP, connects WebSocket
+- **DM Creation**: User picker modal, `POST /rooms/dm`, auto-selects new DM room
+- **Room List Subscription**: WebSocket on `/api/rooms` auto-reloads sidebar when rooms change
+- **Channel Validation**: Names must be lowercase + hyphens (e.g. `my-channel`), validated client & server
 - **Message Display**: Unified `displayMessage()` for both history and real-time
 - **Reconnection**: Exponential backoff (1s, 2s, 4s, 8s, 10s max), up to 5 attempts
 - **Message Deduplication**: Tracks `lastMessageId`; HTTP uses `?since={lastMessageId}` (exclusive)

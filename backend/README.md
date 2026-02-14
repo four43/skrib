@@ -20,11 +20,14 @@ backend/mini_chat/
 │   ├── schemas.py          # Pydantic models
 │   └── services.py         # Business logic
 │
-├── rooms/                   # Rooms module
+├── subscriptions.py         # ListSubscriptionManager (WS push for list endpoints)
+│
+├── rooms/                   # Rooms module (channels + DMs)
 │   ├── __init__.py
-│   ├── routes.py           # Room endpoints
-│   ├── schemas.py          # Pydantic models
-│   └── services.py         # Business logic
+│   ├── routes.py           # Room endpoints + list subscription WS
+│   ├── schemas.py          # Pydantic models (RoomInfo, DM requests)
+│   ├── services.py         # Business logic (channels, DMs, validation)
+│   └── websocket.py        # ConnectionManager for per-room chat WS
 │
 ├── messages/                # Messages module
 │   ├── __init__.py
@@ -58,11 +61,29 @@ backend/mini_chat/
 
 | Method | Endpoint | Description |
 |--------|----------|-------------|
-| GET | `/rooms` | List all rooms |
-| POST | `/rooms` | Create a new room |
+| GET | `/rooms` | List rooms visible to user (channels + own DMs) |
+| WS | `/rooms` | Subscribe to room list updates (same path, upgraded) |
+| POST | `/rooms` | Create a channel (name: lowercase + hyphens) |
+| POST | `/rooms/dm` | Create or get a DM with another user |
 | DELETE | `/rooms/{room_id}` | Soft-delete a room (admin only) |
 | GET | `/rooms/{room_id}/messages` | Get messages in a room |
 | POST | `/rooms/{room_id}/messages` | Send message to a room |
+| WS | `/rooms/{room_id}/ws` | Real-time chat in a room |
+
+### Users (`/api/users`)
+
+| Method | Endpoint | Description |
+|--------|----------|-------------|
+| GET | `/users` | List all users (admin only) |
+| GET | `/users/list` | List usernames (authenticated, for DM picker) |
+| GET | `/users/pending` | List pending approvals (admin only) |
+| POST | `/users/pending/approve` | Approve a user (admin only) |
+| POST | `/users/pending/reject` | Reject a user (admin only) |
+| DELETE | `/users/{username}` | Delete a user (admin only) |
+| PUT | `/users/{username}/role` | Set user role (admin only) |
+| GET | `/users/preferences/colors` | All users' color preferences |
+| GET | `/users/{username}/preferences` | Get user preferences |
+| PUT | `/users/{username}/preferences` | Update user preferences |
 
 ### Messages (`/api/messages`)
 
