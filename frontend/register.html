@@ -9,20 +9,25 @@
     <!-- Register View -->
     <div id="authView" class="auth-container">
         <div class="auth-box">
-            <div id="registerForm">
+            <form id="registerForm" onsubmit="register(); return false;" novalidate>
                 <h1>📝 Register</h1>
                 <p>Create a new account</p>
 
                 <div id="registerStatus"></div>
 
                 <div class="form-group">
-                    <label>Choose a Username</label>
-                    <input type="text" id="registerUsername" placeholder="Enter username">
+                    <label for="registerUsername">Choose a Username</label>
+                    <input type="text" id="registerUsername" placeholder="e.g. cool_user42"
+                           required minlength="4" maxlength="15"
+                           pattern="[a-zA-Z0-9_]{4,15}"
+                           title="4–15 characters: letters, numbers, and underscores only"
+                           autocomplete="username">
+                    <small style="color: #94a3b8;">4–15 characters: letters, numbers, underscores only</small>
                 </div>
 
-                <button onclick="register()">Register</button>
-                <button class="link-button" onclick="goToLogin()">Already registered? Sign in</button>
-            </div>
+                <button type="submit">Register</button>
+                <button type="button" class="link-button" onclick="goToLogin()">Already registered? Sign in</button>
+            </form>
         </div>
     </div>
 

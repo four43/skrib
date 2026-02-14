@@ -24,6 +24,7 @@ from .services import (
     create_pending_user,
     get_user_by_credential,
     create_session_token,
+    validate_username,
 )
 from ..dependencies import get_username_from_token, require_auth
 from ..database import get_db
@@ -66,6 +67,10 @@ async def complete_registration(request: RegistrationCompleteRequest):
 
     if not verify_challenge(request.challenge, 'registration'):
         raise HTTPException(status_code=400, detail="Invalid or expired challenge")
+
+    username_error = validate_username(request.username)
+    if username_error:
+        raise HTTPException(status_code=400, detail=username_error)
 
     try:
         approval_code, is_auto_approved = create_pending_user(

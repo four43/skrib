@@ -1,10 +1,32 @@
 """Business logic for authentication."""
+import re
 import secrets
 import base64
 from datetime import datetime
 from typing import Optional, Tuple
 
 from ..database import get_db, get_setting
+
+# Username rules (Twitter/X-style)
+USERNAME_RE = re.compile(r'^[a-zA-Z0-9_]{4,15}$')
+RESERVED_WORDS = ['admin', 'minichat', 'system']
+
+
+def validate_username(username: str) -> Optional[str]:
+    """Validate a username. Returns an error message, or None if valid."""
+    if not username:
+        return "Username is required"
+    if len(username) < 4:
+        return "Username must be at least 4 characters"
+    if len(username) > 15:
+        return "Username must be 15 characters or fewer"
+    if not USERNAME_RE.match(username):
+        return "Username can only contain letters, numbers, and underscores"
+    lower = username.lower()
+    for word in RESERVED_WORDS:
+        if word in lower:
+            return f"Username cannot contain '{word}'"
+    return None
 
 
 def generate_challenge() -> str:

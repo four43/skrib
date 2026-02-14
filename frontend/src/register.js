@@ -28,17 +28,44 @@ async function checkRegistrationAccess() {
 }
 
 function disableRegistration() {
-    const registerBtn = document.querySelector('#registerForm button[onclick="register()"]');
+    const registerBtn = document.querySelector('#registerForm button[type="submit"]');
     const usernameInput = document.getElementById('registerUsername');
     if (registerBtn) registerBtn.disabled = true;
     if (usernameInput) usernameInput.disabled = true;
 }
 
-async function register() {
-    const username = document.getElementById('registerUsername').value.trim();
+const USERNAME_RE = /^[a-zA-Z0-9_]{4,15}$/;
+const RESERVED_WORDS = ['admin', 'minichat', 'system'];
 
-    if (!username) {
-        showStatus('registerStatus', '❌ Please enter a username', 'error');
+function validateUsername(username) {
+    if (!username) return 'Please enter a username';
+    if (username.length < 4) return 'Username must be at least 4 characters';
+    if (username.length > 15) return 'Username must be 15 characters or fewer';
+    if (!USERNAME_RE.test(username)) return 'Username can only contain letters, numbers, and underscores';
+    const lower = username.toLowerCase();
+    for (const word of RESERVED_WORDS) {
+        if (lower.includes(word)) return `Username cannot contain '${word}'`;
+    }
+    return null;
+}
+
+async function register() {
+    const input = document.getElementById('registerUsername');
+
+    // Let the browser show its native constraint popups first
+    if (!input.checkValidity()) {
+        input.reportValidity();
+        return;
+    }
+
+    const username = input.value.trim();
+
+    // JS validation catches reserved words that HTML5 pattern can't express
+    const usernameError = validateUsername(username);
+    if (usernameError) {
+        input.setCustomValidity(usernameError);
+        input.reportValidity();
+        input.setCustomValidity(''); // reset so native checks work next time
         return;
     }
 
@@ -197,12 +224,19 @@ function goToLogin() {
 window.register = register;
 window.goToLogin = goToLogin;
 
-// Event listener for Enter key
+// Real-time validation: red outline on invalid input
 document.addEventListener('DOMContentLoaded', () => {
-    const usernameInput = document.getElementById('registerUsername');
-    if (usernameInput) {
-        usernameInput.addEventListener('keypress', (e) => {
-            if (e.key === 'Enter') register();
-        });
-    }
+    const input = document.getElementById('registerUsername');
+    if (!input) return;
+
+    input.addEventListener('input', () => {
+        const val = input.value;
+        // Empty is neutral (not red), only flag once the user has typed something
+        if (!val) {
+            input.classList.remove('invalid');
+            return;
+        }
+        const error = validateUsername(val);
+        input.classList.toggle('invalid', error !== null);
+    });
 });

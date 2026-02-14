@@ -131,6 +131,15 @@ input[type="text"]:focus {
     background: rgba(255, 255, 255, 0.9);
 }
 
+input[type="text"].invalid {
+    border-color: #ef4444;
+}
+
+input[type="text"].invalid:focus {
+    border-color: #ef4444;
+    box-shadow: 0 0 0 3px rgba(239, 68, 68, 0.15);
+}
+
 input[type="text"]::placeholder {
     color: #94a3b8;
 }
