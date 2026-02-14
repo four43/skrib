@@ -45,8 +45,8 @@ frontend/src/            # Vanilla JS (Vite build)
 ## Room Types
 
 - **Channels**: `room_type='channel'`, names must be lowercase + hyphens (regex `^[a-z0-9]+(-[a-z0-9]+)*$`), displayed with `#` prefix
-- **DMs**: `room_type='dm'`, auto-generated `room_id` as `dm-{sorted-usernames}`, membership tracked in `room_members` table
-- `GET /rooms` returns both channels (all) and DMs (only where user is a member), with `display_name` field
+- **DMs**: `room_type='dm'`, auto-generated `room_id` as `dm|user_a|user_b` (pipe-delimited, sorted), membership tracked in `room_members` table
+- `GET /rooms` returns channels (where user is a member) and DMs (where user is a member), with `display_name` field
 - Room list is subscribable: same `/rooms` path serves both HTTP GET and WebSocket (upgrade). WS pushes `{"type": "update"}` when rooms change
 
 ## List Subscriptions

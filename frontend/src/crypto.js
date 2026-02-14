@@ -105,6 +105,20 @@ export async function loadPrivateKey(username) {
     );
 }
 
+/** Derive the public key JWK from the stored private key (for re-uploading). */
+export async function exportStoredPublicKey(username) {
+    const jwk = await idbGet(`private:${username}`);
+    if (!jwk) return null;
+    return {
+        kty: jwk.kty,
+        n: jwk.n,
+        e: jwk.e,
+        alg: jwk.alg,
+        ext: true,
+        key_ops: ['encrypt'],
+    };
+}
+
 // ---------------------------------------------------------------------------
 // AES-GCM room keys
 // ---------------------------------------------------------------------------

@@ -1,7 +1,7 @@
 """Users API routes — preferences and user management."""
 from fastapi import APIRouter, Depends, HTTPException
 
-from ..dependencies import require_auth, require_admin, get_username_from_token
+from ..dependencies import require_auth, require_admin, require_moderator, get_username_from_token
 from pydantic import BaseModel
 from .schemas import (
     GetPreferencesResponse,
@@ -28,17 +28,17 @@ from .services import (
 router = APIRouter(prefix="/users", tags=["users"])
 
 
-# --- User management (admin only) ---
+# --- User management (admin/moderator) ---
 
 @router.get("", response_model=UsersListResponse)
-async def list_all_users(_: str = Depends(require_admin)):
+async def list_all_users(_: str = Depends(require_moderator)):
     """Get list of all users."""
     users = get_all_users()
     return UsersListResponse(users=users)
 
 
 @router.get("/pending", response_model=PendingUsersResponse)
-async def list_pending_users(admin: str = Depends(require_admin)):
+async def list_pending_users(admin: str = Depends(require_moderator)):
     """Get list of pending user approvals."""
     pending = get_pending_users()
     return PendingUsersResponse(pending=pending)
@@ -47,7 +47,7 @@ async def list_pending_users(admin: str = Depends(require_admin)):
 @router.post("/pending/approve")
 async def approve_pending_user(
     request: ApproveUserRequest,
-    admin: str = Depends(require_admin),
+    admin: str = Depends(require_moderator),
 ):
     """Approve a pending user."""
     if not approve_user(request.approval_code, admin):
@@ -58,7 +58,7 @@ async def approve_pending_user(
 @router.post("/pending/reject")
 async def reject_pending_user(
     request: RejectUserRequest,
-    _: str = Depends(require_admin),
+    _: str = Depends(require_moderator),
 ):
     """Reject a pending user."""
     if not reject_user(request.approval_code):
@@ -135,7 +135,7 @@ async def update_user_preferences_endpoint(
         if not cursor.fetchone():
             raise HTTPException(status_code=404, detail="User not found")
 
-    update_user_preferences(target_username, color=request.color, theme_color=request.theme_color)
+    update_user_preferences(target_username, color=request.color, theme_color=request.theme_color, nickname=request.nickname)
     return UpdatePreferencesResponse(status="ok")
 
 
@@ -150,7 +150,7 @@ async def set_role(
     _: str = Depends(require_admin),
 ):
     """Set user role."""
-    if request.role not in ['admin', 'user']:
+    if request.role not in ['admin', 'moderator', 'user']:
         raise HTTPException(status_code=400, detail="Invalid role")
     if not set_user_role(username, request.role):
         raise HTTPException(status_code=404, detail="User not found")

@@ -1,6 +1,6 @@
 import './style.css';
 import { API_URL, showStatus, arrayBufferToBase64, base64ToArrayBuffer, friendlyError, loadAndApplyTheme } from './utils.js';
-import { loadPrivateKey, generateEncryptionKeyPair, exportPublicKey, storePrivateKey } from './crypto.js';
+import { loadPrivateKey, generateEncryptionKeyPair, exportPublicKey, storePrivateKey, exportStoredPublicKey } from './crypto.js';
 
 // Load theme, check session, then check registration mode
 loadAndApplyTheme();
@@ -76,13 +76,20 @@ async function login() {
             localStorage.setItem('username', completeData.username);
             localStorage.setItem('role', completeData.role);
 
-            // Ensure encryption keys exist (generate if missing, e.g. new device)
+            // Ensure encryption keys exist and server has the public key
             try {
                 let privKey = await loadPrivateKey(completeData.username);
+                let publicKeyJwk;
                 if (!privKey) {
                     const keyPair = await generateEncryptionKeyPair();
-                    const publicKeyJwk = await exportPublicKey(keyPair);
+                    publicKeyJwk = await exportPublicKey(keyPair);
                     await storePrivateKey(completeData.username, keyPair.privateKey);
+                } else {
+                    // Derive public key from stored private key
+                    publicKeyJwk = await exportStoredPublicKey(completeData.username);
+                }
+                // Always upload to ensure server has the public key
+                if (publicKeyJwk) {
                     await fetch(`${API_URL}/auth/encryption-key`, {
                         method: 'POST',
                         headers: {

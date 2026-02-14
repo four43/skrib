@@ -24,7 +24,7 @@ class CreateRoomResponse(BaseModel):
 
 
 class CreateDMRequest(BaseModel):
-    username: str
+    usernames: List[str]
 
 
 class CreateDMResponse(BaseModel):
@@ -63,6 +63,12 @@ class AddMemberRequest(BaseModel):
 
 
 class AddMemberResponse(BaseModel):
+    status: str
+    room_id: str
+    username: str
+
+
+class RemoveMemberResponse(BaseModel):
     status: str
     room_id: str
     username: str

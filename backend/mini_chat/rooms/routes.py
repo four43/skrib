@@ -16,6 +16,7 @@ from .schemas import (
     DeleteRoomResponse,
     AddMemberRequest,
     AddMemberResponse,
+    RemoveMemberResponse,
     StoreRoomKeyRequest,
     RoomKeysResponse,
 )
@@ -30,13 +31,14 @@ from .services import (
     create_or_get_dm,
     validate_channel_name,
     add_room_member,
+    remove_room_member,
     store_room_key,
     get_room_keys,
     ChatRoom,
 )
 from .websocket import manager
 from ..subscriptions import ListSubscriptionManager
-from ..dependencies import require_auth, require_admin, verify_token
+from ..dependencies import require_auth, require_admin, require_moderator, verify_token
 
 router = APIRouter(prefix="/rooms", tags=["rooms"])
 
@@ -104,25 +106,35 @@ async def create_dm(
     request: CreateDMRequest,
     username: str = Depends(require_auth)
 ):
-    """Create or get a DM room with another user."""
-    if request.username == username:
+    """Create or get a DM room with one or more users."""
+    if not request.usernames:
+        raise HTTPException(status_code=400, detail="At least one username is required")
+
+    targets = list(set(request.usernames))
+    if len(targets) == 1 and targets[0] == username:
         raise HTTPException(status_code=400, detail="Cannot DM yourself")
 
-    # Verify target user exists
+    # Remove self from target list if included
+    targets = [u for u in targets if u != username]
+    if not targets:
+        raise HTTPException(status_code=400, detail="At least one other user is required")
+
+    # Verify all target users exist
     from ..database import get_db
     with get_db() as conn:
-        cursor = conn.execute(
-            'SELECT username FROM users WHERE username = ?',
-            (request.username,)
-        )
-        if not cursor.fetchone():
-            raise HTTPException(status_code=404, detail="User not found")
+        for target in targets:
+            cursor = conn.execute(
+                'SELECT username FROM users WHERE username = ?',
+                (target,)
+            )
+            if not cursor.fetchone():
+                raise HTTPException(status_code=404, detail=f"User not found: {target}")
 
-    room = create_or_get_dm(username, request.username)
+    room = create_or_get_dm(username, targets)
 
-    # Notify both users — the DM is new on their room lists
-    await rooms_subscriptions.notify(username, {"type": "update"})
-    await rooms_subscriptions.notify(request.username, {"type": "update"})
+    # Notify all participants
+    for participant in [username] + targets:
+        await rooms_subscriptions.notify(participant, {"type": "update"})
 
     return CreateDMResponse(status="ok", room=RoomInfo(**room))
 
@@ -198,6 +210,55 @@ async def add_member_endpoint(
     await rooms_subscriptions.notify(request.username, {"type": "update"})
 
     return AddMemberResponse(status="ok", room_id=room_id, username=request.username)
+
+
+@router.delete("/{room_id}/members/me", response_model=RemoveMemberResponse)
+async def leave_room_endpoint(
+    room_id: str,
+    username: str = Depends(require_auth),
+):
+    """Leave a channel. Cannot leave DMs."""
+    room_type = get_room_type(room_id)
+    if room_type == 'dm':
+        raise HTTPException(status_code=400, detail="Cannot leave a DM")
+    if not room_type:
+        raise HTTPException(status_code=404, detail="Room not found")
+
+    result = remove_room_member(room_id, username)
+
+    if result['status'] == 'not_member':
+        raise HTTPException(status_code=400, detail="You are not a member of this room")
+    if result['status'] == 'room_not_found':
+        raise HTTPException(status_code=404, detail="Room not found")
+
+    await rooms_subscriptions.notify(username, {"type": "update"})
+
+    return RemoveMemberResponse(status="ok", room_id=room_id, username=username)
+
+
+@router.delete("/{room_id}/members/{target_username}", response_model=RemoveMemberResponse)
+async def kick_member_endpoint(
+    room_id: str,
+    target_username: str,
+    username: str = Depends(require_moderator),
+):
+    """Kick a member from a channel. Requires moderator or admin."""
+    room_type = get_room_type(room_id)
+    if room_type == 'dm':
+        raise HTTPException(status_code=400, detail="Cannot kick from a DM")
+    if not room_type:
+        raise HTTPException(status_code=404, detail="Room not found")
+
+    result = remove_room_member(room_id, target_username)
+
+    if result['status'] == 'not_member':
+        raise HTTPException(status_code=400, detail="User is not a member of this room")
+    if result['status'] == 'room_not_found':
+        raise HTTPException(status_code=404, detail="Room not found")
+
+    await rooms_subscriptions.notify(target_username, {"type": "update"})
+
+    return RemoveMemberResponse(status="ok", room_id=room_id, username=target_username)
 
 
 @router.post("/{room_id}/keys")

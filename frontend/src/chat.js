@@ -23,6 +23,7 @@ let reconnectAttempts = 0;
 let maxReconnectAttempts = 5;
 let reconnectTimeout = null;
 let userColors = {};  // Cache of username -> color mappings
+let userNicknames = {};  // Cache of username -> nickname (null if not set)
 let serverColor = '#6366f1';  // Cached server color for theme reset
 let currentRegMode = 'closed';  // Current registration mode
 let roomMeta = {};  // Cache of room_id -> { room_type, display_name, members }
@@ -171,6 +172,153 @@ registerCommand('invite', async (args) => {
     }
 }, 'Invite a user to the current room');
 
+registerCommand('nick', async (args) => {
+    const nickname = args.trim();
+
+    if (!nickname) {
+        const current = userNicknames[currentUsername];
+        if (current) {
+            displaySystemMessage(`Your nickname is "${current}". Use /nick <name> to change it, or /nick clear to remove.`);
+        } else {
+            displaySystemMessage('You have no nickname set. Use /nick <name> to set one.');
+        }
+        return;
+    }
+
+    const clearAliases = ['clear', 'reset', 'remove'];
+    const isClearing = clearAliases.includes(nickname.toLowerCase());
+
+    if (!isClearing && nickname.length > 32) {
+        displaySystemMessage('Nickname must be 32 characters or fewer.');
+        return;
+    }
+
+    try {
+        const response = await fetch(`${API_URL}/users/${currentUsername}/preferences`, {
+            method: 'PUT',
+            headers: {
+                'Authorization': `Bearer ${sessionToken}`,
+                'Content-Type': 'application/json'
+            },
+            body: JSON.stringify({ nickname: isClearing ? '' : nickname })
+        });
+
+        if (response.ok) {
+            if (isClearing) {
+                delete userNicknames[currentUsername];
+                displaySystemMessage('Nickname cleared. Your username will be displayed.');
+            } else {
+                userNicknames[currentUsername] = nickname;
+                displaySystemMessage(`Nickname set to "${nickname}".`);
+            }
+            // Reload messages to reflect change
+            if (currentRoom) {
+                document.getElementById('messages').innerHTML = '';
+                lastMessageId = 0;
+                await loadMessages();
+            }
+        } else {
+            const data = await response.json();
+            displaySystemMessage(`Failed to set nickname: ${data.detail || 'Unknown error'}`);
+        }
+    } catch (error) {
+        console.error('[CMD] Error setting nickname:', error);
+        displaySystemMessage('Failed to set nickname. Please try again.');
+    }
+}, 'Set your display nickname (/nick <name>, /nick clear)');
+
+registerCommand('leave', async () => {
+    if (!currentRoom) {
+        displaySystemMessage('Please select a room first.');
+        return;
+    }
+
+    const meta = roomMeta[currentRoom];
+    if (meta && meta.room_type === 'dm') {
+        displaySystemMessage('You cannot leave a DM.');
+        return;
+    }
+
+    if (!confirm(`Leave #${currentRoom}? You will need to be re-invited to rejoin.`)) {
+        return;
+    }
+
+    try {
+        const response = await fetch(
+            `${API_URL}/rooms/${encodeURIComponent(currentRoom)}/members/me`,
+            {
+                method: 'DELETE',
+                headers: { 'Authorization': `Bearer ${sessionToken}` },
+            }
+        );
+
+        if (response.ok) {
+            // Disconnect from room
+            if (websocket) {
+                websocket.close();
+                websocket = null;
+            }
+            currentRoom = null;
+            lastMessageId = 0;
+            history.replaceState(null, '', window.location.pathname);
+            document.getElementById('chatHeader').textContent = '[No room selected]';
+            document.getElementById('messages').innerHTML = '<div class="empty-state"><p>Select a chat room to start</p></div>';
+            await loadRooms();
+        } else {
+            const data = await response.json();
+            displaySystemMessage(`Failed to leave: ${data.detail || 'Unknown error'}`);
+        }
+    } catch (error) {
+        console.error('[CMD] Error leaving room:', error);
+        displaySystemMessage('Failed to leave room. Please try again.');
+    }
+}, 'Leave the current channel');
+
+registerCommand('kick', async (args) => {
+    const targetUsername = args.trim();
+
+    if (!targetUsername) {
+        displaySystemMessage('Usage: /kick <username>');
+        return;
+    }
+
+    if (!currentRoom) {
+        displaySystemMessage('Please select a room first.');
+        return;
+    }
+
+    if (currentRole !== 'admin' && currentRole !== 'moderator') {
+        displaySystemMessage('Only admins and moderators can kick users.');
+        return;
+    }
+
+    const meta = roomMeta[currentRoom];
+    if (meta && meta.room_type === 'dm') {
+        displaySystemMessage('You cannot kick users from a DM.');
+        return;
+    }
+
+    try {
+        const response = await fetch(
+            `${API_URL}/rooms/${encodeURIComponent(currentRoom)}/members/${encodeURIComponent(targetUsername)}`,
+            {
+                method: 'DELETE',
+                headers: { 'Authorization': `Bearer ${sessionToken}` },
+            }
+        );
+
+        if (response.ok) {
+            displaySystemMessage(`Kicked ${targetUsername} from this room.`);
+        } else {
+            const data = await response.json();
+            displaySystemMessage(`Failed to kick ${targetUsername}: ${data.detail || 'Unknown error'}`);
+        }
+    } catch (error) {
+        console.error('[CMD] Error kicking user:', error);
+        displaySystemMessage('Failed to kick user. Please try again.');
+    }
+}, 'Kick a user from the current channel (admin/mod only)');
+
 // ---------------------------------------------------------------------------
 // E2E helpers
 // ---------------------------------------------------------------------------
@@ -243,44 +391,42 @@ async function initRoomKey(roomId) {
     }
 }
 
-/** Generate a room key for a DM and encrypt for both users. */
-async function initDMRoomKey(roomId, otherUsername) {
+/** Generate a room key for a DM and encrypt for all participants. */
+async function initDMRoomKey(roomId, otherUsernames) {
     if (!privateKey) return;
+    if (typeof otherUsernames === 'string') otherUsernames = [otherUsernames];
 
     try {
-        // Fetch both public keys
-        const [myResp, otherResp] = await Promise.all([
-            fetch(`${API_URL}/auth/encryption-key/${encodeURIComponent(currentUsername)}`,
-                { headers: { 'Authorization': `Bearer ${sessionToken}` } }),
-            fetch(`${API_URL}/auth/encryption-key/${encodeURIComponent(otherUsername)}`,
-                { headers: { 'Authorization': `Bearer ${sessionToken}` } }),
-        ]);
+        const allUsers = [currentUsername, ...otherUsernames];
 
-        if (!myResp.ok || !otherResp.ok) return;
+        // Fetch public keys for all participants
+        const keyResponses = await Promise.all(
+            allUsers.map(u =>
+                fetch(`${API_URL}/auth/encryption-key/${encodeURIComponent(u)}`,
+                    { headers: { 'Authorization': `Bearer ${sessionToken}` } })
+            )
+        );
 
-        const myPk = JSON.parse((await myResp.json()).public_key);
-        const otherPk = JSON.parse((await otherResp.json()).public_key);
+        if (keyResponses.some(r => !r.ok)) return;
+
+        const publicKeys = {};
+        for (let i = 0; i < allUsers.length; i++) {
+            publicKeys[allUsers[i]] = JSON.parse((await keyResponses[i].json()).public_key);
+        }
 
         const roomKey = await generateRoomKey();
 
-        const [encForMe, encForOther] = await Promise.all([
-            encryptRoomKey(roomKey, myPk),
-            encryptRoomKey(roomKey, otherPk),
-        ]);
-
-        // Upload both encrypted keys
-        await Promise.all([
-            fetch(`${API_URL}/rooms/${encodeURIComponent(roomId)}/keys`, {
-                method: 'POST',
-                headers: { 'Content-Type': 'application/json', 'Authorization': `Bearer ${sessionToken}` },
-                body: JSON.stringify({ username: currentUsername, encrypted_key: encForMe, key_epoch: 0 }),
-            }),
-            fetch(`${API_URL}/rooms/${encodeURIComponent(roomId)}/keys`, {
-                method: 'POST',
-                headers: { 'Content-Type': 'application/json', 'Authorization': `Bearer ${sessionToken}` },
-                body: JSON.stringify({ username: otherUsername, encrypted_key: encForOther, key_epoch: 0 }),
-            }),
-        ]);
+        // Encrypt and upload for each participant
+        await Promise.all(
+            allUsers.map(async (user) => {
+                const encKey = await encryptRoomKey(roomKey, publicKeys[user]);
+                return fetch(`${API_URL}/rooms/${encodeURIComponent(roomId)}/keys`, {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json', 'Authorization': `Bearer ${sessionToken}` },
+                    body: JSON.stringify({ username: user, encrypted_key: encKey, key_epoch: 0 }),
+                });
+            })
+        );
 
         roomKeys[roomId] = { 0: roomKey };
     } catch (error) {
@@ -346,9 +492,15 @@ async function checkSession() {
 async function initializeChatView() {
     document.getElementById('currentUser').textContent = `👤 ${currentUsername}`;
 
-    if (currentRole === 'admin') {
-        document.getElementById('adminBadge').classList.remove('hidden');
+    if (currentRole === 'admin' || currentRole === 'moderator') {
+        const badge = document.getElementById('adminBadge');
+        badge.textContent = currentRole === 'admin' ? 'ADMIN' : 'MOD';
+        badge.classList.remove('hidden');
         document.getElementById('adminPanelBtn').classList.remove('hidden');
+        // Hide admin-only sections for moderators
+        if (currentRole === 'moderator') {
+            document.querySelectorAll('.admin-only').forEach(el => el.style.display = 'none');
+        }
         loadAdminSettings();
     }
 
@@ -453,11 +605,23 @@ async function loadUserColors() {
             }
         });
         if (response.ok) {
-            userColors = await response.json();
+            const data = await response.json();
+            userColors = {};
+            userNicknames = {};
+            for (const [username, prefs] of Object.entries(data)) {
+                userColors[username] = prefs.color;
+                if (prefs.nickname) {
+                    userNicknames[username] = prefs.nickname;
+                }
+            }
         }
     } catch (error) {
         console.error('[HTTP] Error loading user colors:', error);
     }
+}
+
+function getDisplayName(username) {
+    return userNicknames[username] || username;
 }
 
 function toggleSettingsPanel() {
@@ -474,6 +638,10 @@ async function loadUserSettings() {
         });
         if (response.ok) {
             const data = await response.json();
+            const nicknameInput = document.getElementById('userNickname');
+            if (nicknameInput) {
+                nicknameInput.value = data.nickname || '';
+            }
             const colorInput = document.getElementById('userColor');
             if (colorInput) {
                 colorInput.value = data.color;
@@ -553,6 +721,41 @@ async function resetUserThemeColor() {
     } catch (error) {
         console.error('[HTTP] Error resetting theme color:', error);
     }
+}
+
+async function updateUserNickname() {
+    const nickname = document.getElementById('userNickname').value.trim();
+    try {
+        const response = await fetch(`${API_URL}/users/${currentUsername}/preferences`, {
+            method: 'PUT',
+            headers: {
+                'Authorization': `Bearer ${sessionToken}`,
+                'Content-Type': 'application/json'
+            },
+            body: JSON.stringify({ nickname: nickname || '' })
+        });
+        if (response.ok) {
+            if (nickname) {
+                userNicknames[currentUsername] = nickname;
+            } else {
+                delete userNicknames[currentUsername];
+            }
+            // Refresh messages to show new nickname
+            if (currentRoom) {
+                document.getElementById('messages').innerHTML = '';
+                lastMessageId = 0;
+                await loadMessages();
+            }
+        }
+    } catch (error) {
+        console.error('[HTTP] Error updating nickname:', error);
+        alert('Failed to update nickname');
+    }
+}
+
+async function clearUserNickname() {
+    document.getElementById('userNickname').value = '';
+    await updateUserNickname();
 }
 
 async function updateServerColor() {
@@ -799,24 +1002,31 @@ async function loadAllUsers() {
         if (data.users.length === 0) {
             usersList.innerHTML = '<p style="color: #999;">No users</p>';
         } else {
-            usersList.innerHTML = data.users.map(user => `
-                <div class="user-item">
-                    <div class="user-info">
-                        <span class="user-name">${user.username}</span>
-                        <span class="user-role ${user.role}">${user.role.toUpperCase()}</span>
+            const isAdmin = currentRole === 'admin';
+            usersList.innerHTML = data.users.map(user => {
+                let actions = '';
+                if (isAdmin && user.username !== currentUsername) {
+                    if (user.role === 'user') {
+                        actions += `<button class="promote-btn" onclick="window.setUserRole('${user.username}', 'moderator')">Make Mod</button>`;
+                        actions += `<button class="promote-btn" onclick="window.setUserRole('${user.username}', 'admin')">Make Admin</button>`;
+                    } else if (user.role === 'moderator') {
+                        actions += `<button class="demote-btn" onclick="window.setUserRole('${user.username}', 'user')">Remove Mod</button>`;
+                        actions += `<button class="promote-btn" onclick="window.setUserRole('${user.username}', 'admin')">Make Admin</button>`;
+                    } else {
+                        actions += `<button class="demote-btn" onclick="window.setUserRole('${user.username}', 'user')">Remove Admin</button>`;
+                    }
+                    actions += `<button class="delete-btn" onclick="window.deleteUser('${user.username}')">Delete</button>`;
+                }
+                return `
+                    <div class="user-item">
+                        <div class="user-info">
+                            <span class="user-name">${user.username}</span>
+                            <span class="user-role ${user.role}">${user.role.toUpperCase()}</span>
+                        </div>
+                        <div class="user-actions">${actions}</div>
                     </div>
-                    <div class="user-actions">
-                        ${user.role === 'user'
-                            ? `<button class="promote-btn" onclick="window.setUserRole('${user.username}', 'admin')">Make Admin</button>`
-                            : `<button class="demote-btn" onclick="window.setUserRole('${user.username}', 'user')">Remove Admin</button>`
-                        }
-                        ${user.username !== currentUsername
-                            ? `<button class="delete-btn" onclick="window.deleteUser('${user.username}')">Delete</button>`
-                            : ''
-                        }
-                    </div>
-                </div>
-            `).join('');
+                `;
+            }).join('');
         }
     } catch (error) {
         console.error('Failed to load users:', error);
@@ -824,7 +1034,8 @@ async function loadAllUsers() {
 }
 
 async function setUserRole(username, role) {
-    if (!confirm(`Are you sure you want to ${role === 'admin' ? 'promote' : 'demote'} ${username}?`)) {
+    const action = role === 'user' ? 'demote' : 'promote';
+    if (!confirm(`Are you sure you want to ${action} ${username} to ${role}?`)) {
         return;
     }
 
@@ -983,12 +1194,17 @@ function createRoomItem(room) {
 
     const nameSpan = document.createElement('span');
     nameSpan.className = 'room-name';
-    nameSpan.textContent = room.display_name;
+    if (room.room_type === 'dm') {
+        const parts = room.display_name.split(', ');
+        nameSpan.textContent = parts.map(u => getDisplayName(u)).join(', ');
+    } else {
+        nameSpan.textContent = room.display_name;
+    }
     nameSpan.onclick = () => selectRoom(room.room_id);
 
     item.appendChild(nameSpan);
 
-    if (currentRole === 'admin' && room.room_type === 'channel') {
+    if ((currentRole === 'admin' || currentRole === 'moderator') && room.room_type === 'channel') {
         const settingsBtn = document.createElement('button');
         settingsBtn.className = 'room-settings-btn';
         settingsBtn.textContent = '\u2699';
@@ -1137,7 +1353,11 @@ function selectRoom(roomId) {
 
     // Use display_name from metadata for header
     const meta = roomMeta[roomId];
-    const displayName = meta ? meta.display_name : roomId;
+    let displayName = meta ? meta.display_name : roomId;
+    if (meta && meta.room_type === 'dm') {
+        const parts = displayName.split(', ');
+        displayName = parts.map(u => getDisplayName(u)).join(', ');
+    }
     document.getElementById('chatHeader').textContent = displayName;
 
     document.querySelectorAll('.room-item').forEach(item => {
@@ -1285,10 +1505,11 @@ async function displayMessage(msg) {
     }
 
     const messageBody = linkifyRoomRefs(escapeHtml(plaintext));
+    const displayName = getDisplayName(msg.username);
 
     messageDiv.innerHTML = `
         <div class="message-header">
-            <span class="username" style="color: ${userColor};">${escapeHtml(msg.username)}</span>
+            <span class="username" style="color: ${userColor};" title="${escapeHtml(msg.username)}">${escapeHtml(displayName)}</span>
             <span class="timestamp">${timeStr}</span>
         </div>
         <div class="message-text">${messageBody}</div>
@@ -1449,6 +1670,12 @@ function closeDMModal() {
     modal.classList.remove('open');
 }
 
+function updateDMStartButton() {
+    const btn = document.getElementById('dmStartBtn');
+    const checked = document.querySelectorAll('#dmUserList input[type="checkbox"]:checked');
+    btn.style.display = checked.length > 0 ? '' : 'none';
+}
+
 async function loadDMUserList() {
     try {
         const response = await fetch(`${API_URL}/users/list`, {
@@ -1466,19 +1693,35 @@ async function loadDMUserList() {
 
         userList.innerHTML = '';
         otherUsers.forEach(username => {
-            const item = document.createElement('div');
-            item.className = 'dm-user-item';
-            item.textContent = username;
-            item.onclick = () => startDM(username);
-            userList.appendChild(item);
+            const label = document.createElement('label');
+            label.className = 'dm-user-item';
+            const cb = document.createElement('input');
+            cb.type = 'checkbox';
+            cb.value = username;
+            cb.addEventListener('change', updateDMStartButton);
+            label.appendChild(cb);
+            label.appendChild(document.createTextNode(` ${username}`));
+            userList.appendChild(label);
         });
+
+        document.getElementById('dmStartBtn').style.display = 'none';
     } catch (error) {
         console.error('Error loading user list:', error);
         document.getElementById('dmUserList').innerHTML = '<p style="color: #999;">Failed to load users</p>';
     }
 }
 
-async function startDM(targetUsername) {
+async function startDMFromModal() {
+    const checked = document.querySelectorAll('#dmUserList input[type="checkbox"]:checked');
+    const targets = Array.from(checked).map(cb => cb.value);
+    if (targets.length === 0) return;
+    await startDM(targets);
+}
+
+async function startDM(targetUsernames) {
+    // Accept a single string for backwards compat (e.g. from slash command)
+    if (typeof targetUsernames === 'string') targetUsernames = [targetUsernames];
+
     try {
         const response = await fetch(`${API_URL}/rooms/dm`, {
             method: 'POST',
@@ -1486,7 +1729,7 @@ async function startDM(targetUsername) {
                 'Content-Type': 'application/json',
                 'Authorization': `Bearer ${sessionToken}`
             },
-            body: JSON.stringify({ username: targetUsername })
+            body: JSON.stringify({ usernames: targetUsernames })
         });
 
         const data = await response.json();
@@ -1496,10 +1739,9 @@ async function startDM(targetUsername) {
             return;
         }
 
-        // Generate E2E room key for both DM participants
-        // Only init if this is a brand new DM (no keys yet)
+        // Generate E2E room key for all DM participants
         if (!roomKeys[data.room.room_id]) {
-            await initDMRoomKey(data.room.room_id, targetUsername);
+            await initDMRoomKey(data.room.room_id, targetUsernames);
         }
 
         closeDMModal();
@@ -1527,6 +1769,8 @@ window.deleteUser = deleteUser;
 window.updateUserColor = updateUserColor;
 window.updateUserThemeColor = updateUserThemeColor;
 window.resetUserThemeColor = resetUserThemeColor;
+window.updateUserNickname = updateUserNickname;
+window.clearUserNickname = clearUserNickname;
 window.updateServerColor = updateServerColor;
 window.updateUserColorAdmin = updateUserColorAdmin;
 window.openCreateRoomModal = openCreateRoomModal;
@@ -1534,6 +1778,7 @@ window.closeCreateRoomModal = closeCreateRoomModal;
 window.createRoom = createRoom;
 window.openDMModal = openDMModal;
 window.closeDMModal = closeDMModal;
+window.startDMFromModal = startDMFromModal;
 window.sendMessage = sendMessage;
 window.toggleSidebar = toggleSidebar;
 window.closeRoomSettings = closeRoomSettings;
@@ -1553,5 +1798,10 @@ document.addEventListener('DOMContentLoaded', () => {
         newRoomInput.addEventListener('keypress', (e) => {
             if (e.key === 'Enter') createRoom();
         });
+    }
+
+    const nicknameInput = document.getElementById('userNickname');
+    if (nicknameInput) {
+        nicknameInput.addEventListener('change', updateUserNickname);
     }
 });

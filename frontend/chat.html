@@ -65,7 +65,7 @@
             <button class="close-btn" onclick="toggleAdminPanel()">✕</button>
         </div>
 
-        <div class="admin-section">
+        <div class="admin-section admin-only">
             <h3>Server Theme</h3>
             <div class="preference-item">
                 <label for="serverColorPicker">Server color:</label>
@@ -73,7 +73,7 @@
             </div>
         </div>
 
-        <div class="admin-section">
+        <div class="admin-section admin-only">
             <h3>Registration Mode</h3>
             <div class="reg-mode-slider">
                 <input type="range" id="regModeSlider" min="0" max="3" step="1" value="0"
@@ -88,7 +88,7 @@
             </div>
         </div>
 
-        <div id="inviteSection" class="admin-section hidden">
+        <div id="inviteSection" class="admin-section admin-only hidden">
             <h3>Invite Links</h3>
             <button class="invite-generate-btn" onclick="generateInviteLink()">Generate Invite Link</button>
             <div id="inviteList"></div>
@@ -104,7 +104,7 @@
             <div id="usersList"></div>
         </div>
 
-        <div class="admin-section">
+        <div class="admin-section admin-only">
             <h3>User Preferences</h3>
             <div id="userPreferencesList"></div>
         </div>
@@ -127,6 +127,14 @@
 
         <div class="settings-section">
             <h3>Display Preferences</h3>
+            <div class="preference-item">
+                <label for="userNickname">Nickname:</label>
+                <div style="display: flex; align-items: center; gap: 8px;">
+                    <input type="text" id="userNickname" maxlength="32" placeholder="Enter nickname..."
+                           style="flex: 1; padding: 4px 8px; border: 1px solid rgba(255,255,255,0.2); border-radius: 4px; font-size: 14px; background: rgba(255,255,255,0.1); color: inherit;">
+                    <button class="theme-reset-btn" onclick="clearUserNickname()">Clear</button>
+                </div>
+            </div>
             <div class="preference-item">
                 <label for="userColor">Your username color:</label>
                 <input type="color" id="userColor" value="#1976d2" onchange="updateUserColor()">
@@ -193,6 +201,7 @@
             </div>
             <div class="room-settings-body">
                 <div id="dmUserList" class="dm-user-list"></div>
+                <button id="dmStartBtn" onclick="startDMFromModal()" style="display:none; margin-top: 12px;">Start Conversation</button>
             </div>
         </div>
     </div>

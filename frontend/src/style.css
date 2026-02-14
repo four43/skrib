@@ -983,6 +983,12 @@ input:focus-visible {
     border: 1px solid rgba(var(--theme-rgb), 0.2);
 }
 
+.user-role.moderator {
+    background: rgba(245, 158, 11, 0.12);
+    color: #d97706;
+    border: 1px solid rgba(245, 158, 11, 0.2);
+}
+
 .user-role.user {
     background: rgba(var(--theme-rgb), 0.06);
     color: var(--theme-color);
@@ -1513,6 +1519,9 @@ input:focus-visible {
 }
 
 .dm-user-item {
+    display: flex;
+    align-items: center;
+    gap: 8px;
     padding: 10px 14px;
     cursor: pointer;
     border-radius: 8px;

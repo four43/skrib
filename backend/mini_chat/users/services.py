@@ -9,7 +9,7 @@ def get_user_preferences(username: str) -> Optional[Dict]:
     """Get preferences for a user. Returns None if not found."""
     with get_db() as conn:
         cursor = conn.execute(
-            'SELECT username, color, theme_color FROM user_preferences WHERE username = ?',
+            'SELECT username, color, theme_color, nickname FROM user_preferences WHERE username = ?',
             (username,)
         )
         row = cursor.fetchone()
@@ -24,10 +24,10 @@ def create_default_preferences(username: str) -> Dict:
             (username, '#1976d2')
         )
         conn.commit()
-        return {'username': username, 'color': '#1976d2', 'theme_color': None}
+        return {'username': username, 'color': '#1976d2', 'theme_color': None, 'nickname': None}
 
 
-def update_user_preferences(username: str, color: Optional[str] = None, theme_color: Optional[str] = None) -> bool:
+def update_user_preferences(username: str, color: Optional[str] = None, theme_color: Optional[str] = None, nickname: Optional[str] = None) -> bool:
     """Update user preferences. Creates default if doesn't exist."""
     with get_db() as conn:
         cursor = conn.execute(
@@ -45,6 +45,11 @@ def update_user_preferences(username: str, color: Optional[str] = None, theme_co
                 # Empty string means "use server default"
                 updates.append('theme_color = ?')
                 params.append(theme_color if theme_color != '' else None)
+            if nickname is not None:
+                # Empty string means "clear nickname, use username"
+                trimmed = nickname.strip()
+                updates.append('nickname = ?')
+                params.append(trimmed if trimmed and len(trimmed) <= 32 else None)
 
             if updates:
                 params.append(username)
@@ -53,19 +58,22 @@ def update_user_preferences(username: str, color: Optional[str] = None, theme_co
                     params
                 )
         else:
+            nick_val = nickname.strip() if nickname else None
+            if nick_val and len(nick_val) > 32:
+                nick_val = None
             conn.execute(
-                'INSERT INTO user_preferences (username, color, theme_color) VALUES (?, ?, ?)',
-                (username, color or '#1976d2', theme_color if theme_color else None)
+                'INSERT INTO user_preferences (username, color, theme_color, nickname) VALUES (?, ?, ?, ?)',
+                (username, color or '#1976d2', theme_color if theme_color else None, nick_val)
             )
         conn.commit()
         return True
 
 
-def get_all_user_preferences() -> Dict[str, str]:
-    """Get all user preferences as a dict mapping username -> color."""
+def get_all_user_preferences() -> Dict[str, Dict]:
+    """Get all user preferences as a dict mapping username -> {color, nickname}."""
     with get_db() as conn:
-        cursor = conn.execute('SELECT username, color FROM user_preferences')
-        return {row['username']: row['color'] for row in cursor}
+        cursor = conn.execute('SELECT username, color, nickname FROM user_preferences')
+        return {row['username']: {'color': row['color'], 'nickname': row['nickname']} for row in cursor}
 
 
 def get_pending_users() -> List[Dict]:

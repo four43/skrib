@@ -119,12 +119,10 @@ def get_user_rooms(username: str) -> List[Dict]:
         for row in cursor:
             room_id = row['room_id']
             members = get_room_members(room_id)
-            other = [m for m in members if m != username]
-            display_name = other[0] if other else username
             rooms.append({
                 'room_id': room_id,
                 'room_type': 'dm',
-                'display_name': display_name,
+                'display_name': dm_display_name(members, username),
                 'members': members,
             })
 
@@ -164,19 +162,26 @@ def create_room(room_id: str, room_type: str = 'channel') -> bool:
     return True
 
 
-def create_or_get_dm(user_a: str, user_b: str) -> Dict:
-    """Create or return existing DM room between two users."""
-    sorted_users = sorted([user_a, user_b])
-    room_id = f"dm-{sorted_users[0]}-{sorted_users[1]}"
+def dm_display_name(members: List[str], viewer: str) -> str:
+    """Build a display name for a DM from the perspective of *viewer*."""
+    others = [m for m in members if m != viewer]
+    if not others:
+        return viewer
+    return ", ".join(others)
+
+
+def create_or_get_dm(creator: str, other_users: List[str]) -> Dict:
+    """Create or return existing DM room among a set of users (including the creator)."""
+    all_users = sorted(set([creator] + other_users))
+    room_id = "dm|" + "|".join(all_users)
 
     with ROOMS_LOCK:
         if room_id in ROOMS:
             members = get_room_members(room_id)
-            other = [m for m in members if m != user_a]
             return {
                 'room_id': room_id,
                 'room_type': 'dm',
-                'display_name': other[0] if other else user_a,
+                'display_name': dm_display_name(members, creator),
                 'members': members,
             }
 
@@ -187,25 +192,21 @@ def create_or_get_dm(user_a: str, user_b: str) -> Dict:
             'INSERT OR IGNORE INTO rooms (room_id, room_type, created_at) VALUES (?, ?, ?)',
             (room_id, 'dm', now)
         )
-        conn.execute(
-            'INSERT OR IGNORE INTO room_members (room_id, username) VALUES (?, ?)',
-            (room_id, sorted_users[0])
-        )
-        conn.execute(
-            'INSERT OR IGNORE INTO room_members (room_id, username) VALUES (?, ?)',
-            (room_id, sorted_users[1])
-        )
+        for user in all_users:
+            conn.execute(
+                'INSERT OR IGNORE INTO room_members (room_id, username) VALUES (?, ?)',
+                (room_id, user)
+            )
         conn.commit()
 
     with ROOMS_LOCK:
         ROOMS[room_id] = 'dm'
 
-    other = [u for u in sorted_users if u != user_a]
     return {
         'room_id': room_id,
         'room_type': 'dm',
-        'display_name': other[0] if other else user_a,
-        'members': sorted_users,
+        'display_name': dm_display_name(all_users, creator),
+        'members': all_users,
     }
 
 
@@ -269,6 +270,31 @@ def add_room_member(room_id: str, username: str) -> Dict:
 
         conn.execute(
             'INSERT INTO room_members (room_id, username) VALUES (?, ?)',
+            (room_id, username),
+        )
+        conn.commit()
+
+    return {'status': 'ok'}
+
+
+def remove_room_member(room_id: str, username: str) -> Dict:
+    """Remove a user from a room.
+
+    Returns dict with 'status': 'ok', 'not_member', or 'room_not_found'.
+    """
+    if not room_exists(room_id):
+        return {'status': 'room_not_found'}
+
+    with get_db() as conn:
+        cursor = conn.execute(
+            'SELECT 1 FROM room_members WHERE room_id = ? AND username = ?',
+            (room_id, username),
+        )
+        if not cursor.fetchone():
+            return {'status': 'not_member'}
+
+        conn.execute(
+            'DELETE FROM room_members WHERE room_id = ? AND username = ?',
             (room_id, username),
         )
         conn.commit()

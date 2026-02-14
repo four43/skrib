@@ -47,6 +47,19 @@ def require_admin(authorization: Optional[str] = Header(None)) -> str:
     return username
 
 
+def require_moderator(authorization: Optional[str] = Header(None)) -> str:
+    """Require moderator or admin authentication."""
+    username = require_auth(authorization)
+
+    with get_db() as conn:
+        cursor = conn.execute('SELECT role FROM users WHERE username = ?', (username,))
+        row = cursor.fetchone()
+        if not row or row['role'] not in ('admin', 'moderator'):
+            raise HTTPException(status_code=403, detail="Moderator access required")
+
+    return username
+
+
 def verify_token(token: str) -> Optional[str]:
     """Verify a token and return the username (for WebSocket auth)."""
     try:

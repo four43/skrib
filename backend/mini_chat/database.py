@@ -146,6 +146,7 @@ def init_db():
                 username TEXT PRIMARY KEY,
                 color TEXT NOT NULL DEFAULT '#1976d2',
                 theme_color TEXT,
+                nickname TEXT,
                 FOREIGN KEY (username) REFERENCES users(username) ON DELETE CASCADE
             )
         ''')
