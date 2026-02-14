@@ -14,6 +14,10 @@ from .schemas import (
     SendMessageResponse,
     MessagesResponse,
     DeleteRoomResponse,
+    AddMemberRequest,
+    AddMemberResponse,
+    StoreRoomKeyRequest,
+    RoomKeysResponse,
 )
 from .services import (
     get_user_rooms,
@@ -25,6 +29,9 @@ from .services import (
     get_room_members,
     create_or_get_dm,
     validate_channel_name,
+    add_room_member,
+    store_room_key,
+    get_room_keys,
     ChatRoom,
 )
 from .websocket import manager
@@ -165,6 +172,52 @@ async def delete_room_endpoint(
     await rooms_subscriptions.notify_all({"type": "update"})
 
     return DeleteRoomResponse(status="ok", room_id=room_id)
+
+
+@router.post("/{room_id}/members", response_model=AddMemberResponse)
+async def add_member_endpoint(
+    room_id: str,
+    request: AddMemberRequest,
+    username: str = Depends(require_auth),
+):
+    """Add a member to a room."""
+    _check_room_access(room_id, username)
+
+    result = add_room_member(room_id, request.username)
+
+    if result['status'] == 'user_not_found':
+        raise HTTPException(status_code=404, detail="User not found")
+    if result['status'] == 'room_not_found':
+        raise HTTPException(status_code=404, detail="Room not found")
+    if result['status'] == 'already_member':
+        raise HTTPException(status_code=400, detail="User is already a member")
+
+    await rooms_subscriptions.notify(request.username, {"type": "update"})
+
+    return AddMemberResponse(status="ok", room_id=room_id, username=request.username)
+
+
+@router.post("/{room_id}/keys")
+async def store_room_key_endpoint(
+    room_id: str,
+    request: StoreRoomKeyRequest,
+    username: str = Depends(require_auth),
+):
+    """Store an encrypted room key for a user."""
+    _check_room_access(room_id, username)
+    store_room_key(room_id, request.username, request.key_epoch, request.encrypted_key)
+    return {"status": "ok"}
+
+
+@router.get("/{room_id}/keys", response_model=RoomKeysResponse)
+async def get_room_keys_endpoint(
+    room_id: str,
+    username: str = Depends(require_auth),
+):
+    """Get your encrypted room keys (all epochs)."""
+    _check_room_access(room_id, username)
+    keys = get_room_keys(room_id, username)
+    return RoomKeysResponse(keys=keys)
 
 
 @router.websocket("/{room_id}/ws")

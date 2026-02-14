@@ -241,3 +241,55 @@ def ensure_room_exists(room_id: str):
     with ROOMS_LOCK:
         if room_id not in ROOMS:
             ROOMS[room_id] = 'channel'
+
+
+def add_room_member(room_id: str, username: str) -> Dict:
+    """Add a user as a member of a room.
+
+    Returns dict with 'status': 'ok', 'already_member', 'user_not_found', or 'room_not_found'.
+    """
+    if not room_exists(room_id):
+        return {'status': 'room_not_found'}
+
+    with get_db() as conn:
+        cursor = conn.execute(
+            'SELECT username FROM users WHERE username = ?', (username,)
+        )
+        if not cursor.fetchone():
+            return {'status': 'user_not_found'}
+
+        cursor = conn.execute(
+            'SELECT 1 FROM room_members WHERE room_id = ? AND username = ?',
+            (room_id, username),
+        )
+        if cursor.fetchone():
+            return {'status': 'already_member'}
+
+        conn.execute(
+            'INSERT INTO room_members (room_id, username) VALUES (?, ?)',
+            (room_id, username),
+        )
+        conn.commit()
+
+    return {'status': 'ok'}
+
+
+def store_room_key(room_id: str, username: str, key_epoch: int, encrypted_key: str):
+    """Store an encrypted room key for a user at a given epoch."""
+    now = datetime.now().isoformat()
+    with get_db() as conn:
+        conn.execute(
+            'INSERT OR REPLACE INTO room_keys (room_id, username, key_epoch, encrypted_key, created_at) VALUES (?, ?, ?, ?, ?)',
+            (room_id, username, key_epoch, encrypted_key, now),
+        )
+        conn.commit()
+
+
+def get_room_keys(room_id: str, username: str) -> List[Dict]:
+    """Get all encrypted room keys for a user across all epochs."""
+    with get_db() as conn:
+        cursor = conn.execute(
+            'SELECT key_epoch, encrypted_key FROM room_keys WHERE room_id = ? AND username = ? ORDER BY key_epoch',
+            (room_id, username),
+        )
+        return [{'key_epoch': row['key_epoch'], 'encrypted_key': row['encrypted_key']} for row in cursor]

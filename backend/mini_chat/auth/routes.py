@@ -2,6 +2,8 @@
 from fastapi import APIRouter, HTTPException, Depends, Query
 from typing import Optional
 
+from datetime import datetime
+
 from .schemas import (
     RegistrationBeginResponse,
     RegistrationCompleteRequest,
@@ -10,6 +12,8 @@ from .schemas import (
     LoginCompleteRequest,
     LoginCompleteResponse,
     SessionResponse,
+    StoreEncryptionKeyRequest,
+    EncryptionKeyResponse,
 )
 from .services import (
     generate_challenge,
@@ -21,7 +25,8 @@ from .services import (
     get_user_by_credential,
     create_session_token,
 )
-from ..dependencies import get_username_from_token
+from ..dependencies import get_username_from_token, require_auth
+from ..database import get_db
 
 router = APIRouter(prefix="/auth", tags=["authentication"])
 
@@ -134,3 +139,36 @@ async def check_session(username: Optional[str] = Depends(get_username_from_toke
                 )
 
     return SessionResponse(authenticated=False)
+
+
+@router.post("/encryption-key")
+async def store_encryption_key(
+    request: StoreEncryptionKeyRequest,
+    username: str = Depends(require_auth),
+):
+    """Store the user's encryption public key (JWK)."""
+    now = datetime.now().isoformat()
+    with get_db() as conn:
+        conn.execute(
+            'INSERT OR REPLACE INTO user_encryption_keys (username, public_key, created_at) VALUES (?, ?, ?)',
+            (username, request.public_key, now),
+        )
+        conn.commit()
+    return {"status": "ok"}
+
+
+@router.get("/encryption-key/{target_username}", response_model=EncryptionKeyResponse)
+async def get_encryption_key(
+    target_username: str,
+    _: str = Depends(require_auth),
+):
+    """Get a user's encryption public key."""
+    with get_db() as conn:
+        cursor = conn.execute(
+            'SELECT public_key FROM user_encryption_keys WHERE username = ?',
+            (target_username,),
+        )
+        row = cursor.fetchone()
+    if not row:
+        raise HTTPException(status_code=404, detail="Encryption key not found for user")
+    return EncryptionKeyResponse(username=target_username, public_key=row['public_key'])

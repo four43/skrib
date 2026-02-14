@@ -58,3 +58,12 @@ class SessionResponse(BaseModel):
     authenticated: bool
     username: Optional[str] = None
     role: Optional[str] = None
+
+
+class StoreEncryptionKeyRequest(BaseModel):
+    public_key: str  # JWK JSON string
+
+
+class EncryptionKeyResponse(BaseModel):
+    username: str
+    public_key: str

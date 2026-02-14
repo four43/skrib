@@ -56,3 +56,28 @@ class MessagesResponse(BaseModel):
 class DeleteRoomResponse(BaseModel):
     status: str
     room_id: str
+
+
+class AddMemberRequest(BaseModel):
+    username: str
+
+
+class AddMemberResponse(BaseModel):
+    status: str
+    room_id: str
+    username: str
+
+
+class StoreRoomKeyRequest(BaseModel):
+    username: str
+    encrypted_key: str
+    key_epoch: int = 0
+
+
+class RoomKeyEntry(BaseModel):
+    key_epoch: int
+    encrypted_key: str
+
+
+class RoomKeysResponse(BaseModel):
+    keys: List[RoomKeyEntry]

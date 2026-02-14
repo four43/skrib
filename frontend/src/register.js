@@ -1,5 +1,6 @@
 import './style.css';
 import { API_URL, showStatus, arrayBufferToBase64, base64ToArrayBuffer, friendlyError, loadAndApplyTheme } from './utils.js';
+import { generateEncryptionKeyPair, exportPublicKey, storePrivateKey } from './crypto.js';
 
 // Get invite token from URL if present
 const urlParams = new URLSearchParams(window.location.search);
@@ -111,15 +112,64 @@ async function register() {
         if (completeData.detail) {
             showStatus('registerStatus', `❌ ${completeData.detail}`, 'error');
         } else if (completeData.status === 'approved') {
+            // Generate E2E encryption key pair and upload public key
+            try {
+                showStatus('registerStatus', '🔑 Generating encryption keys...', 'info');
+                const keyPair = await generateEncryptionKeyPair();
+                const publicKeyJwk = await exportPublicKey(keyPair);
+                await storePrivateKey(username, keyPair.privateKey);
+
+                // We need a session token to upload the key. Log in first,
+                // then upload. For auto-approved users we can do a quick login.
+                const loginBegin = await fetch(`${API_URL}/auth/login/begin`);
+                const loginBeginData = await loginBegin.json();
+                const loginChallenge = base64ToArrayBuffer(loginBeginData.challenge);
+                const loginAssertion = await navigator.credentials.get({
+                    publicKey: {
+                        challenge: loginChallenge,
+                        timeout: 60000,
+                        userVerification: "preferred"
+                    }
+                });
+                const loginResp = await fetch(`${API_URL}/auth/login/complete`, {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({
+                        credentialId: arrayBufferToBase64(loginAssertion.rawId),
+                        challenge: loginBeginData.challenge,
+                    })
+                });
+                const loginData = await loginResp.json();
+
+                if (loginData.session_token) {
+                    await fetch(`${API_URL}/auth/encryption-key`, {
+                        method: 'POST',
+                        headers: {
+                            'Content-Type': 'application/json',
+                            'Authorization': `Bearer ${loginData.session_token}`,
+                        },
+                        body: JSON.stringify({ public_key: JSON.stringify(publicKeyJwk) }),
+                    });
+
+                    // Store session so login page redirects straight to chat
+                    localStorage.setItem('session_token', loginData.session_token);
+                    localStorage.setItem('username', loginData.username);
+                    localStorage.setItem('role', loginData.role);
+                }
+            } catch (keyError) {
+                console.error('Failed to generate encryption keys:', keyError);
+                // Non-fatal: user can still chat, keys will be generated on next login
+            }
+
             showStatus('registerStatus',
                 `<div class="approval-code">
                     <h3>✅ Registration Complete!</h3>
-                    <p>Your account has been approved. Redirecting to login...</p>
+                    <p>Your account has been approved. Redirecting to chat...</p>
                 </div>`,
                 'success'
             );
             setTimeout(() => {
-                window.location.href = '/login.html';
+                window.location.href = '/chat.html';
             }, 2000);
         } else {
             showStatus('registerStatus',

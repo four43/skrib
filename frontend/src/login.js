@@ -1,5 +1,6 @@
 import './style.css';
 import { API_URL, showStatus, arrayBufferToBase64, base64ToArrayBuffer, friendlyError, loadAndApplyTheme } from './utils.js';
+import { loadPrivateKey, generateEncryptionKeyPair, exportPublicKey, storePrivateKey } from './crypto.js';
 
 // Load theme, check session, then check registration mode
 loadAndApplyTheme();
@@ -74,6 +75,26 @@ async function login() {
             localStorage.setItem('session_token', completeData.session_token);
             localStorage.setItem('username', completeData.username);
             localStorage.setItem('role', completeData.role);
+
+            // Ensure encryption keys exist (generate if missing, e.g. new device)
+            try {
+                let privKey = await loadPrivateKey(completeData.username);
+                if (!privKey) {
+                    const keyPair = await generateEncryptionKeyPair();
+                    const publicKeyJwk = await exportPublicKey(keyPair);
+                    await storePrivateKey(completeData.username, keyPair.privateKey);
+                    await fetch(`${API_URL}/auth/encryption-key`, {
+                        method: 'POST',
+                        headers: {
+                            'Content-Type': 'application/json',
+                            'Authorization': `Bearer ${completeData.session_token}`,
+                        },
+                        body: JSON.stringify({ public_key: JSON.stringify(publicKeyJwk) }),
+                    });
+                }
+            } catch (keyError) {
+                console.error('Failed to load/generate encryption keys:', keyError);
+            }
 
             // Redirect to chat
             window.location.href = '/chat.html';

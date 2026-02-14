@@ -1,5 +1,15 @@
 import './style.css';
 import { API_URL, escapeHtml, loadAndApplyTheme, applyThemeColor } from './utils.js';
+import {
+    loadPrivateKey,
+    generateRoomKey,
+    encryptRoomKey,
+    decryptRoomKey,
+    encryptMessage,
+    decryptMessage,
+    isEncryptedMessage,
+    getMessageEpoch,
+} from './crypto.js';
 
 let sessionToken = null;
 let currentUsername = null;
@@ -18,6 +28,265 @@ let currentRegMode = 'closed';  // Current registration mode
 let roomMeta = {};  // Cache of room_id -> { room_type, display_name, members }
 let roomsWs = null;  // WebSocket subscription for room list updates
 let roomsWsReconnectTimeout = null;
+let privateKey = null;  // User's RSA-OAEP private key (loaded from IndexedDB)
+let roomKeys = {};  // room_id -> { epoch: CryptoKey }
+
+// ---------------------------------------------------------------------------
+// Slash command framework
+// ---------------------------------------------------------------------------
+
+const slashCommands = {};
+
+function registerCommand(name, handler, description) {
+    slashCommands[name] = { handler, description };
+}
+
+function parseAndExecuteCommand(input) {
+    const parts = input.substring(1).split(/\s+/);
+    const commandName = parts[0].toLowerCase();
+    const args = parts.slice(1).join(' ').trim();
+
+    const command = slashCommands[commandName];
+    if (!command) {
+        displaySystemMessage(`Unknown command: /${commandName}. Type /help for available commands.`);
+        return;
+    }
+
+    command.handler(args);
+}
+
+function displaySystemMessage(text) {
+    const messagesDiv = document.getElementById('messages');
+    if (!messagesDiv) return;
+
+    if (messagesDiv.querySelector('.empty-state')) {
+        messagesDiv.innerHTML = '';
+    }
+
+    const messageDiv = document.createElement('div');
+    messageDiv.className = 'message system-message';
+    messageDiv.innerHTML = `
+        <div class="message-text system-message-text">${escapeHtml(text).replace(/\n/g, '<br>')}</div>
+    `;
+
+    messagesDiv.appendChild(messageDiv);
+    messagesDiv.scrollTop = messagesDiv.scrollHeight;
+}
+
+// ---------------------------------------------------------------------------
+// Commands: /help, /invite
+// ---------------------------------------------------------------------------
+
+registerCommand('help', () => {
+    const lines = ['Available commands:'];
+    for (const [name, cmd] of Object.entries(slashCommands)) {
+        lines.push(`  /${name} — ${cmd.description}`);
+    }
+    displaySystemMessage(lines.join('\n'));
+}, 'Show available commands');
+
+registerCommand('invite', async (args) => {
+    const targetUsername = args.trim();
+
+    if (!targetUsername) {
+        displaySystemMessage('Usage: /invite <username>');
+        return;
+    }
+
+    if (!currentRoom) {
+        displaySystemMessage('Please select a room first.');
+        return;
+    }
+
+    if (!privateKey) {
+        displaySystemMessage('Encryption keys not loaded. Please log out and back in.');
+        return;
+    }
+
+    const currentEpochs = roomKeys[currentRoom];
+    if (!currentEpochs || Object.keys(currentEpochs).length === 0) {
+        displaySystemMessage('No room key available. Cannot invite to an unencrypted room.');
+        return;
+    }
+
+    try {
+        // 1. Add member to room
+        const memberResp = await fetch(
+            `${API_URL}/rooms/${encodeURIComponent(currentRoom)}/members`,
+            {
+                method: 'POST',
+                headers: {
+                    'Content-Type': 'application/json',
+                    'Authorization': `Bearer ${sessionToken}`,
+                },
+                body: JSON.stringify({ username: targetUsername }),
+            }
+        );
+
+        if (!memberResp.ok) {
+            const data = await memberResp.json();
+            displaySystemMessage(`Could not invite ${targetUsername}: ${data.detail || 'Unknown error'}`);
+            return;
+        }
+
+        // 2. Fetch their encryption public key
+        const keyResp = await fetch(
+            `${API_URL}/auth/encryption-key/${encodeURIComponent(targetUsername)}`,
+            { headers: { 'Authorization': `Bearer ${sessionToken}` } }
+        );
+
+        if (!keyResp.ok) {
+            displaySystemMessage(`${targetUsername} has no encryption key. They need to log in first.`);
+            return;
+        }
+
+        const { public_key: publicKeyJson } = await keyResp.json();
+        const publicKeyJwk = JSON.parse(publicKeyJson);
+
+        // 3. Encrypt room key for each epoch the invitee should have access to
+        const epochs = Object.keys(currentEpochs).map(Number);
+        for (const epoch of epochs) {
+            const encKey = await encryptRoomKey(currentEpochs[epoch], publicKeyJwk);
+            await fetch(
+                `${API_URL}/rooms/${encodeURIComponent(currentRoom)}/keys`,
+                {
+                    method: 'POST',
+                    headers: {
+                        'Content-Type': 'application/json',
+                        'Authorization': `Bearer ${sessionToken}`,
+                    },
+                    body: JSON.stringify({
+                        username: targetUsername,
+                        encrypted_key: encKey,
+                        key_epoch: epoch,
+                    }),
+                }
+            );
+        }
+
+        displaySystemMessage(`Invited ${targetUsername} to this room.`);
+    } catch (error) {
+        console.error('[CMD] Error inviting user:', error);
+        displaySystemMessage('Failed to invite user. Please try again.');
+    }
+}, 'Invite a user to the current room');
+
+// ---------------------------------------------------------------------------
+// E2E helpers
+// ---------------------------------------------------------------------------
+
+/** Fetch and decrypt all room keys for the current user in a given room. */
+async function loadRoomKeys(roomId) {
+    if (!privateKey) return;
+
+    try {
+        const resp = await fetch(
+            `${API_URL}/rooms/${encodeURIComponent(roomId)}/keys`,
+            { headers: { 'Authorization': `Bearer ${sessionToken}` } }
+        );
+        if (!resp.ok) return;
+
+        const { keys } = await resp.json();
+        if (!keys || keys.length === 0) return;
+
+        roomKeys[roomId] = {};
+        for (const entry of keys) {
+            try {
+                roomKeys[roomId][entry.key_epoch] = await decryptRoomKey(entry.encrypted_key, privateKey);
+            } catch (e) {
+                console.warn(`[E2E] Failed to decrypt epoch ${entry.key_epoch} for ${roomId}:`, e);
+            }
+        }
+    } catch (error) {
+        console.error('[E2E] Error loading room keys:', error);
+    }
+}
+
+/** Generate a room key, encrypt for self, and upload to server. */
+async function initRoomKey(roomId) {
+    if (!privateKey) return;
+
+    try {
+        // Fetch our own public key
+        const pkResp = await fetch(
+            `${API_URL}/auth/encryption-key/${encodeURIComponent(currentUsername)}`,
+            { headers: { 'Authorization': `Bearer ${sessionToken}` } }
+        );
+        if (!pkResp.ok) return;
+
+        const { public_key: myPublicKeyJson } = await pkResp.json();
+        const myPublicKeyJwk = JSON.parse(myPublicKeyJson);
+
+        const roomKey = await generateRoomKey();
+        const encKey = await encryptRoomKey(roomKey, myPublicKeyJwk);
+
+        await fetch(
+            `${API_URL}/rooms/${encodeURIComponent(roomId)}/keys`,
+            {
+                method: 'POST',
+                headers: {
+                    'Content-Type': 'application/json',
+                    'Authorization': `Bearer ${sessionToken}`,
+                },
+                body: JSON.stringify({
+                    username: currentUsername,
+                    encrypted_key: encKey,
+                    key_epoch: 0,
+                }),
+            }
+        );
+
+        roomKeys[roomId] = { 0: roomKey };
+        return roomKey;
+    } catch (error) {
+        console.error('[E2E] Error initializing room key:', error);
+    }
+}
+
+/** Generate a room key for a DM and encrypt for both users. */
+async function initDMRoomKey(roomId, otherUsername) {
+    if (!privateKey) return;
+
+    try {
+        // Fetch both public keys
+        const [myResp, otherResp] = await Promise.all([
+            fetch(`${API_URL}/auth/encryption-key/${encodeURIComponent(currentUsername)}`,
+                { headers: { 'Authorization': `Bearer ${sessionToken}` } }),
+            fetch(`${API_URL}/auth/encryption-key/${encodeURIComponent(otherUsername)}`,
+                { headers: { 'Authorization': `Bearer ${sessionToken}` } }),
+        ]);
+
+        if (!myResp.ok || !otherResp.ok) return;
+
+        const myPk = JSON.parse((await myResp.json()).public_key);
+        const otherPk = JSON.parse((await otherResp.json()).public_key);
+
+        const roomKey = await generateRoomKey();
+
+        const [encForMe, encForOther] = await Promise.all([
+            encryptRoomKey(roomKey, myPk),
+            encryptRoomKey(roomKey, otherPk),
+        ]);
+
+        // Upload both encrypted keys
+        await Promise.all([
+            fetch(`${API_URL}/rooms/${encodeURIComponent(roomId)}/keys`, {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json', 'Authorization': `Bearer ${sessionToken}` },
+                body: JSON.stringify({ username: currentUsername, encrypted_key: encForMe, key_epoch: 0 }),
+            }),
+            fetch(`${API_URL}/rooms/${encodeURIComponent(roomId)}/keys`, {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json', 'Authorization': `Bearer ${sessionToken}` },
+                body: JSON.stringify({ username: otherUsername, encrypted_key: encForOther, key_epoch: 0 }),
+            }),
+        ]);
+
+        roomKeys[roomId] = { 0: roomKey };
+    } catch (error) {
+        console.error('[E2E] Error initializing DM room key:', error);
+    }
+}
 
 // Load server theme immediately (before auth check) so page renders with correct color
 loadAndApplyTheme().then(color => { serverColor = color; });
@@ -47,6 +316,17 @@ async function checkSession() {
             currentUsername = username;
             currentRole = data.role;
             localStorage.setItem('role', data.role);
+
+            // Load E2E encryption private key from IndexedDB
+            try {
+                privateKey = await loadPrivateKey(username);
+                if (!privateKey) {
+                    console.warn('[E2E] No private key found in IndexedDB');
+                }
+            } catch (e) {
+                console.error('[E2E] Failed to load private key:', e);
+            }
+
             await loadUserColors();
             await loadUserSettings();
             initializeChatView();
@@ -808,6 +1088,9 @@ async function createRoom() {
         if (data.detail) {
             alert(data.detail);
         } else {
+            // Generate E2E room key for this new channel
+            await initRoomKey(roomId);
+
             input.value = '';
             closeCreateRoomModal();
             await loadRooms();
@@ -864,11 +1147,11 @@ function selectRoom(roomId) {
     // Clear messages div when switching rooms
     document.getElementById('messages').innerHTML = '';
 
-    // Load message history first
-    loadMessages();
-
-    // Then connect to WebSocket for real-time updates
-    connectWebSocket(roomId);
+    // Load room encryption keys, then message history, then connect WebSocket
+    loadRoomKeys(roomId).then(() => {
+        loadMessages();
+        connectWebSocket(roomId);
+    });
 
     // Auto-hide sidebar on mobile after selecting a room
     if (window.innerWidth <= 768) {
@@ -966,7 +1249,7 @@ function linkifyRoomRefs(text) {
     });
 }
 
-function displayMessage(msg) {
+async function displayMessage(msg) {
     const messagesDiv = document.getElementById('messages');
 
     // Clear empty state if present
@@ -983,7 +1266,25 @@ function displayMessage(msg) {
     // Get user's color preference, default to blue
     const userColor = userColors[msg.username] || '#1976d2';
 
-    const messageBody = linkifyRoomRefs(escapeHtml(msg.message));
+    // Decrypt if encrypted
+    let plaintext = msg.message;
+    if (isEncryptedMessage(msg.message)) {
+        const epoch = getMessageEpoch(msg.message);
+        const epochs = roomKeys[currentRoom];
+        const key = epochs && epochs[epoch];
+        if (key) {
+            try {
+                plaintext = await decryptMessage(key, msg.message);
+            } catch (e) {
+                console.warn('[E2E] Failed to decrypt message:', e);
+                plaintext = '[encrypted message — cannot decrypt]';
+            }
+        } else {
+            plaintext = '[encrypted message — no key for this room]';
+        }
+    }
+
+    const messageBody = linkifyRoomRefs(escapeHtml(plaintext));
 
     messageDiv.innerHTML = `
         <div class="message-header">
@@ -1019,8 +1320,10 @@ async function loadMessages() {
         if (data.messages && data.messages.length > 0) {
             console.log(`[HTTP] Loaded ${data.messages.length} messages from history`);
 
-            // Use displayMessage for each message
-            data.messages.forEach(msg => displayMessage(msg));
+            // Use displayMessage for each message (async for decryption)
+            for (const msg of data.messages) {
+                await displayMessage(msg);
+            }
         } else {
             console.log(`[HTTP] No message history`);
         }
@@ -1031,7 +1334,7 @@ async function loadMessages() {
     }
 }
 
-function sendMessage() {
+async function sendMessage() {
     const message = document.getElementById('messageInput').value.trim();
 
     if (!currentRoom) {
@@ -1041,6 +1344,13 @@ function sendMessage() {
 
     if (!message) return;
 
+    // Slash command interception
+    if (message.startsWith('/')) {
+        document.getElementById('messageInput').value = '';
+        parseAndExecuteCommand(message);
+        return;
+    }
+
     // Check if WebSocket is connected
     if (!websocket || websocket.readyState !== WebSocket.OPEN) {
         alert('Not connected to chat. Reconnecting...');
@@ -1049,10 +1359,19 @@ function sendMessage() {
     }
 
     try {
-        // Send message via WebSocket
+        let payload = message;
+
+        // Encrypt if we have a room key
+        const epochs = roomKeys[currentRoom];
+        if (epochs) {
+            const epochNums = Object.keys(epochs).map(Number);
+            const latestEpoch = Math.max(...epochNums);
+            payload = await encryptMessage(epochs[latestEpoch], message, latestEpoch);
+        }
+
         websocket.send(JSON.stringify({
             type: 'message',
-            message: message
+            message: payload
         }));
 
         // Clear input
@@ -1175,6 +1494,12 @@ async function startDM(targetUsername) {
         if (data.detail) {
             alert(data.detail);
             return;
+        }
+
+        // Generate E2E room key for both DM participants
+        // Only init if this is a brand new DM (no keys yet)
+        if (!roomKeys[data.room.room_id]) {
+            await initDMRoomKey(data.room.room_id, targetUsername);
         }
 
         closeDMModal();
