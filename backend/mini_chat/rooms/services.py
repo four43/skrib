@@ -90,13 +90,15 @@ def load_rooms_from_db():
 
 
 def get_user_rooms(username: str) -> List[Dict]:
-    """Get rooms visible to a user: all channels + DMs they're a member of."""
+    """Get rooms visible to a user: channels and DMs they're a member of."""
     with get_db() as conn:
-        # Get all channels
-        cursor = conn.execute(
-            'SELECT room_id, room_type FROM rooms WHERE deleted = 0 AND room_type = ?',
-            ('channel',)
-        )
+        # Get channels where user is a member
+        cursor = conn.execute('''
+            SELECT r.room_id, r.room_type
+            FROM rooms r
+            JOIN room_members rm ON r.room_id = rm.room_id
+            WHERE r.deleted = 0 AND r.room_type = 'channel' AND rm.username = ?
+        ''', (username,))
         rooms = []
         for row in cursor:
             rooms.append({

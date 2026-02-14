@@ -90,8 +90,11 @@ async def create_new_room(
     if not create_room(request.room_id, room_type='channel'):
         raise HTTPException(status_code=400, detail="Room already exists")
 
-    # Notify all subscribers — new channel is visible to everyone
-    await rooms_subscriptions.notify_all({"type": "update"})
+    # Add creator as the first member
+    add_room_member(request.room_id, username)
+
+    # Notify creator — new channel appears in their room list
+    await rooms_subscriptions.notify(username, {"type": "update"})
 
     return CreateRoomResponse(status="ok", room_id=request.room_id)
 
