@@ -38,12 +38,16 @@ class CreateDMResponse(BaseModel):
 class MessageResponse(BaseModel):
     id: int
     username: str
-    message: str
+    content: str
+    content_type: str = 'text'
+    key_epoch: Optional[int] = None
     timestamp: str
 
 
 class SendMessageRequest(BaseModel):
-    message: str
+    content: str
+    content_type: str = 'text'
+    key_epoch: Optional[int] = None
 
 
 class SendMessageResponse(BaseModel):

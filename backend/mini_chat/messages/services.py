@@ -18,7 +18,7 @@ def search_messages(
         params = []
 
         if query:
-            where_clauses.append("message LIKE ?")
+            where_clauses.append("content LIKE ?")
             params.append(f"%{query}%")
 
         if room_id:
@@ -41,7 +41,7 @@ def search_messages(
         # Get messages
         params.extend([limit, offset])
         cursor = conn.execute(f'''
-            SELECT id, room_id, username, message, timestamp
+            SELECT id, room_id, username, content, content_type, key_epoch, timestamp
             FROM messages
             WHERE {where_sql}
             ORDER BY id DESC
@@ -54,7 +54,9 @@ def search_messages(
                 'id': row['id'],
                 'room_id': row['room_id'],
                 'username': row['username'],
-                'message': row['message'],
+                'content': row['content'],
+                'content_type': row['content_type'],
+                'key_epoch': row['key_epoch'],
                 'timestamp': row['timestamp']
             })
 

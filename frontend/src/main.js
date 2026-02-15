@@ -547,7 +547,7 @@ async function loadMessages() {
                         <span class="username">${escapeHtml(msg.username)}</span>
                         <span class="timestamp">${timeStr}</span>
                     </div>
-                    <div class="message-text">${escapeHtml(msg.message)}</div>
+                    <div class="message-text">${escapeHtml(msg.content)}</div>
                 `;
 
                 messagesDiv.appendChild(messageDiv);
@@ -579,7 +579,8 @@ async function sendMessage() {
                 'Authorization': `Bearer ${sessionToken}`
             },
             body: JSON.stringify({
-                message: message
+                content: message,
+                content_type: 'text'
             })
         });
 

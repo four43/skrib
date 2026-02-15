@@ -76,7 +76,9 @@ def init_db():
                 id INTEGER PRIMARY KEY AUTOINCREMENT,
                 room_id TEXT NOT NULL,
                 username TEXT NOT NULL,
-                message TEXT NOT NULL,
+                content TEXT NOT NULL,
+                content_type TEXT NOT NULL DEFAULT 'text',
+                key_epoch INTEGER,
                 timestamp TEXT NOT NULL
             )
         ''')

@@ -148,7 +148,12 @@ async def send_room_message(
     _check_room_access(room_id, username)
 
     room = ChatRoom(room_id)
-    message = room.add_message(username, request.message)
+    message = room.add_message(
+        username,
+        request.content,
+        request.content_type,
+        request.key_epoch
+    )
 
     await bus.broadcast_to_room(room_id, {
         "type": "room.message",

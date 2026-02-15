@@ -7,7 +7,9 @@ class Message(BaseModel):
     id: int
     room_id: str
     username: str
-    message: str
+    content: str
+    content_type: str = 'text'
+    key_epoch: Optional[int] = None
     timestamp: str
 
 

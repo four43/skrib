@@ -1171,16 +1171,36 @@ async function displayMessage(msg) {
     const userColor = userColors[msg.username] || '#1976d2';
 
     // Decrypt if encrypted
-    let plaintext = msg.message;
-    if (isEncryptedMessage(msg.message)) {
-        const epoch = getMessageEpoch(msg.message);
+    let plaintext = msg.content;
+    const contentType = msg.content_type || 'text';
+
+    if (contentType === 'encrypted') {
+        // Use key_epoch from the message if available, otherwise fall back to prefix parsing
+        const epoch = msg.key_epoch !== undefined && msg.key_epoch !== null
+            ? msg.key_epoch
+            : getMessageEpoch(msg.content);
         const epochs = roomKeys[currentRoom];
         const key = epochs && epochs[epoch];
         if (key) {
             try {
-                plaintext = await decryptMessage(key, msg.message);
+                plaintext = await decryptMessage(key, msg.content);
             } catch (e) {
                 console.warn('[E2E] Failed to decrypt message:', e);
+                plaintext = '[encrypted message — cannot decrypt]';
+            }
+        } else {
+            plaintext = '[encrypted message — no key for this room]';
+        }
+    } else if (contentType === 'text' && isEncryptedMessage(msg.content)) {
+        // Backward compatibility: old messages with ENC: prefix but content_type='text'
+        const epoch = getMessageEpoch(msg.content);
+        const epochs = roomKeys[currentRoom];
+        const key = epochs && epochs[epoch];
+        if (key) {
+            try {
+                plaintext = await decryptMessage(key, msg.content);
+            } catch (e) {
+                console.warn('[E2E] Failed to decrypt legacy message:', e);
                 plaintext = '[encrypted message — cannot decrypt]';
             }
         } else {
@@ -1264,21 +1284,32 @@ async function sendMessage() {
     }
 
     try {
-        let payload = message;
+        let content = message;
+        let contentType = 'text';
+        let keyEpoch = undefined;
 
         // Encrypt if we have a room key
         const epochs = roomKeys[currentRoom];
         if (epochs) {
             const epochNums = Object.keys(epochs).map(Number);
             const latestEpoch = Math.max(...epochNums);
-            payload = await encryptMessage(epochs[latestEpoch], message, latestEpoch);
+            content = await encryptMessage(epochs[latestEpoch], message, latestEpoch);
+            contentType = 'encrypted';
+            keyEpoch = latestEpoch;
         }
 
-        ws.send(JSON.stringify({
+        const payload = {
             type: 'room.message',
             room_id: currentRoom,
-            message: payload,
-        }));
+            content: content,
+            content_type: contentType,
+        };
+
+        if (keyEpoch !== undefined) {
+            payload.key_epoch = keyEpoch;
+        }
+
+        ws.send(JSON.stringify(payload));
 
         // Clear input
         document.getElementById('messageInput').value = '';

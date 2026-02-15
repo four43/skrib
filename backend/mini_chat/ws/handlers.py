@@ -74,9 +74,12 @@ async def handle_room(bus, ws: WebSocket, username: str, msg: dict):
             await ws.send_json({"type": "room.error", "room_id": room_id, "message": error})
             return
 
-        text = msg.get("message", "")
+        content = msg.get("content", "")
+        content_type = msg.get("content_type", "text")
+        key_epoch = msg.get("key_epoch")
+
         room = ChatRoom(room_id)
-        message_data = room.add_message(username, text)
+        message_data = room.add_message(username, content, content_type, key_epoch)
 
         # Broadcast to all sockets subscribed to this room
         await bus.broadcast_to_room(room_id, {
