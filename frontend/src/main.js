@@ -274,19 +274,23 @@ function updateRegistrationToggle(enabled) {
 async function toggleRegistration() {
     const toggle = document.getElementById('regToggle');
     const enabled = !toggle.classList.contains('active');
+    const mode = enabled ? 'approval_required' : 'closed';
 
     try {
-        const resp = await fetch(`${API_URL}/server/registration`, {
-            method: 'PUT',
+        const resp = await fetch(`${API_URL}/server`, {
+            method: 'PATCH',
             headers: {
                 'Content-Type': 'application/json',
                 'Authorization': `Bearer ${sessionToken}`
             },
-            body: JSON.stringify({ enabled })
+            body: JSON.stringify({ registration_mode: mode })
         });
-        const data = await resp.json();
+        if (!resp.ok) {
+            console.error('Failed to update registration mode');
+            return;
+        }
 
-        updateRegistrationToggle(data.enabled);
+        updateRegistrationToggle(enabled);
     } catch (error) {
         console.error('Failed to toggle registration:', error);
     }
@@ -326,13 +330,13 @@ async function loadPendingUsers() {
 
 async function approveUser(code) {
     try {
-        const resp = await fetch(`${API_URL}/users/pending/approve`, {
-            method: 'POST',
+        const resp = await fetch(`${API_URL}/users/pending/${encodeURIComponent(code)}`, {
+            method: 'PATCH',
             headers: {
                 'Content-Type': 'application/json',
                 'Authorization': `Bearer ${sessionToken}`
             },
-            body: JSON.stringify({ approval_code: code })
+            body: JSON.stringify({ status: 'approved' })
         });
 
         if (resp.ok) {
@@ -346,13 +350,13 @@ async function approveUser(code) {
 
 async function rejectUser(code) {
     try {
-        const resp = await fetch(`${API_URL}/users/pending/reject`, {
-            method: 'POST',
+        const resp = await fetch(`${API_URL}/users/pending/${encodeURIComponent(code)}`, {
+            method: 'PATCH',
             headers: {
                 'Content-Type': 'application/json',
                 'Authorization': `Bearer ${sessionToken}`
             },
-            body: JSON.stringify({ approval_code: code })
+            body: JSON.stringify({ status: 'rejected' })
         });
 
         if (resp.ok) {
@@ -408,8 +412,8 @@ async function setUserRole(username, role) {
     }
 
     try {
-        const resp = await fetch(`${API_URL}/users/${encodeURIComponent(username)}/role`, {
-            method: 'PUT',
+        const resp = await fetch(`${API_URL}/users/${encodeURIComponent(username)}`, {
+            method: 'PATCH',
             headers: {
                 'Content-Type': 'application/json',
                 'Authorization': `Bearer ${sessionToken}`

@@ -19,11 +19,10 @@ from .schemas import (
     StoreRoomKeyRequest,
     RoomKeysResponse,
     MarkReadRequest,
-    UpdateNotifyLevelRequest,
     RoomDetailResponse,
     MemberInfo,
-    SetTopicRequest,
-    SetRoomRoleRequest,
+    RoomUpdateRequest,
+    MemberUpdateRequest,
 )
 from .services import (
     get_user_rooms,
@@ -194,18 +193,6 @@ async def mark_read_endpoint(
     return {"status": "ok"}
 
 
-@router.put("/{room_id}/notify")
-async def update_notify_level_endpoint(
-    room_id: str,
-    request: UpdateNotifyLevelRequest,
-    username: str = Depends(require_auth),
-):
-    """Set the notification level for the current user in a room."""
-    _check_room_access(room_id, username)
-    set_notify_level(room_id, username, request.notify_level)
-    return {"status": "ok", "notify_level": request.notify_level}
-
-
 @router.delete("/{room_id}", response_model=DeleteRoomResponse)
 async def delete_room_endpoint(
     room_id: str,
@@ -277,6 +264,37 @@ async def remove_member(
     return {"status": "ok", "room_id": room_id, "username": target_username}
 
 
+@router.patch("/{room_id}/members/{target_username}")
+async def update_member(
+    room_id: str,
+    target_username: str,
+    updates: MemberUpdateRequest,
+    username: str = Depends(require_auth),
+):
+    """Update member properties. Users can update their own notify_level, ops can update roles."""
+    _check_room_access(room_id, username)
+
+    # Check if member exists
+    role = get_room_role(room_id, target_username)
+    if role is None:
+        raise HTTPException(status_code=404, detail="User is not a member of this room")
+
+    # Update notify_level (users can update their own)
+    if updates.notify_level is not None:
+        if target_username != username:
+            raise HTTPException(status_code=403, detail="You can only change your own notification settings")
+        set_notify_level(room_id, target_username, updates.notify_level)
+
+    # Update room_role (requires op/mod/admin)
+    if updates.room_role is not None:
+        _require_room_op_or_global_mod(room_id, username)
+        result = set_room_role(room_id, target_username, updates.room_role)
+        if result['status'] != 'ok':
+            raise HTTPException(status_code=400, detail="Failed to update role")
+
+    return {"status": "ok"}
+
+
 @router.post("/{room_id}/keys")
 async def store_room_key_endpoint(
     room_id: str,
@@ -320,50 +338,28 @@ async def get_room_detail(
     )
 
 
-@router.put("/{room_id}/topic")
-async def set_topic_endpoint(
+@router.patch("/{room_id}")
+async def update_room(
     room_id: str,
-    request: SetTopicRequest,
+    updates: RoomUpdateRequest,
     username: str = Depends(require_auth),
 ):
-    """Set a room's topic. Requires room owner/op or global admin."""
+    """Update room properties (e.g., topic). Requires room owner/op or global admin."""
     _check_room_access(room_id, username)
     _require_room_op_or_global_mod(room_id, username)
 
-    if not set_topic(room_id, request.topic):
-        raise HTTPException(status_code=404, detail="Room not found")
+    if updates.topic is not None:
+        if not set_topic(room_id, updates.topic):
+            raise HTTPException(status_code=404, detail="Room not found")
 
-    await bus.broadcast_to_room(room_id, {
-        "type": "room.topic",
-        "room_id": room_id,
-        "topic": request.topic,
-        "set_by": username,
-    })
+        await bus.broadcast_to_room(room_id, {
+            "type": "room.topic",
+            "room_id": room_id,
+            "topic": updates.topic,
+            "set_by": username,
+        })
 
-    return {"status": "ok", "topic": request.topic}
-
-
-@router.put("/{room_id}/role")
-async def set_room_role_endpoint(
-    room_id: str,
-    request: SetRoomRoleRequest,
-    username: str = Depends(require_auth),
-):
-    """Set a member's role in a room. Requires room owner."""
-    _check_room_access(room_id, username)
-
-    room_role = get_room_role(room_id, username)
-    global_role = _get_global_role(username)
-    if room_role != 'owner' and global_role != 'admin':
-        raise HTTPException(status_code=403, detail="Room owner or admin required")
-
-    result = set_room_role(room_id, request.username, request.role)
-    if result['status'] == 'not_member':
-        raise HTTPException(status_code=400, detail="User is not a member of this room")
-    if result['status'] == 'room_not_found':
-        raise HTTPException(status_code=404, detail="Room not found")
-
-    return {"status": "ok", "username": request.username, "role": request.role}
+    return {"status": "ok"}
 
 
 def _check_room_access(room_id: str, username: str):

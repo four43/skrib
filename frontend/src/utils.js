@@ -94,7 +94,7 @@ export function applyThemeColor(hex) {
  */
 export async function loadAndApplyTheme(userThemeColor = null) {
     try {
-        const resp = await fetch(`${API_URL}/server/theme`);
+        const resp = await fetch(`${API_URL}/server`);
         const data = await resp.json();
         const color = userThemeColor || data.server_color || '#6366f1';
         applyThemeColor(color);

@@ -3,15 +3,10 @@ from fastapi import APIRouter, Depends, HTTPException, Request
 
 from .schemas import (
     ServerInfoResponse,
-    UpdateRegistrationModeRequest,
-    UpdateRegistrationModeResponse,
+    ServerUpdateRequest,
     InviteTokenListResponse,
     InviteTokenResponse,
     CreateInviteResponse,
-    RegistrationStatusResponse,
-    ServerThemeResponse,
-    UpdateServerColorRequest,
-    UpdateServerColorResponse,
 )
 from .services import (
     get_system_status,
@@ -21,34 +16,55 @@ from .services import (
     delete_invite_token,
 )
 from ..database import get_setting, set_setting
-from ..dependencies import require_admin
+from ..dependencies import require_admin, get_username_from_token
 
 router = APIRouter(prefix="/server", tags=["server"])
 
 
 @router.get("", response_model=ServerInfoResponse)
-async def get_server_info(_: str = Depends(require_admin)):
-    """Get server info including settings and status."""
-    status = get_system_status()
-    return ServerInfoResponse(**status)
-
-
-@router.get("/registration-status", response_model=RegistrationStatusResponse)
-async def get_registration_status():
-    """Get registration mode (public, no auth required)."""
+async def get_server_info(username: str = Depends(get_username_from_token)):
+    """Get server info. Public info (registration_mode, server_color) for all users, full stats for admins."""
     from ..auth.services import get_registration_mode
-    mode = get_registration_mode()
-    return RegistrationStatusResponse(mode=mode)
+    from ..database import get_db
+
+    # Get public info
+    registration_mode = get_registration_mode()
+    server_color = get_setting('server_color', '#6366f1') or '#6366f1'
+
+    # Check if user is admin
+    is_admin = False
+    if username:
+        with get_db() as conn:
+            cursor = conn.execute('SELECT role FROM users WHERE username = ?', (username,))
+            row = cursor.fetchone()
+            is_admin = row and row['role'] == 'admin'
+
+    # Return full status for admins, basic info for others
+    if is_admin:
+        status = get_system_status()
+        return ServerInfoResponse(**status)
+    else:
+        return ServerInfoResponse(
+            registration_mode=registration_mode,
+            server_color=server_color
+        )
 
 
-@router.put("/registration", response_model=UpdateRegistrationModeResponse)
-async def update_registration_mode(
-    request: UpdateRegistrationModeRequest,
+@router.patch("", response_model=ServerInfoResponse)
+async def update_server(
+    updates: ServerUpdateRequest,
     _: str = Depends(require_admin)
 ):
-    """Update registration mode."""
-    mode = set_registration_mode(request.mode)
-    return UpdateRegistrationModeResponse(mode=mode)
+    """Update server properties (admin only)."""
+    if updates.registration_mode is not None:
+        set_registration_mode(updates.registration_mode)
+
+    if updates.server_color is not None:
+        set_setting('server_color', updates.server_color)
+
+    # Return updated server info
+    status = get_system_status()
+    return ServerInfoResponse(**status)
 
 
 @router.post("/invites", response_model=CreateInviteResponse)
@@ -78,20 +94,3 @@ async def remove_invite(token: str, _: str = Depends(require_admin)):
     if not delete_invite_token(token):
         raise HTTPException(status_code=404, detail="Invite token not found")
     return {"status": "deleted"}
-
-
-@router.get("/theme", response_model=ServerThemeResponse)
-async def get_server_theme():
-    """Get server theme color (public, no auth required)."""
-    color = get_setting('server_color', '#6366f1') or '#6366f1'
-    return ServerThemeResponse(server_color=color)
-
-
-@router.put("/color", response_model=UpdateServerColorResponse)
-async def update_server_color(
-    request: UpdateServerColorRequest,
-    _: str = Depends(require_admin)
-):
-    """Update server theme color (admin only)."""
-    set_setting('server_color', request.server_color)
-    return UpdateServerColorResponse(server_color=request.server_color)

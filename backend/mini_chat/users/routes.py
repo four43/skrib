@@ -5,12 +5,11 @@ from ..dependencies import require_auth, require_admin, require_moderator, get_u
 from pydantic import BaseModel
 from .schemas import (
     GetPreferencesResponse,
-    UpdatePreferencesRequest,
-    UpdatePreferencesResponse,
     PendingUsersResponse,
-    ApproveUserRequest,
-    RejectUserRequest,
+    UpdatePendingUserRequest,
     UsersListResponse,
+    UserProfile,
+    UserUpdateRequest,
 )
 from .services import (
     get_user_preferences,
@@ -43,26 +42,21 @@ async def list_pending_users(admin: str = Depends(require_moderator)):
     return PendingUsersResponse(pending=pending)
 
 
-@router.post("/pending/approve")
-async def approve_pending_user(
-    request: ApproveUserRequest,
+@router.patch("/pending/{approval_code}")
+async def update_pending_user(
+    approval_code: str,
+    request: UpdatePendingUserRequest,
     admin: str = Depends(require_moderator),
 ):
-    """Approve a pending user."""
-    if not approve_user(request.approval_code, admin):
-        raise HTTPException(status_code=404, detail="Pending user not found")
-    return {"status": "ok"}
+    """Approve or reject a pending user."""
+    if request.status == 'approved':
+        if not approve_user(approval_code, admin):
+            raise HTTPException(status_code=404, detail="Pending user not found")
+    elif request.status == 'rejected':
+        if not reject_user(approval_code):
+            raise HTTPException(status_code=404, detail="Pending user not found")
 
-
-@router.post("/pending/reject")
-async def reject_pending_user(
-    request: RejectUserRequest,
-    _: str = Depends(require_moderator),
-):
-    """Reject a pending user."""
-    if not reject_user(request.approval_code):
-        raise HTTPException(status_code=404, detail="Pending user not found")
-    return {"status": "ok"}
+    return {"status": "ok", "approval_code": approval_code, "action": request.status}
 
 
 @router.delete("/{username}")
@@ -83,6 +77,97 @@ async def list_usernames(_: str = Depends(require_auth)):
     """Get list of all usernames (for DM picker)."""
     users = get_all_users()
     return {"usernames": [u['username'] for u in users]}
+
+
+# --- User profile and properties ---
+
+@router.get("/{target_username}", response_model=UserProfile)
+async def get_user_profile(
+    target_username: str,
+    username: str = Depends(get_username_from_token),
+):
+    """Get user profile. Users can access their own, admins can access any."""
+    from ..database import get_db
+
+    # Check permissions
+    if target_username != username:
+        with get_db() as conn:
+            cursor = conn.execute('SELECT role FROM users WHERE username = ?', (username,))
+            row = cursor.fetchone()
+            if not row or row['role'] != 'admin':
+                raise HTTPException(status_code=403, detail="Not authorized")
+
+    # Get user profile
+    prefs = get_user_preferences(target_username)
+    if not prefs:
+        raise HTTPException(status_code=404, detail="User not found")
+
+    with get_db() as conn:
+        cursor = conn.execute(
+            'SELECT username, role, status FROM users WHERE username = ?',
+            (target_username,)
+        )
+        row = cursor.fetchone()
+        if not row:
+            raise HTTPException(status_code=404, detail="User not found")
+
+        return UserProfile(
+            username=row['username'],
+            role=row['role'],
+            status=row['status'],
+            color=prefs['color'],
+            theme_color=prefs.get('theme_color'),
+            nickname=prefs.get('nickname'),
+        )
+
+
+@router.patch("/{target_username}")
+async def update_user(
+    target_username: str,
+    updates: UserUpdateRequest,
+    username: str = Depends(get_username_from_token),
+):
+    """Update user properties. Users can update their own preferences, admins can update roles."""
+    from ..database import get_db
+
+    # Check if target user exists
+    with get_db() as conn:
+        cursor = conn.execute('SELECT username FROM users WHERE username = ?', (target_username,))
+        if not cursor.fetchone():
+            raise HTTPException(status_code=404, detail="User not found")
+
+    # Check permissions
+    is_self = target_username == username
+    is_admin = False
+    if not is_self:
+        with get_db() as conn:
+            cursor = conn.execute('SELECT role FROM users WHERE username = ?', (username,))
+            row = cursor.fetchone()
+            is_admin = row and row['role'] == 'admin'
+            if not is_admin:
+                raise HTTPException(status_code=403, detail="Not authorized")
+
+    # Update preferences (color, theme_color, nickname) - users can update their own
+    if updates.color is not None or updates.theme_color is not None or updates.nickname is not None:
+        if not is_self and not is_admin:
+            raise HTTPException(status_code=403, detail="You can only change your own preferences")
+        update_user_preferences(
+            target_username,
+            color=updates.color,
+            theme_color=updates.theme_color,
+            nickname=updates.nickname
+        )
+
+    # Update role - admin only
+    if updates.role is not None:
+        if not is_admin:
+            raise HTTPException(status_code=403, detail="Admin required to change roles")
+        if updates.role not in ['admin', 'moderator', 'user']:
+            raise HTTPException(status_code=400, detail="Invalid role")
+        if not set_user_role(target_username, updates.role):
+            raise HTTPException(status_code=404, detail="User not found")
+
+    return {"status": "ok"}
 
 
 # --- Preferences ---
@@ -111,46 +196,3 @@ async def get_user_preferences_endpoint(
     if not prefs:
         raise HTTPException(status_code=404, detail="User not found")
     return GetPreferencesResponse(**prefs)
-
-
-@router.put("/{target_username}/preferences", response_model=UpdatePreferencesResponse)
-async def update_user_preferences_endpoint(
-    target_username: str,
-    request: UpdatePreferencesRequest,
-    username: str = Depends(get_username_from_token),
-):
-    """Update user preferences. Users can update their own, admins can update any."""
-    if target_username != username:
-        from ..database import get_db
-        with get_db() as conn:
-            cursor = conn.execute('SELECT role FROM users WHERE username = ?', (username,))
-            row = cursor.fetchone()
-            if not row or row['role'] != 'admin':
-                raise HTTPException(status_code=403, detail="Not authorized")
-
-    from ..database import get_db
-    with get_db() as conn:
-        cursor = conn.execute('SELECT username FROM users WHERE username = ?', (target_username,))
-        if not cursor.fetchone():
-            raise HTTPException(status_code=404, detail="User not found")
-
-    update_user_preferences(target_username, color=request.color, theme_color=request.theme_color, nickname=request.nickname)
-    return UpdatePreferencesResponse(status="ok")
-
-
-class UpdateRoleRequest(BaseModel):
-    role: str
-
-
-@router.put("/{username}/role")
-async def set_role(
-    username: str,
-    request: UpdateRoleRequest,
-    _: str = Depends(require_admin),
-):
-    """Set user role."""
-    if request.role not in ['admin', 'moderator', 'user']:
-        raise HTTPException(status_code=400, detail="Invalid role")
-    if not set_user_role(username, request.role):
-        raise HTTPException(status_code=404, detail="User not found")
-    return {"status": "ok"}

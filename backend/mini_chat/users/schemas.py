@@ -1,5 +1,5 @@
 from pydantic import BaseModel
-from typing import List, Optional
+from typing import List, Optional, Literal
 
 
 class UserPreferences(BaseModel):
@@ -35,6 +35,11 @@ class PendingUsersResponse(BaseModel):
     pending: List[PendingUser]
 
 
+class UpdatePendingUserRequest(BaseModel):
+    """Request body for updating pending user status via PATCH."""
+    status: Literal['approved', 'rejected']
+
+
 class ApproveUserRequest(BaseModel):
     approval_code: str
 
@@ -51,10 +56,30 @@ class UserInfo(BaseModel):
     approved_by: str | None
 
 
+class UserProfile(BaseModel):
+    """Full user profile including preferences."""
+    username: str
+    role: str
+    status: str
+    color: str
+    theme_color: Optional[str] = None
+    nickname: Optional[str] = None
+
+
+class UserUpdateRequest(BaseModel):
+    """Request body for updating user properties via PATCH."""
+    color: Optional[str] = None
+    theme_color: Optional[str] = None
+    nickname: Optional[str] = None
+    role: Optional[str] = None  # Admin only
+
+
 class UsersListResponse(BaseModel):
     users: List[UserInfo]
 
 
+# Legacy schemas - deprecated
 class SetRoleRequest(BaseModel):
+    """Deprecated: use UserUpdateRequest with PATCH instead."""
     username: str
     role: str

@@ -12,13 +12,13 @@ checkRegistrationAccess();
 
 async function checkRegistrationAccess() {
     try {
-        const resp = await fetch(`${API_URL}/server/registration-status`);
+        const resp = await fetch(`${API_URL}/server`);
         const data = await resp.json();
 
-        if (data.mode === 'closed') {
+        if (data.registration_mode === 'closed') {
             showStatus('registerStatus', '❌ Registration is currently closed', 'error');
             disableRegistration();
-        } else if (data.mode === 'invite_only' && !inviteToken) {
+        } else if (data.registration_mode === 'invite_only' && !inviteToken) {
             showStatus('registerStatus', '❌ Registration requires an invite link', 'error');
             disableRegistration();
         }

@@ -6,7 +6,7 @@ The API has been reorganized following FastAPI best practices with feature-based
 
 ## Directory Structure
 
-```
+```text
 backend/mini_chat/
 ├── __init__.py              # Package initialization
 ├── main.py                  # App initialization & router registration
@@ -50,7 +50,7 @@ backend/mini_chat/
 ### Authentication (`/api/auth`)
 
 | Method | Endpoint | Description |
-|--------|----------|-------------|
+| --- | --- | --- |
 | GET | `/auth/register/begin` | Begin WebAuthn registration |
 | POST | `/auth/register/complete` | Complete registration |
 | GET | `/auth/login/begin` | Begin WebAuthn login |
@@ -60,20 +60,29 @@ backend/mini_chat/
 ### Rooms (`/api/rooms`)
 
 | Method | Endpoint | Description |
-|--------|----------|-------------|
+| --- | --- | --- |
 | GET | `/rooms` | List rooms visible to user (channels + own DMs) |
-| WS | `/rooms` | Subscribe to room list updates (same path, upgraded) |
-| POST | `/rooms` | Create a channel (name: lowercase + hyphens) |
+| POST | `/rooms` | Create a room (supports plugin room types) |
 | POST | `/rooms/dm` | Create or get a DM with another user |
 | DELETE | `/rooms/{room_id}` | Soft-delete a room (admin only) |
-| GET | `/rooms/{room_id}/messages` | Get messages in a room |
+| GET | `/rooms/{room_id}/messages` | Get messages in a room (supports `?since=id`) |
 | POST | `/rooms/{room_id}/messages` | Send message to a room |
-| WS | `/rooms/{room_id}/ws` | Real-time chat in a room |
+
+**Room Creation Body**:
+
+```json
+{
+  "room_id": "general",           // For channels: lowercase + hyphens
+  "room_type": "channel",         // "channel", "dm", or plugin-provided type
+  "name": "General Discussion"    // Optional display name
+}
+```
+
 
 ### Users (`/api/users`)
 
 | Method | Endpoint | Description |
-|--------|----------|-------------|
+| --- | --- | --- |
 | GET | `/users` | List all users (admin only) |
 | GET | `/users/list` | List usernames (authenticated, for DM picker) |
 | GET | `/users/pending` | List pending approvals (admin only) |
@@ -88,7 +97,7 @@ backend/mini_chat/
 ### Messages (`/api/messages`)
 
 | Method | Endpoint | Description |
-|--------|----------|-------------|
+| --- | --- | --- |
 | GET | `/messages` | Search messages globally |
 
 **Query Parameters:**
@@ -98,6 +107,281 @@ backend/mini_chat/
 - `username`: Filter by user
 - `limit`: Number of results (1-500, default 100)
 - `offset`: Results to skip (for pagination)
+
+### Plugins (`/api/plugins`)
+
+| Method | Endpoint | Description |
+| --- | --- | --- |
+| GET | `/plugins/manifest` | List all registered plugins with frontend assets |
+| GET | `/plugins/{name}/config` | Get plugin-specific configuration |
+
+**Manifest Response**:
+
+```json
+{
+  "plugins": [
+    {
+      "name": "chat",
+      "version": "1.0.0",
+      "room_types": ["channel", "dm"],
+      "scripts": ["/static/plugins/chat/chat.js"],
+      "styles": ["/static/plugins/chat/chat.css"],
+      "config": { "features": ["encryption", "typing_indicators"] }
+    },
+    {
+      "name": "whiteboard",
+      "version": "1.0.0",
+      "room_types": ["whiteboard"],
+      "scripts": ["/static/plugins/whiteboard/whiteboard.js"],
+      "styles": ["/static/plugins/whiteboard/whiteboard.css"],
+      "config": { "tools": ["pen", "eraser", "line"] }
+    }
+  ]
+}
+```
+
+### Themes (`/api/themes`)
+
+| Method | Endpoint | Description |
+| --- | --- | --- |
+| GET | `/themes` | List available themes |
+| GET | `/themes/{theme_id}` | Get theme CSS variables and config |
+
+**Theme Response**:
+
+```json
+{
+  "id": "dark",
+  "name": "Dark Mode",
+  "css_variables": {
+    "--background": "#1a1a1a",
+    "--text": "#e0e0e0",
+    "--primary": "#6366f1"
+  },
+  "config": {
+    "message_density": "comfortable",
+    "font_family": "system-ui"
+  }
+}
+```
+
+## WebSocket Protocol
+
+### Connection
+
+**Endpoint**: `WS /api/ws?token={sessionToken}`
+
+- Single persistent connection per client
+- Authentication via query parameter
+- Namespace-based message routing (extensible via plugins)
+
+### Message Format
+
+All WebSocket messages follow the format:
+```json
+{
+  "type": "namespace.action",
+  "room_id": "...",     // Optional, depends on action
+  "...": "..."          // Additional fields per action
+}
+```
+
+### Namespaces
+
+The WebSocket bus uses **namespaces** to route messages. Core namespaces:
+
+- `system.*` - Connection-level events (authentication, ping/pong, errors)
+- `room.*` - Room-related events (join, leave, messages, topic)
+- **Plugin namespaces** - Plugins can register custom namespaces (e.g., `whiteboard.*`, `polls.*`)
+
+### Client → Server Events
+
+#### System Namespace (Client → Server)
+
+```javascript
+// Ping server
+{ "type": "system.ping" }
+```
+
+#### Room Namespace (Client → Server)
+
+```javascript
+// Join a room (subscribe to room-scoped broadcasts)
+{
+  "type": "room.join",
+  "room_id": "general"
+}
+
+// Leave a room (unsubscribe from room-scoped broadcasts)
+{
+  "type": "room.leave",
+  "room_id": "general"
+}
+
+// Send a message
+{
+  "type": "room.message",
+  "room_id": "general",
+  "content": "Hello world",
+  "content_type": "text",        // Optional: "text", "encrypted", "poll", etc.
+  "key_epoch": 1                 // Optional: for E2E encryption
+}
+```
+
+#### Plugin Namespaces (Client → Server)
+
+```javascript
+// Whiteboard plugin: send drawing data
+{
+  "type": "whiteboard.draw",
+  "room_id": "design-room",
+  "data": {
+    "x": 100,
+    "y": 200,
+    "color": "#ff0000",
+    "tool": "pen"
+  }
+}
+```
+
+### Server → Client Events
+
+#### System Namespace (Server → Client)
+
+```javascript
+// Connection established
+{ "type": "system.connected", "username": "alice" }
+
+// Pong response
+{ "type": "system.pong" }
+
+// Error
+{ "type": "system.error", "message": "Invalid JSON" }
+```
+
+#### Room Namespace (Server → Client)
+
+**Room-scoped events** (sent only to sockets that sent `room.join`):
+
+```javascript
+// Join confirmation
+{ "type": "room.joined", "room_id": "general" }
+
+// Leave confirmation
+{ "type": "room.left", "room_id": "general" }
+
+// New message in the room
+{
+  "type": "room.message",
+  "room_id": "general",
+  "data": {
+    "id": 123,
+    "username": "bob",
+    "content": "Hello",
+    "content_type": "text",
+    "timestamp": "2026-02-15T10:30:00Z",
+    "key_epoch": null
+  }
+}
+
+// Topic changed
+{
+  "type": "room.topic",
+  "room_id": "general",
+  "topic": "New topic",
+  "set_by": "alice"
+}
+
+// Error in room action
+{
+  "type": "room.error",
+  "room_id": "general",
+  "message": "Not a member of this DM"
+}
+```
+
+**User-scoped events** (sent to all of a user's connected tabs):
+
+```javascript
+// Room list changed (new room, deleted room, membership change)
+{
+  "type": "room.update",
+  "room_id": "general",
+  "room_type": "channel",
+  "sender": "alice",
+  "unread_count": 5
+}
+
+// New message notification (for users with notify_level='all')
+{
+  "type": "room.new_message",
+  "room_id": "general",
+  "room_type": "channel",
+  "sender": "bob",
+  "unread_count": 6
+}
+```
+
+#### Plugin Namespaces (Server → Client)
+
+```javascript
+// Whiteboard plugin: broadcast drawing data
+{
+  "type": "whiteboard.draw",
+  "room_id": "design-room",
+  "data": { "x": 100, "y": 200, "color": "#ff0000" },
+  "username": "alice"
+}
+
+// Whiteboard plugin: canvas cleared
+{
+  "type": "whiteboard.clear",
+  "room_id": "design-room",
+  "username": "bob"
+}
+```
+
+### Event Scopes
+
+The WebSocket bus supports two broadcast scopes:
+
+1. **Room-scoped**: Only sent to sockets that explicitly joined the room via `room.join`
+   - Examples: `room.message`, `room.topic`, `whiteboard.draw`
+   - Use: Real-time collaboration within a specific room
+
+2. **User-scoped**: Sent to all of a user's connected tabs/devices
+   - Examples: `room.update`, `room.new_message`
+   - Use: Notifications, sidebar updates, global state sync
+
+### Namespace Registration (Plugin Development)
+
+Plugins register custom namespaces via:
+
+```python
+def register_ws_namespace(self, bus: UnifiedConnectionManager):
+    async def handle_my_namespace(bus, ws, username, msg):
+        action = msg["type"].split(".", 1)[1]
+        room_id = msg.get("room_id")
+
+        if action == "custom_action":
+            await bus.broadcast_to_room(room_id, {
+                "type": "myplugin.custom_action",
+                "room_id": room_id,
+                "data": msg.get("data")
+            })
+
+    bus.register_namespace("myplugin", handle_my_namespace)
+```
+
+Frontend plugins register handlers via:
+
+```javascript
+window.pluginLoader.registerWSHandler('myplugin', (action, data) => {
+    if (action === 'custom_action') {
+        // Handle the event
+    }
+});
+```
 
 ## Design Principles
 
@@ -158,7 +442,7 @@ python mini_chat/admin_cli.py --url http://remote-server:8000 status
 ### Old Structure → New Structure
 
 | Old | New |
-|-----|-----|
+| --- | --- |
 | `chat_server_webauthn.py` | Split into modules |
 | Direct DB access in CLI | API-based CLI |
 | Single routes file | Feature-based routers |

@@ -115,10 +115,10 @@ async function login() {
 
 async function checkRegistrationMode() {
     try {
-        const resp = await fetch(`${API_URL}/server/registration-status`);
+        const resp = await fetch(`${API_URL}/server`);
         const data = await resp.json();
         // Show register button for approval_required and open modes
-        if (data.mode === 'approval_required' || data.mode === 'open') {
+        if (data.registration_mode === 'approval_required' || data.registration_mode === 'open') {
             document.getElementById('registerSection').classList.remove('hidden');
         }
         // For closed and invite_only, register section stays hidden

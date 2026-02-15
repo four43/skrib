@@ -14,10 +14,16 @@ class RegistrationMode(str, Enum):
 class ServerInfoResponse(BaseModel):
     registration_mode: RegistrationMode
     server_color: str
-    users_count: int
-    pending_count: int
-    rooms_count: int
-    messages_count: int
+    users_count: Optional[int] = None  # Admin only
+    pending_count: Optional[int] = None  # Admin only
+    rooms_count: Optional[int] = None  # Admin only
+    messages_count: Optional[int] = None  # Admin only
+
+
+class ServerUpdateRequest(BaseModel):
+    """Request body for updating server properties via PATCH."""
+    registration_mode: Optional[RegistrationMode] = None
+    server_color: Optional[str] = None
 
 
 class UpdateRegistrationModeRequest(BaseModel):

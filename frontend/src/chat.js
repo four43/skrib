@@ -193,8 +193,8 @@ registerCommand('nick', async (args) => {
     }
 
     try {
-        const response = await fetch(`${API_URL}/users/${currentUsername}/preferences`, {
-            method: 'PUT',
+        const response = await fetch(`${API_URL}/users/${encodeURIComponent(currentUsername)}`, {
+            method: 'PATCH',
             headers: {
                 'Authorization': `Bearer ${sessionToken}`,
                 'Content-Type': 'application/json'
@@ -342,9 +342,9 @@ registerCommand('topic', async (args) => {
 
     try {
         const response = await fetch(
-            `${API_URL}/rooms/${encodeURIComponent(currentRoom)}/topic`,
+            `${API_URL}/rooms/${encodeURIComponent(currentRoom)}`,
             {
-                method: 'PUT',
+                method: 'PATCH',
                 headers: {
                     'Authorization': `Bearer ${sessionToken}`,
                     'Content-Type': 'application/json',
@@ -663,8 +663,8 @@ async function loadUserSettings() {
 async function updateUserColor() {
     const color = document.getElementById('userColor').value;
     try {
-        const response = await fetch(`${API_URL}/users/${currentUsername}/preferences`, {
-            method: 'PUT',
+        const response = await fetch(`${API_URL}/users/${encodeURIComponent(currentUsername)}`, {
+            method: 'PATCH',
             headers: {
                 'Authorization': `Bearer ${sessionToken}`,
                 'Content-Type': 'application/json'
@@ -688,8 +688,8 @@ async function updateUserColor() {
 async function updateUserThemeColor() {
     const themeColor = document.getElementById('userThemeColor').value;
     try {
-        const response = await fetch(`${API_URL}/users/${currentUsername}/preferences`, {
-            method: 'PUT',
+        const response = await fetch(`${API_URL}/users/${encodeURIComponent(currentUsername)}`, {
+            method: 'PATCH',
             headers: {
                 'Authorization': `Bearer ${sessionToken}`,
                 'Content-Type': 'application/json'
@@ -707,8 +707,8 @@ async function updateUserThemeColor() {
 
 async function resetUserThemeColor() {
     try {
-        const response = await fetch(`${API_URL}/users/${currentUsername}/preferences`, {
-            method: 'PUT',
+        const response = await fetch(`${API_URL}/users/${encodeURIComponent(currentUsername)}`, {
+            method: 'PATCH',
             headers: {
                 'Authorization': `Bearer ${sessionToken}`,
                 'Content-Type': 'application/json'
@@ -726,8 +726,8 @@ async function resetUserThemeColor() {
 async function updateUserNickname() {
     const nickname = document.getElementById('userNickname').value.trim();
     try {
-        const response = await fetch(`${API_URL}/users/${currentUsername}/preferences`, {
-            method: 'PUT',
+        const response = await fetch(`${API_URL}/users/${encodeURIComponent(currentUsername)}`, {
+            method: 'PATCH',
             headers: {
                 'Authorization': `Bearer ${sessionToken}`,
                 'Content-Type': 'application/json'
@@ -1358,8 +1358,8 @@ async function updateNotifyLevel() {
     const level = document.getElementById('notifyLevelSelect').value;
 
     try {
-        const resp = await fetch(`${API_URL}/rooms/${encodeURIComponent(roomId)}/notify`, {
-            method: 'PUT',
+        const resp = await fetch(`${API_URL}/rooms/${encodeURIComponent(roomId)}/members/${encodeURIComponent(currentUsername)}`, {
+            method: 'PATCH',
             headers: {
                 'Authorization': `Bearer ${sessionToken}`,
                 'Content-Type': 'application/json',

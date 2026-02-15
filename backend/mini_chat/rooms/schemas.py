@@ -127,10 +127,24 @@ class RoomDetailResponse(BaseModel):
     members: List[MemberInfo]
 
 
+class RoomUpdateRequest(BaseModel):
+    """Request body for updating room properties via PATCH."""
+    topic: Optional[str] = None
+
+
+class MemberUpdateRequest(BaseModel):
+    """Request body for updating member properties via PATCH."""
+    notify_level: Optional[Literal['all', 'mentions', 'muted']] = None
+    room_role: Optional[Literal['op', 'voice', 'member']] = None
+
+
+# Legacy schemas - deprecated
 class SetTopicRequest(BaseModel):
+    """Deprecated: use RoomUpdateRequest with PATCH instead."""
     topic: str
 
 
 class SetRoomRoleRequest(BaseModel):
+    """Deprecated: use MemberUpdateRequest with PATCH instead."""
     username: str
     role: Literal['op', 'voice', 'member']
