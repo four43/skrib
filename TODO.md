@@ -3,6 +3,7 @@
 A manual todo list of features I think of:
 
 - [ ] Notifications in the UI for new messages, pending approvals, etc.
+- [ ] Auth states for rooms - open(requestable, listable), invite-only, private(no invites)
 - [ ] Add option for dark mode
 - [ ] Presence and typing indicators
 - [ ] UI - when user types slash help auto complete slash command

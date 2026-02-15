@@ -12,6 +12,7 @@ from .schemas import (
     SendMessageResponse,
     MessagesResponse,
     DeleteRoomResponse,
+    InviteRequest,
     AddMemberRequest,
     AddMemberResponse,
     RemoveMemberResponse,
@@ -224,13 +225,13 @@ async def delete_room_endpoint(
     return DeleteRoomResponse(status="ok", room_id=room_id)
 
 
-@router.post("/{room_id}/members", response_model=AddMemberResponse)
-async def add_member_endpoint(
+@router.post("/{room_id}/invite")
+async def invite_member(
     room_id: str,
-    request: AddMemberRequest,
+    request: InviteRequest,
     username: str = Depends(require_auth),
 ):
-    """Add a member to a room."""
+    """Invite a member to a room (IRC INVITE verb)."""
     _check_room_access(room_id, username)
 
     result = add_room_member(room_id, request.username)
@@ -244,48 +245,25 @@ async def add_member_endpoint(
 
     await bus.notify_user(request.username, {"type": "room.update"})
 
-    return AddMemberResponse(status="ok", room_id=room_id, username=request.username)
+    return {"status": "ok", "room_id": room_id, "username": request.username}
 
 
-@router.delete("/{room_id}/members/me", response_model=RemoveMemberResponse)
-async def leave_room_endpoint(
-    room_id: str,
-    username: str = Depends(require_auth),
-):
-    """Leave a channel. Cannot leave DMs."""
-    room_type = get_room_type(room_id)
-    if room_type == 'dm':
-        raise HTTPException(status_code=400, detail="Cannot leave a DM")
-    if not room_type:
-        raise HTTPException(status_code=404, detail="Room not found")
-
-    result = remove_room_member(room_id, username)
-
-    if result['status'] == 'not_member':
-        raise HTTPException(status_code=400, detail="You are not a member of this room")
-    if result['status'] == 'room_not_found':
-        raise HTTPException(status_code=404, detail="Room not found")
-
-    await bus.notify_user(username, {"type": "room.update"})
-
-    return RemoveMemberResponse(status="ok", room_id=room_id, username=username)
-
-
-@router.delete("/{room_id}/members/{target_username}", response_model=RemoveMemberResponse)
-async def kick_member_endpoint(
+@router.delete("/{room_id}/members/{target_username}")
+async def remove_member(
     room_id: str,
     target_username: str,
     username: str = Depends(require_auth),
 ):
-    """Kick a member from a channel. Requires room owner/op or global admin/moderator."""
+    """Remove a member from a room. Regular users can only remove themselves, ops can remove others."""
     room_type = get_room_type(room_id)
     if room_type == 'dm':
-        raise HTTPException(status_code=400, detail="Cannot kick from a DM")
+        raise HTTPException(status_code=400, detail="Cannot leave or kick from a DM")
     if not room_type:
         raise HTTPException(status_code=404, detail="Room not found")
 
-    # Check permission: room owner/op OR global admin/moderator
-    _require_room_op_or_global_mod(room_id, username)
+    # Check permission: can always remove yourself, otherwise need op/mod/admin
+    if target_username != username:
+        _require_room_op_or_global_mod(room_id, username)
 
     result = remove_room_member(room_id, target_username)
 
@@ -296,7 +274,7 @@ async def kick_member_endpoint(
 
     await bus.notify_user(target_username, {"type": "room.update"})
 
-    return RemoveMemberResponse(status="ok", room_id=room_id, username=target_username)
+    return {"status": "ok", "room_id": room_id, "username": target_username}
 
 
 @router.post("/{room_id}/keys")

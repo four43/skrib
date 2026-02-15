@@ -4,6 +4,8 @@
 
 Rename membership-related endpoints to use IRC-inspired verbs (`join`, `part`, `invite`, `kick`). Consolidate redundant user endpoints. This makes the API more intuitive and aligns with the IRC-style chat model.
 
+**Status:** Room detail endpoint (`GET /rooms/{id}`) already implemented. Room keys table migration (Plan 04) complete. Unread message counts added to WebSocket events.
+
 Don't worry about schema migration. We can delete and recreate the database during development.
 
 ## Endpoint Changes
@@ -12,17 +14,21 @@ Don't worry about schema migration. We can delete and recreate the database duri
 
 | Before | After | Notes |
 |--------|-------|-------|
-| `POST /rooms/{id}/members` (body: `{username}`) | `POST /rooms/{id}/invite` (body: `{username}`) | Clearer intent, works for bots |
-| `DELETE /rooms/{id}/members/me` | `POST /rooms/{id}/part` | IRC PART verb |
-| `DELETE /rooms/{id}/members/{user}` | `POST /rooms/{id}/kick/{username}` | IRC KICK verb |
+| `POST /rooms/{id}/members` (body: `{username}`) | `POST /rooms/{id}/invite` (body: `{username}`) | Clearer intent |
+| `DELETE /rooms/{id}/members/me` + `DELETE /rooms/{id}/members/{user}` | `DELETE /rooms/{id}/members/{username}` | Consolidated resource-based endpoint |
 
-**Why POST instead of DELETE for part/kick:** These are actions with side effects (notifications, key rotation in the future), not simple resource deletions. POST better models "perform this action."
+**Resource-based approach:** Single `DELETE /rooms/{id}/members/{username}` endpoint handles both:
 
-### Room Info (new)
+- **Self-removal** (part/leave): Regular users can DELETE their own username
+- **Kicking**: Ops/admins can DELETE other usernames
 
-| Endpoint | Purpose |
-|----------|---------|
-| `GET /rooms/{id}` | Room detail: topic, members with roles, type |
+Frontend commands `/part` and `/kick` both use this same endpoint with different usernames.
+
+### Room Info (already implemented ✓)
+
+| Endpoint | Purpose | Status |
+|----------|---------|--------|
+| `GET /rooms/{id}` | Room detail: topic, members with roles, type, created_by | ✓ Already exists |
 
 ### User Endpoints (consolidated)
 
@@ -56,32 +62,31 @@ async def add_member_endpoint(...)
 @router.post("/{room_id}/invite", ...)
 async def invite_member(...)
 
-# Before:
+# Before (two separate endpoints):
 @router.delete("/{room_id}/members/me", ...)
 async def leave_room_endpoint(...)
 
-# After:
-@router.post("/{room_id}/part", ...)
-async def part_room(...)
-
-# Before:
 @router.delete("/{room_id}/members/{target_username}", ...)
 async def kick_member_endpoint(...)
 
-# After:
-@router.post("/{room_id}/kick/{username}", ...)
-async def kick_member(...)
+# After (consolidated resource-based endpoint):
+@router.delete("/{room_id}/members/{target_username}", ...)
+async def remove_member(...):
+    # Permission check: users can remove themselves, ops can remove others
+    if target_username != username:
+        _require_room_op_or_global_mod(room_id, username)
 ```
 
-**New endpoint:**
+**Room detail endpoint (already exists):**
 
 ```python
-@router.get("/{room_id}", ...)
+@router.get("/{room_id}", response_model=RoomDetailResponse)  # ✓ Already implemented
 async def get_room_detail(room_id: str, username: str = Depends(require_auth)):
-    """Get room details including topic, members, and roles."""
+    """Get detailed room info including topic and members with roles."""
+    # Implementation complete at routes.py:326
 ```
 
-**Note on route ordering:** `GET /rooms/{room_id}` must be registered AFTER `GET /rooms` (the list endpoint) to avoid the path parameter capturing empty string. FastAPI handles this correctly since `GET /rooms` is `GET ""` on the router.
+**Note:** Route ordering is handled correctly - `GET /rooms/{room_id}` is registered after `GET /rooms` list endpoint.
 
 ### `backend/mini_chat/rooms/schemas.py`
 
@@ -90,16 +95,18 @@ async def get_room_detail(room_id: str, username: str = Depends(require_auth)):
 class InviteRequest(BaseModel):
     username: str
 
-# New: room detail response
-class RoomDetailResponse(BaseModel):
+# RoomDetailResponse and MemberInfo already exist ✓
+class RoomDetailResponse(BaseModel):  # ✓ Already implemented
     room_id: str
     room_type: str
     topic: str = ''
+    created_by: str | None
     members: List[MemberInfo]
 
-class MemberInfo(BaseModel):
+class MemberInfo(BaseModel):  # ✓ Already implemented
     username: str
     room_role: str = 'member'
+    joined_at: str | None
 ```
 
 Remove: `AddMemberRequest`, `AddMemberResponse`, `RemoveMemberResponse` (replace with generic `StatusResponse`)
@@ -153,11 +160,11 @@ Update API calls:
 // /invite command: POST /rooms/{id}/members → POST /rooms/{id}/invite
 // (body stays the same: {username})
 
-// /leave command: DELETE /rooms/{id}/members/me → POST /rooms/{id}/part
-// (no body needed)
+// /leave and /part commands: DELETE /rooms/{id}/members/{myUsername}
+// Backend checks: user can only delete themselves
 
-// /kick command: DELETE /rooms/{id}/members/{user} → POST /rooms/{id}/kick/{user}
-// (no body needed)
+// /kick command: DELETE /rooms/{id}/members/{targetUsername}
+// Backend checks: requires op/mod/admin permission
 
 // loadUserColors: GET /users/preferences/colors → GET /users
 // (response shape may change)
@@ -182,13 +189,31 @@ Update API calls:
 
 Since this is pre-production, no deprecation — just change everything in one coordinated deploy. The frontend and backend are deployed together via Docker.
 
+## Current Implementation Status
+
+### Already Complete ✓
+
+- `GET /rooms/{id}` - Room detail with topic, members, roles (routes.py:326)
+- `room_keys` table - E2E encryption keys separated from room_users (Plan 04)
+- Unread counts in WebSocket `room.new_message` / `room.update` events
+- `RoomDetailResponse` and `MemberInfo` schemas exist
+
+### Still To Do
+
+- [ ] Rename `POST /rooms/{id}/members` → `POST /rooms/{id}/invite`
+- [ ] Rename `DELETE /rooms/{id}/members/me` → `POST /rooms/{id}/part`
+- [ ] Rename `DELETE /rooms/{id}/members/{target}` → `POST /rooms/{id}/kick/{username}`
+- [ ] Consolidate user endpoints (remove `/list`, `/preferences/colors`)
+- [ ] Add `GET /users/me` and `PUT /users/me`
+- [ ] Move encryption key endpoints from `/auth` to `/users`
+
 ## Testing Checklist
 
 - [ ] `POST /rooms/{id}/invite` adds member, returns 200
 - [ ] `POST /rooms/{id}/part` removes self from channel, returns 200
 - [ ] `POST /rooms/{id}/part` on DM returns 400
 - [ ] `POST /rooms/{id}/kick/{user}` removes target (requires op/mod/admin)
-- [ ] `GET /rooms/{id}` returns room detail with topic and members
+- [x] `GET /rooms/{id}` returns room detail with topic and members ✓
 - [ ] `GET /users` returns appropriate data based on caller's role
 - [ ] `GET /users/me` returns own profile with preferences
 - [ ] `PUT /users/me` updates own preferences

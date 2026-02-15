@@ -2,7 +2,7 @@
 
 ## Goal
 
-Replace the `encrypted_keys TEXT DEFAULT '{}'` JSON blob in `room_members` with a dedicated `room_keys` table. This makes key storage queryable, indexable, and separates E2E concerns from membership.
+Replace the `encrypted_keys TEXT DEFAULT '{}'` JSON blob in `room_users` with a dedicated `room_keys` table. This makes key storage queryable, indexable, and separates E2E concerns from membership.
 
 Don't worry about schema migration. We can delete and recreate the database during development.
 
@@ -21,17 +21,17 @@ CREATE TABLE IF NOT EXISTS room_keys (
 );
 ```
 
-### Drop from `room_members`
+### Drop from `room_users`
 
 Remove the `encrypted_keys` column. SQLite doesn't support `DROP COLUMN` before 3.35.0, so we'll recreate the table if the column exists.
 
 ## Migration
 
-1. Check if `room_members.encrypted_keys` column exists
+1. Check if `room_users.encrypted_keys` column exists
 2. If yes:
-   a. Read all non-empty encrypted_keys from `room_members`
+   a. Read all non-empty encrypted_keys from `room_users`
    b. Parse the JSON and INSERT rows into `room_keys`
-   c. Recreate `room_members` without the `encrypted_keys` column
+   c. Recreate `room_users` without the `encrypted_keys` column
 3. If no: just create `room_keys` if it doesn't exist
 
 ```sql
@@ -41,9 +41,9 @@ Remove the `encrypted_keys` column. SQLite doesn't support `DROP COLUMN` before 
 --   INSERT INTO room_keys (room_id, key_epoch, username, encrypted_key, created_at)
 --   VALUES (room_id, int(epoch), username, encrypted_key, now())
 
--- Then recreate room_members without encrypted_keys:
-ALTER TABLE room_members RENAME TO room_members_old;
-CREATE TABLE room_members (
+-- Then recreate room_users without encrypted_keys:
+ALTER TABLE room_users RENAME TO room_users_old;
+CREATE TABLE room_users (
     room_id TEXT NOT NULL,
     username TEXT NOT NULL,
     last_read_message_id INTEGER NOT NULL DEFAULT 0,
@@ -54,9 +54,9 @@ CREATE TABLE room_members (
     FOREIGN KEY (room_id) REFERENCES rooms(room_id),
     FOREIGN KEY (username) REFERENCES users(username)
 );
-INSERT INTO room_members (room_id, username, last_read_message_id, notify_level)
-    SELECT room_id, username, last_read_message_id, notify_level FROM room_members_old;
-DROP TABLE room_members_old;
+INSERT INTO room_users (room_id, username, last_read_message_id, notify_level)
+    SELECT room_id, username, last_read_message_id, notify_level FROM room_users_old;
+DROP TABLE room_users_old;
 ```
 
 **Note:** This plan assumes Plan 02 (room_role, joined_at) is implemented first. If implementing independently, omit `room_role` and `joined_at` from the recreated table.
@@ -67,7 +67,7 @@ DROP TABLE room_members_old;
 
 - Add `room_keys` CREATE TABLE statement
 - Add migration logic to move data from JSON blob to new table
-- Remove `encrypted_keys` from `room_members` CREATE statement
+- Remove `encrypted_keys` from `room_users` CREATE statement
 
 ### `backend/mini_chat/rooms/services.py`
 
@@ -81,14 +81,14 @@ DROP TABLE room_members_old;
 def store_room_key(room_id, username, key_epoch, encrypted_key):
     with get_db() as conn:
         cursor = conn.execute(
-            'SELECT encrypted_keys FROM room_members WHERE room_id = ? AND username = ?',
+            'SELECT encrypted_keys FROM room_users WHERE room_id = ? AND username = ?',
             (room_id, username))
         row = cursor.fetchone()
         if not row: return
         keys = json.loads(row['encrypted_keys'])
         keys[str(key_epoch)] = encrypted_key
         conn.execute(
-            'UPDATE room_members SET encrypted_keys = ? WHERE room_id = ? AND username = ?',
+            'UPDATE room_users SET encrypted_keys = ? WHERE room_id = ? AND username = ?',
             (json.dumps(keys), room_id, username))
         conn.commit()
 ```
@@ -112,7 +112,7 @@ def store_room_key(room_id, username, key_epoch, encrypted_key):
 def get_room_keys(room_id, username):
     with get_db() as conn:
         cursor = conn.execute(
-            'SELECT encrypted_keys FROM room_members WHERE room_id = ? AND username = ?',
+            'SELECT encrypted_keys FROM room_users WHERE room_id = ? AND username = ?',
             (room_id, username))
         row = cursor.fetchone()
         if not row: return []
@@ -150,11 +150,11 @@ def get_room_keys(room_id, username):
 - Queries like "get all users with epoch N keys" are now a simple SELECT (useful for key rotation)
 - No JSON parsing in hot paths
 - Proper foreign keys and indexing
-- Clean separation: membership is in `room_members`, encryption is in `room_keys`
+- Clean separation: membership is in `room_users`, encryption is in `room_keys`
 
 ## Testing Checklist
 
-- [ ] Fresh database: `room_keys` table created, `room_members` has no `encrypted_keys` column
+- [ ] Fresh database: `room_keys` table created, `room_users` has no `encrypted_keys` column
 - [ ] Existing database: JSON data migrated to `room_keys` rows correctly
 - [ ] Store room key: new row in `room_keys`
 - [ ] Get room keys: returns correct epochs in order

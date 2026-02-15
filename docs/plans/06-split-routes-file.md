@@ -103,7 +103,7 @@ Cleanest: Keep `_check_room_access` as a helper in a small `rooms/helpers.py`:
 ```python
 # rooms/helpers.py
 from fastapi import HTTPException
-from .services import room_exists, ensure_room_exists, get_room_type, get_room_members
+from .services import room_exists, ensure_room_exists, get_room_type, get_room_users
 
 def check_room_access(room_id: str, username: str):
     """Verify room exists and user has access. Raises HTTPException."""
@@ -111,7 +111,7 @@ def check_room_access(room_id: str, username: str):
         ensure_room_exists(room_id)
     room_type = get_room_type(room_id)
     if room_type == 'dm':
-        members = get_room_members(room_id)
+        members = get_room_users(room_id)
         if username not in members:
             raise HTTPException(status_code=403, detail="Not a member of this DM")
 ```

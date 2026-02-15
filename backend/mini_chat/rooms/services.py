@@ -1,5 +1,4 @@
 """Business logic for rooms."""
-import json
 import re
 from datetime import datetime
 from typing import List, Dict, Optional
@@ -326,39 +325,27 @@ def remove_room_member(room_id: str, username: str) -> Dict:
 
 def store_room_key(room_id: str, username: str, key_epoch: int, encrypted_key: str):
     """Store an encrypted room key for a user at a given epoch."""
+    now = datetime.now().isoformat()
     with get_db() as conn:
-        cursor = conn.execute(
-            'SELECT encrypted_keys FROM room_users WHERE room_id = ? AND username = ?',
-            (room_id, username),
-        )
-        row = cursor.fetchone()
-        if not row:
-            return
-
-        keys = json.loads(row['encrypted_keys'])
-        keys[str(key_epoch)] = encrypted_key
-        conn.execute(
-            'UPDATE room_users SET encrypted_keys = ? WHERE room_id = ? AND username = ?',
-            (json.dumps(keys), room_id, username),
-        )
+        conn.execute('''
+            INSERT OR REPLACE INTO room_keys (room_id, key_epoch, username, encrypted_key, created_at)
+            VALUES (?, ?, ?, ?, ?)
+        ''', (room_id, key_epoch, username, encrypted_key, now))
         conn.commit()
 
 
 def get_room_keys(room_id: str, username: str) -> List[Dict]:
     """Get all encrypted room keys for a user across all epochs."""
     with get_db() as conn:
-        cursor = conn.execute(
-            'SELECT encrypted_keys FROM room_users WHERE room_id = ? AND username = ?',
-            (room_id, username),
-        )
-        row = cursor.fetchone()
-        if not row:
-            return []
-
-        keys = json.loads(row['encrypted_keys'])
+        cursor = conn.execute('''
+            SELECT key_epoch, encrypted_key
+            FROM room_keys
+            WHERE room_id = ? AND username = ?
+            ORDER BY key_epoch
+        ''', (room_id, username))
         return [
-            {'key_epoch': int(epoch), 'encrypted_key': enc_key}
-            for epoch, enc_key in sorted(keys.items(), key=lambda x: int(x[0]))
+            {'key_epoch': row['key_epoch'], 'encrypted_key': row['encrypted_key']}
+            for row in cursor
         ]
 
 

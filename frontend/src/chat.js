@@ -112,7 +112,7 @@ registerCommand('invite', async (args) => {
     try {
         // 1. Add member to room
         const memberResp = await fetch(
-            `${API_URL}/rooms/${encodeURIComponent(currentRoom)}/members`,
+            `${API_URL}/rooms/${encodeURIComponent(currentRoom)}/invite`,
             {
                 method: 'POST',
                 headers: {
@@ -243,8 +243,9 @@ registerCommand('leave', async () => {
     }
 
     try {
+        const myUsername = localStorage.getItem('username');
         const response = await fetch(
-            `${API_URL}/rooms/${encodeURIComponent(currentRoom)}/members/me`,
+            `${API_URL}/rooms/${encodeURIComponent(currentRoom)}/members/${encodeURIComponent(myUsername)}`,
             {
                 method: 'DELETE',
                 headers: { 'Authorization': `Bearer ${sessionToken}` },
@@ -272,6 +273,11 @@ registerCommand('leave', async () => {
         displaySystemMessage('Failed to leave room. Please try again.');
     }
 }, 'Leave the current channel');
+
+// Alias /part for /leave (IRC terminology)
+registerCommand('part', async (args) => {
+    await slashCommands['leave'].handler(args);
+}, 'Leave the current channel (alias for /leave)');
 
 registerCommand('kick', async (args) => {
     const targetUsername = args.trim();

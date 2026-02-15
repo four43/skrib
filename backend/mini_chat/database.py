@@ -103,7 +103,7 @@ def init_db():
             )
         ''')
 
-        # Room users table (membership, read positions, roles, and encrypted room keys)
+        # Room users table (membership, read positions, roles)
         conn.execute('''
             CREATE TABLE IF NOT EXISTS room_users (
                 room_id TEXT NOT NULL,
@@ -111,7 +111,6 @@ def init_db():
                 room_role TEXT NOT NULL DEFAULT 'member',
                 joined_at TEXT,
                 last_read_message_id INTEGER NOT NULL DEFAULT 0,
-                encrypted_keys TEXT NOT NULL DEFAULT '{}',
                 notify_level TEXT NOT NULL DEFAULT 'all',
                 PRIMARY KEY (room_id, username),
                 FOREIGN KEY (room_id) REFERENCES rooms(room_id),
@@ -119,6 +118,19 @@ def init_db():
             )
         ''')
 
+        # Room keys table (E2E encryption keys separated from membership)
+        conn.execute('''
+            CREATE TABLE IF NOT EXISTS room_keys (
+                room_id TEXT NOT NULL,
+                key_epoch INTEGER NOT NULL,
+                username TEXT NOT NULL,
+                encrypted_key TEXT NOT NULL,
+                created_at TEXT NOT NULL,
+                PRIMARY KEY (room_id, key_epoch, username),
+                FOREIGN KEY (room_id) REFERENCES rooms(room_id),
+                FOREIGN KEY (username) REFERENCES users(username)
+            )
+        ''')
 
         # Invite tokens table for invite-only registration mode
         conn.execute('''

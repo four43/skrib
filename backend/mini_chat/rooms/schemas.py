@@ -65,17 +65,26 @@ class DeleteRoomResponse(BaseModel):
     room_id: str
 
 
+class InviteRequest(BaseModel):
+    """Request body for inviting a member to a room."""
+    username: str
+
+
+# Legacy schemas - kept for backwards compatibility, can be removed later
 class AddMemberRequest(BaseModel):
+    """Deprecated: use InviteRequest instead."""
     username: str
 
 
 class AddMemberResponse(BaseModel):
+    """Deprecated: endpoints now return plain dicts."""
     status: str
     room_id: str
     username: str
 
 
 class RemoveMemberResponse(BaseModel):
+    """Deprecated: endpoints now return plain dicts."""
     status: str
     room_id: str
     username: str
