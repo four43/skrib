@@ -26,10 +26,40 @@ class UnifiedConnectionManager:
         self.ws_to_rooms: Dict[WebSocket, Set[str]] = {}
         # namespace -> async handler(bus, ws, username, msg)
         self.namespace_handlers: Dict[str, Callable[..., Awaitable]] = {}
+        # event_type -> list of async callbacks for cross-namespace listening
+        self.event_listeners: Dict[str, list[Callable[[dict], Awaitable]]] = {}
 
     def register_namespace(self, namespace: str, handler: Callable[..., Awaitable]):
         """Register an async handler for a message namespace (e.g. 'system', 'room')."""
         self.namespace_handlers[namespace] = handler
+
+    def on_event(self, event_type: str, callback: Callable[[dict], Awaitable]):
+        """Register a callback to be notified when an event of this type is broadcast.
+
+        This allows plugins to observe events from other namespaces without
+        intercepting the message flow.
+
+        Args:
+            event_type: The message type (e.g., "room.message", "typing.start")
+            callback: Async function(event_data: dict) to call
+        """
+        if event_type not in self.event_listeners:
+            self.event_listeners[event_type] = []
+        self.event_listeners[event_type].append(callback)
+
+    async def _trigger_event_listeners(self, message: dict):
+        """Notify all registered listeners for this message type.
+
+        Args:
+            message: The message dict being broadcast
+        """
+        event_type = message.get("type")
+        if event_type and event_type in self.event_listeners:
+            for callback in self.event_listeners[event_type]:
+                try:
+                    await callback(message)
+                except Exception as e:
+                    print(f"[WS] Error in event listener for {event_type}: {e}")
 
     def connect(self, ws: WebSocket, username: str):
         """Register a new authenticated WebSocket connection."""
@@ -90,6 +120,9 @@ class UnifiedConnectionManager:
         for ws in disconnected:
             self.disconnect(ws)
 
+        # Trigger event listeners (for plugins to observe)
+        await self._trigger_event_listeners(message)
+
     async def notify_user(self, username: str, message: dict):
         """Send a message to all of a user's sockets (user-scoped)."""
         sockets = self.user_connections.get(username, set()).copy()
@@ -101,6 +134,9 @@ class UnifiedConnectionManager:
                 disconnected.append(ws)
         for ws in disconnected:
             self.disconnect(ws)
+
+        # Trigger event listeners (for plugins to observe)
+        await self._trigger_event_listeners(message)
 
     async def notify_all_users(self, message: dict):
         """Send a message to every connected user."""

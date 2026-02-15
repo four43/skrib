@@ -28,6 +28,11 @@ from .server.routes import router as server_router
 from .users.routes import router as preferences_router
 from .ws.routes import router as ws_router
 
+# Import plugin system
+from .plugins import registry
+from .plugins.routes import router as plugins_router
+from .plugins.typing_plugin import TypingPlugin
+
 # Create FastAPI app
 app = FastAPI(title=APP_TITLE, version=APP_VERSION)
 
@@ -67,6 +72,49 @@ async def startup_event():
     print(f"Users: {user_count}, Pending: {pending_count}")
     print(f"Registration mode: {reg_mode}")
 
+    # Initialize plugin system
+    print("\n[Plugins] Initializing plugin system...")
+
+    # Register built-in plugins
+    try:
+        typing_plugin = TypingPlugin()
+        registry.register(typing_plugin)
+    except Exception as e:
+        print(f"[Plugins] Failed to register typing plugin: {e}")
+
+    # Discover additional plugins
+    # registry.discover_plugins()  # Uncomment to enable auto-discovery
+
+    # Register plugin WebSocket namespaces
+    from . import ws
+    for plugin in registry.get_all_plugins():
+        try:
+            plugin.register_ws_namespace(ws.bus)
+            print(f"[Plugins] Registered WebSocket namespace for: {plugin.name}")
+        except Exception as e:
+            print(f"[Plugins] Failed to register WS namespace for {plugin.name}: {e}")
+
+    # Call on_startup for all plugins
+    for plugin in registry.get_all_plugins():
+        try:
+            await plugin.on_startup()
+        except Exception as e:
+            print(f"[Plugins] Error in on_startup for {plugin.name}: {e}")
+
+    print(f"[Plugins] Loaded {len(registry.get_all_plugins())} plugins")
+    print()
+
+
+@app.on_event("shutdown")
+async def shutdown_event():
+    """Call on_shutdown for all plugins."""
+    print("\n[Plugins] Shutting down plugins...")
+    for plugin in registry.get_all_plugins():
+        try:
+            await plugin.on_shutdown()
+        except Exception as e:
+            print(f"[Plugins] Error in on_shutdown for {plugin.name}: {e}")
+
 
 # Register API routers
 app.include_router(auth_router, prefix="/api")
@@ -75,6 +123,7 @@ app.include_router(messages_router, prefix="/api")
 app.include_router(server_router, prefix="/api")
 app.include_router(preferences_router, prefix="/api")
 app.include_router(ws_router, prefix="/api")
+app.include_router(plugins_router, prefix="/api")
 
 
 @app.get("/")

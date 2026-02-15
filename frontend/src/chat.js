@@ -31,6 +31,10 @@ const USE_NOTIFICATION_TAG = false;  // Group notifications per room (browser ma
 let privateKey = null;  // User's RSA-OAEP private key (loaded from IndexedDB)
 let roomKeys = {};  // room_id -> { epoch: CryptoKey }
 
+// Plugin system
+const pluginHandlers = {};  // namespace -> handler function
+let pluginsLoaded = false;
+
 // ---------------------------------------------------------------------------
 // Slash command framework
 // ---------------------------------------------------------------------------
@@ -71,6 +75,99 @@ function displaySystemMessage(text) {
 
     messagesDiv.appendChild(messageDiv);
     messagesDiv.scrollTop = messagesDiv.scrollHeight;
+}
+
+// ---------------------------------------------------------------------------
+// Plugin system
+// ---------------------------------------------------------------------------
+
+/**
+ * Register a plugin namespace handler.
+ * Called by dynamically loaded plugin scripts.
+ *
+ * @param {string} namespace - Plugin namespace (e.g., 'typing')
+ * @param {function} handler - Handler function(action, data, context)
+ */
+window.registerPluginHandler = function(namespace, handler) {
+    if (pluginHandlers[namespace]) {
+        console.warn(`[Plugins] Overwriting existing handler for namespace: ${namespace}`);
+    }
+    pluginHandlers[namespace] = handler;
+    console.log(`[Plugins] Registered handler for namespace: ${namespace}`);
+};
+
+/**
+ * Load plugins from the backend manifest.
+ * Fetches plugin list and dynamically loads frontend scripts.
+ */
+async function loadPlugins() {
+    if (pluginsLoaded) return;
+
+    try {
+        console.log('[Plugins] Fetching plugin manifest...');
+        const response = await fetch(`${API_URL}/plugins/manifest`, {
+            headers: {
+                'Authorization': `Bearer ${sessionToken}`
+            }
+        });
+
+        if (!response.ok) {
+            console.error('[Plugins] Failed to fetch manifest:', response.status);
+            return;
+        }
+
+        const manifest = await response.json();
+        const plugins = manifest.plugins || [];
+
+        console.log(`[Plugins] Found ${plugins.length} plugins:`, plugins.map(p => p.name).join(', '));
+
+        // Load each plugin's frontend assets
+        for (const plugin of plugins) {
+            const scripts = plugin.scripts || [];
+
+            for (const scriptPath of scripts) {
+                try {
+                    console.log(`[Plugins] Loading script for ${plugin.name}: ${scriptPath}`);
+
+                    // Dynamically import the plugin script
+                    // Scripts should be served from backend (we'll implement this next)
+                    const module = await import(`${API_URL}/plugins/${plugin.name}/assets/${scriptPath}`);
+
+                    // If the module has an init function, call it
+                    if (module.init && typeof module.init === 'function') {
+                        await module.init({
+                            registerHandler: window.registerPluginHandler,
+                            sendMessage: (msg) => ws?.send(JSON.stringify(msg)),
+                            currentRoom: () => currentRoom,
+                            currentUsername: () => currentUsername,
+                            displaySystemMessage,
+                        });
+                    }
+                } catch (error) {
+                    console.error(`[Plugins] Failed to load script ${scriptPath} for ${plugin.name}:`, error);
+                }
+            }
+
+            // Load styles
+            const styles = plugin.styles || [];
+            for (const stylePath of styles) {
+                try {
+                    const link = document.createElement('link');
+                    link.rel = 'stylesheet';
+                    link.href = `${API_URL}/plugins/${plugin.name}/assets/${stylePath}`;
+                    document.head.appendChild(link);
+                    console.log(`[Plugins] Loaded stylesheet for ${plugin.name}: ${stylePath}`);
+                } catch (error) {
+                    console.error(`[Plugins] Failed to load style ${stylePath} for ${plugin.name}:`, error);
+                }
+            }
+        }
+
+        pluginsLoaded = true;
+        console.log('[Plugins] All plugins loaded');
+    } catch (error) {
+        console.error('[Plugins] Error loading plugins:', error);
+    }
 }
 
 // ---------------------------------------------------------------------------
@@ -554,6 +651,7 @@ async function initializeChatView() {
     }
 
     await loadRooms();
+    await loadPlugins();  // Load plugins before connecting WebSocket
     connectWebSocket();
 
     // Navigate to room from hash if present
@@ -623,6 +721,9 @@ async function loadUserColors() {
 function getDisplayName(username) {
     return userNicknames[username] || username;
 }
+
+// Expose for plugins
+window.getDisplayName = getDisplayName;
 
 function toggleSettingsPanel() {
     const panel = document.getElementById('settingsPanel');
@@ -890,16 +991,33 @@ function dispatchMessage(data) {
     const namespace = type.substring(0, dotIdx);
     const action = type.substring(dotIdx + 1);
 
-    switch (namespace) {
-        case 'system':
-            handleSystemMessage(action, data);
-            break;
-        case 'room':
-            handleRoomMessage(action, data);
-            break;
-        default:
-            console.warn('[WS] Unknown namespace:', namespace);
+    // Core namespaces
+    if (namespace === 'system') {
+        handleSystemMessage(action, data);
+        return;
     }
+    if (namespace === 'room') {
+        handleRoomMessage(action, data);
+        return;
+    }
+
+    // Plugin namespaces
+    const handler = pluginHandlers[namespace];
+    if (handler) {
+        try {
+            handler(action, data, {
+                currentRoom: () => currentRoom,
+                currentUsername: () => currentUsername,
+                displaySystemMessage,
+                sendMessage: (msg) => ws?.send(JSON.stringify(msg)),
+            });
+        } catch (error) {
+            console.error(`[WS] Error in plugin handler for ${namespace}:`, error);
+        }
+        return;
+    }
+
+    console.warn('[WS] Unknown namespace:', namespace);
 }
 
 function handleSystemMessage(action, data) {
