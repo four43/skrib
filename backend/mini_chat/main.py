@@ -26,6 +26,7 @@ from .rooms.routes import router as rooms_router
 from .messages.routes import router as messages_router
 from .server.routes import router as server_router
 from .users.routes import router as preferences_router
+from .ws.routes import router as ws_router
 
 # Create FastAPI app
 app = FastAPI(title=APP_TITLE, version=APP_VERSION)
@@ -73,6 +74,7 @@ app.include_router(rooms_router, prefix="/api")
 app.include_router(messages_router, prefix="/api")
 app.include_router(server_router, prefix="/api")
 app.include_router(preferences_router, prefix="/api")
+app.include_router(ws_router, prefix="/api")
 
 
 @app.get("/")

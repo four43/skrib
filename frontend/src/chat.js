@@ -16,11 +16,11 @@ let currentUsername = null;
 let currentRole = null;
 let currentRoom = null;
 let lastMessageId = 0;
-let websocket = null;
+let ws = null;  // Single unified WebSocket connection
 
 let isLoadingMessages = false;
 let reconnectAttempts = 0;
-let maxReconnectAttempts = 5;
+let maxReconnectAttempts = 10;
 let reconnectTimeout = null;
 let userColors = {};  // Cache of username -> color mappings
 let userNicknames = {};  // Cache of username -> nickname (null if not set)
@@ -28,8 +28,6 @@ let serverColor = '#6366f1';  // Cached server color for theme reset
 
 let roomMeta = {};  // Cache of room_id -> { room_type, display_name, members }
 const USE_NOTIFICATION_TAG = false;  // Group notifications per room (browser may throttle)
-let roomsWs = null;  // WebSocket subscription for room list updates
-let roomsWsReconnectTimeout = null;
 let privateKey = null;  // User's RSA-OAEP private key (loaded from IndexedDB)
 let roomKeys = {};  // room_id -> { epoch: CryptoKey }
 
@@ -254,10 +252,9 @@ registerCommand('leave', async () => {
         );
 
         if (response.ok) {
-            // Disconnect from room
-            if (websocket) {
-                websocket.close();
-                websocket = null;
+            // Leave the room subscription on the unified WS
+            if (ws && ws.readyState === WebSocket.OPEN) {
+                ws.send(JSON.stringify({ type: 'room.leave', room_id: currentRoom }));
             }
             currentRoom = null;
             lastMessageId = 0;
@@ -551,7 +548,7 @@ async function initializeChatView() {
     }
 
     await loadRooms();
-    connectRoomsSubscription();
+    connectWebSocket();
 
     // Navigate to room from hash if present
     const roomFromHash = getRoomFromHash();
@@ -584,16 +581,11 @@ function logout() {
     localStorage.removeItem('username');
     localStorage.removeItem('role');
 
-    if (websocket) {
-        websocket.close();
-        websocket = null;
-    }
-    if (roomsWs) {
-        roomsWs.close();
-        roomsWs = null;
+    if (ws) {
+        ws.close();
+        ws = null;
     }
     if (reconnectTimeout) clearTimeout(reconnectTimeout);
-    if (roomsWsReconnectTimeout) clearTimeout(roomsWsReconnectTimeout);
 
     history.replaceState(null, '', window.location.pathname);
     window.location.href = '/login.html';
@@ -834,54 +826,140 @@ function createRoomItem(room) {
     return item;
 }
 
-function connectRoomsSubscription() {
-    if (roomsWs) {
-        roomsWs.close();
-        roomsWs = null;
+function connectWebSocket() {
+    if (ws) {
+        ws.close();
+        ws = null;
     }
 
     const wsProtocol = window.location.protocol === 'https:' ? 'wss:' : 'ws:';
     const wsHost = window.location.host;
-    const wsUrl = `${wsProtocol}//${wsHost}/api/rooms?token=${encodeURIComponent(sessionToken)}`;
+    const wsUrl = `${wsProtocol}//${wsHost}/api/ws?token=${encodeURIComponent(sessionToken)}`;
 
-    console.log('[WS:rooms] Connecting to room list subscription...');
-    roomsWs = new WebSocket(wsUrl);
+    console.log('[WS] Connecting...');
+    ws = new WebSocket(wsUrl);
 
-    roomsWs.onopen = () => {
-        console.log('[WS:rooms] Connected');
+    ws.onopen = () => {
+        console.log('[WS] Connected');
+        reconnectAttempts = 0;
+        // Re-join current room if we're reconnecting
+        if (currentRoom) {
+            ws.send(JSON.stringify({ type: 'room.join', room_id: currentRoom }));
+        }
     };
 
-    roomsWs.onmessage = (event) => {
+    ws.onmessage = (event) => {
         try {
             const data = JSON.parse(event.data);
-            if (data.type === 'update') {
-                console.log('[WS:rooms] Room list updated, reloading...');
-                loadRooms();
-            } else if (data.type === 'new_message') {
-                console.log('[WS:rooms] New message notification:', data);
-                loadRooms();
-                // Show toast if the message is not in the currently active room
-                if (data.room_id !== currentRoom) {
-                    showNotification(data);
+            dispatchMessage(data);
+        } catch (error) {
+            console.error('[WS] Error parsing message:', error);
+        }
+    };
+
+    ws.onclose = () => {
+        console.log('[WS] Disconnected');
+        ws = null;
+        if (sessionToken && reconnectAttempts < maxReconnectAttempts) {
+            reconnectAttempts++;
+            const delay = Math.min(1000 * Math.pow(2, reconnectAttempts - 1), 10000);
+            console.log(`[WS] Reconnecting in ${delay}ms (attempt ${reconnectAttempts}/${maxReconnectAttempts})...`);
+            reconnectTimeout = setTimeout(connectWebSocket, delay);
+        }
+    };
+
+    ws.onerror = (error) => {
+        console.error('[WS] Error:', error);
+    };
+}
+
+function dispatchMessage(data) {
+    const type = data.type || '';
+    const dotIdx = type.indexOf('.');
+    if (dotIdx === -1) {
+        console.warn('[WS] No namespace in type:', type);
+        return;
+    }
+
+    const namespace = type.substring(0, dotIdx);
+    const action = type.substring(dotIdx + 1);
+
+    switch (namespace) {
+        case 'system':
+            handleSystemMessage(action, data);
+            break;
+        case 'room':
+            handleRoomMessage(action, data);
+            break;
+        default:
+            console.warn('[WS] Unknown namespace:', namespace);
+    }
+}
+
+function handleSystemMessage(action, data) {
+    switch (action) {
+        case 'connected':
+            console.log(`[WS] Authenticated as ${data.username}`);
+            break;
+        case 'pong':
+            break;
+        case 'error':
+            console.error('[WS] System error:', data.message);
+            break;
+        default:
+            console.warn('[WS] Unknown system action:', action);
+    }
+}
+
+function handleRoomMessage(action, data) {
+    switch (action) {
+        case 'joined':
+            console.log(`[WS] Joined room ${data.room_id}`);
+            break;
+
+        case 'left':
+            console.log(`[WS] Left room ${data.room_id}`);
+            break;
+
+        case 'update':
+            console.log('[WS] Room list updated, reloading...');
+            loadRooms();
+            break;
+
+        case 'new_message':
+            console.log('[WS] New message notification:', data);
+            loadRooms();
+            if (data.room_id !== currentRoom) {
+                showNotification(data);
+            }
+            break;
+
+        case 'message':
+            if (data.room_id === currentRoom) {
+                displayMessage(data.data);
+                if (data.data.id) {
+                    markRoomAsRead(currentRoom, data.data.id);
                 }
             }
-        } catch (error) {
-            console.error('[WS:rooms] Error parsing message:', error);
-        }
-    };
+            break;
 
-    roomsWs.onclose = () => {
-        console.log('[WS:rooms] Disconnected');
-        roomsWs = null;
-        // Reconnect after a delay if we're still logged in
-        if (sessionToken) {
-            roomsWsReconnectTimeout = setTimeout(connectRoomsSubscription, 5000);
-        }
-    };
+        case 'topic':
+            if (data.room_id === currentRoom) {
+                if (roomMeta[currentRoom]) {
+                    roomMeta[currentRoom].topic = data.topic;
+                }
+                document.getElementById('chatHeaderTopic').textContent = data.topic || '';
+                displaySystemMessage(`${data.set_by} set the topic: ${data.topic}`);
+            }
+            break;
 
-    roomsWs.onerror = (error) => {
-        console.error('[WS:rooms] Error:', error);
-    };
+        case 'error':
+            console.error(`[WS] Room error (${data.room_id}):`, data.message);
+            break;
+
+        default:
+            console.warn('[WS] Unknown room action:', action);
+    }
 }
 
 function openCreateRoomModal() {
@@ -1004,20 +1082,14 @@ function selectRoom(roomId) {
         return;
     }
 
-    // Close existing WebSocket if any
-    if (websocket) {
-        websocket.close();
-        websocket = null;
-    }
-    if (reconnectTimeout) {
-        clearTimeout(reconnectTimeout);
-        reconnectTimeout = null;
+    // Leave previous room subscription on unified WS
+    if (currentRoom && ws && ws.readyState === WebSocket.OPEN) {
+        ws.send(JSON.stringify({ type: 'room.leave', room_id: currentRoom }));
     }
 
     // Switching to a different room
     currentRoom = roomId;
     lastMessageId = 0;
-    reconnectAttempts = 0;
 
     // Update URL hash
     window.location.hash = `#/r/${encodeURIComponent(roomId)}`;
@@ -1040,13 +1112,15 @@ function selectRoom(roomId) {
     // Clear messages div when switching rooms
     document.getElementById('messages').innerHTML = '';
 
-    // Load room encryption keys, then message history, then connect WebSocket
+    // Join new room on unified WS, load keys and message history
+    if (ws && ws.readyState === WebSocket.OPEN) {
+        ws.send(JSON.stringify({ type: 'room.join', room_id: roomId }));
+    }
     loadRoomKeys(roomId).then(() => {
         loadMessages().then(async () => {
             await markRoomAsRead(roomId, lastMessageId);
             loadRooms();
         });
-        connectWebSocket(roomId);
     });
 
     // Auto-hide sidebar on mobile after selecting a room
@@ -1071,84 +1145,7 @@ function hideSidebar() {
     overlay.classList.remove('show');
 }
 
-function connectWebSocket(roomId) {
-    // Get WebSocket URL
-    const wsProtocol = window.location.protocol === 'https:' ? 'wss:' : 'ws:';
-    const wsHost = window.location.host;
-    const wsUrl = `${wsProtocol}//${wsHost}/api/rooms/${encodeURIComponent(roomId)}/ws?token=${encodeURIComponent(sessionToken)}`;
 
-    console.log(`[WS] Connecting to room ${roomId}...`);
-
-    websocket = new WebSocket(wsUrl);
-
-    websocket.onopen = () => {
-        console.log(`[WS] Connected to room ${roomId}`);
-        reconnectAttempts = 0;
-    };
-
-    websocket.onmessage = (event) => {
-        try {
-            const data = JSON.parse(event.data);
-            handleWebSocketMessage(data);
-        } catch (error) {
-            console.error('[WS] Error parsing message:', error);
-        }
-    };
-
-    websocket.onerror = (error) => {
-        console.error('[WS] WebSocket error:', error);
-    };
-
-    websocket.onclose = (event) => {
-        console.log('[WS] WebSocket closed:', event.code, event.reason);
-        websocket = null;
-
-        // Attempt to reconnect if the room is still active
-        if (currentRoom === roomId && reconnectAttempts < maxReconnectAttempts) {
-            reconnectAttempts++;
-            const delay = Math.min(1000 * Math.pow(2, reconnectAttempts), 10000);
-            console.log(`[WS] Reconnecting in ${delay}ms (attempt ${reconnectAttempts}/${maxReconnectAttempts})...`);
-
-            reconnectTimeout = setTimeout(() => {
-                if (currentRoom === roomId) {
-                    connectWebSocket(roomId);
-                }
-            }, delay);
-        }
-    };
-}
-
-function handleWebSocketMessage(data) {
-    console.log('[WS] Received:', data);
-
-    switch (data.type) {
-        case 'connected':
-            console.log(`[WS] Connection confirmed for room ${data.room}`);
-            break;
-
-        case 'message':
-            displayMessage(data.data);
-            if (data.data.id && currentRoom) {
-                markRoomAsRead(currentRoom, data.data.id);
-            }
-            break;
-
-        case 'topic':
-            if (currentRoom && roomMeta[currentRoom]) {
-                roomMeta[currentRoom].topic = data.topic;
-            }
-            document.getElementById('chatHeaderTopic').textContent = data.topic || '';
-            displaySystemMessage(`${data.set_by} set the topic: ${data.topic}`);
-            break;
-
-        case 'error':
-            console.error('[WS] Server error:', data.message);
-            break;
-
-        default:
-            console.warn('[WS] Unknown message type:', data.type);
-    }
-}
 
 function linkifyRoomRefs(text) {
     return text.replace(/#\/r\/(\S+)/g, (match, room) => {
@@ -1260,9 +1257,9 @@ async function sendMessage() {
     }
 
     // Check if WebSocket is connected
-    if (!websocket || websocket.readyState !== WebSocket.OPEN) {
+    if (!ws || ws.readyState !== WebSocket.OPEN) {
         alert('Not connected to chat. Reconnecting...');
-        connectWebSocket(currentRoom);
+        connectWebSocket();
         return;
     }
 
@@ -1277,9 +1274,10 @@ async function sendMessage() {
             payload = await encryptMessage(epochs[latestEpoch], message, latestEpoch);
         }
 
-        websocket.send(JSON.stringify({
-            type: 'message',
-            message: payload
+        ws.send(JSON.stringify({
+            type: 'room.message',
+            room_id: currentRoom,
+            message: payload,
         }));
 
         // Clear input
@@ -1363,9 +1361,8 @@ async function deleteRoomAction() {
             closeRoomSettings();
             // If we were in the deleted room, clear the chat area
             if (currentRoom === roomId) {
-                if (websocket) {
-                    websocket.close();
-                    websocket = null;
+                if (ws && ws.readyState === WebSocket.OPEN) {
+                    ws.send(JSON.stringify({ type: 'room.leave', room_id: roomId }));
                 }
                 currentRoom = null;
                 lastMessageId = 0;

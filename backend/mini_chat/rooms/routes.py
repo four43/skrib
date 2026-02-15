@@ -1,7 +1,5 @@
 """Rooms API routes."""
-from fastapi import APIRouter, HTTPException, Depends, WebSocket, WebSocketDisconnect
-from typing import Optional
-import json
+from fastapi import APIRouter, HTTPException, Depends
 
 from .schemas import (
     RoomListResponse,
@@ -49,14 +47,10 @@ from .services import (
     set_room_role,
     ChatRoom,
 )
-from .websocket import manager
-from ..subscriptions import ListSubscriptionManager
-from ..dependencies import require_auth, require_admin, require_moderator, verify_token
+from ..ws import bus
+from ..dependencies import require_auth
 
 router = APIRouter(prefix="/rooms", tags=["rooms"])
-
-# Room list subscription manager — clients subscribe via WS on /rooms
-rooms_subscriptions = ListSubscriptionManager("rooms")
 
 
 @router.get("", response_model=RoomListResponse)
@@ -65,29 +59,6 @@ async def list_rooms(username: str = Depends(require_auth)):
     rooms = get_user_rooms(username)
     return RoomListResponse(rooms=[RoomInfo(**r) for r in rooms])
 
-
-@router.websocket("")
-async def rooms_list_ws(websocket: WebSocket, token: Optional[str] = None):
-    """WebSocket subscription for room list updates. Same path as GET /rooms."""
-    if not token:
-        await websocket.close(code=1008, reason="Authentication required")
-        return
-
-    username = verify_token(token)
-    if not username:
-        await websocket.close(code=1008, reason="Invalid token")
-        return
-
-    await rooms_subscriptions.connect(websocket, username)
-
-    try:
-        # Keep connection alive — client doesn't send anything meaningful
-        while True:
-            await websocket.receive_text()
-    except WebSocketDisconnect:
-        rooms_subscriptions.disconnect(websocket, username)
-    except Exception:
-        rooms_subscriptions.disconnect(websocket, username)
 
 
 @router.post("", response_model=CreateRoomResponse)
@@ -109,7 +80,7 @@ async def create_new_room(
     add_room_member(request.room_id, username, room_role='owner')
 
     # Notify creator — new channel appears in their room list
-    await rooms_subscriptions.notify(username, {"type": "update"})
+    await bus.notify_user(username, {"type": "room.update"})
 
     return CreateRoomResponse(status="ok", room_id=request.room_id)
 
@@ -147,7 +118,7 @@ async def create_dm(
 
     # Notify all participants
     for participant in [username] + targets:
-        await rooms_subscriptions.notify(participant, {"type": "update"})
+        await bus.notify_user(participant, {"type": "room.update"})
 
     return CreateDMResponse(status="ok", room=RoomInfo(**room))
 
@@ -179,9 +150,10 @@ async def send_room_message(
     room = ChatRoom(room_id)
     message = room.add_message(username, request.message)
 
-    await manager.broadcast_to_room(room_id, {
-        "type": "message",
-        "data": message
+    await bus.broadcast_to_room(room_id, {
+        "type": "room.message",
+        "room_id": room_id,
+        "data": message,
     })
 
     # Notify other room members so their sidebar unread counts refresh
@@ -190,8 +162,8 @@ async def send_room_message(
     for member in members:
         if member != username:
             level = get_notify_level(room_id, member)
-            event_type = "new_message" if level == "all" else "update"
-            await rooms_subscriptions.notify(member, {
+            event_type = "room.new_message" if level == "all" else "room.update"
+            await bus.notify_user(member, {
                 "type": event_type,
                 "room_id": room_id,
                 "room_type": room_type,
@@ -239,7 +211,7 @@ async def delete_room_endpoint(
         raise HTTPException(status_code=404, detail="Room not found")
 
     # Notify all subscribers — room removed from list
-    await rooms_subscriptions.notify_all({"type": "update"})
+    await bus.notify_all_users({"type": "room.update"})
 
     return DeleteRoomResponse(status="ok", room_id=room_id)
 
@@ -262,7 +234,7 @@ async def add_member_endpoint(
     if result['status'] == 'already_member':
         raise HTTPException(status_code=400, detail="User is already a member")
 
-    await rooms_subscriptions.notify(request.username, {"type": "update"})
+    await bus.notify_user(request.username, {"type": "room.update"})
 
     return AddMemberResponse(status="ok", room_id=room_id, username=request.username)
 
@@ -286,7 +258,7 @@ async def leave_room_endpoint(
     if result['status'] == 'room_not_found':
         raise HTTPException(status_code=404, detail="Room not found")
 
-    await rooms_subscriptions.notify(username, {"type": "update"})
+    await bus.notify_user(username, {"type": "room.update"})
 
     return RemoveMemberResponse(status="ok", room_id=room_id, username=username)
 
@@ -314,7 +286,7 @@ async def kick_member_endpoint(
     if result['status'] == 'room_not_found':
         raise HTTPException(status_code=404, detail="Room not found")
 
-    await rooms_subscriptions.notify(target_username, {"type": "update"})
+    await bus.notify_user(target_username, {"type": "room.update"})
 
     return RemoveMemberResponse(status="ok", room_id=room_id, username=target_username)
 
@@ -341,79 +313,6 @@ async def get_room_keys_endpoint(
     keys = get_room_keys(room_id, username)
     return RoomKeysResponse(keys=keys)
 
-
-@router.websocket("/{room_id}/ws")
-async def websocket_endpoint(websocket: WebSocket, room_id: str, token: Optional[str] = None):
-    """WebSocket endpoint for real-time chat in a room."""
-    if not token:
-        await websocket.close(code=1008, reason="Authentication required")
-        return
-
-    username = verify_token(token)
-    if not username:
-        await websocket.close(code=1008, reason="Invalid token")
-        return
-
-    # Check room access
-    if not room_exists(room_id):
-        ensure_room_exists(room_id)
-
-    room_type = get_room_type(room_id)
-    if room_type == 'dm':
-        members = get_room_members(room_id)
-        if username not in members:
-            await websocket.close(code=1008, reason="Not a member of this DM")
-            return
-
-    await manager.connect(websocket, room_id)
-
-    try:
-        await websocket.send_json({
-            "type": "connected",
-            "room": room_id,
-            "username": username
-        })
-
-        while True:
-            data = await websocket.receive_text()
-
-            try:
-                payload = json.loads(data)
-
-                if payload.get("type") == "message":
-                    room = ChatRoom(room_id)
-                    message = room.add_message(username, payload.get("message", ""))
-
-                    await manager.broadcast_to_room(room_id, {
-                        "type": "message",
-                        "data": message
-                    })
-
-                    # Notify other room members so their sidebar unread counts refresh
-                    members = get_room_members(room_id)
-                    for member in members:
-                        if member != username:
-                            level = get_notify_level(room_id, member)
-                            event_type = "new_message" if level == "all" else "update"
-                            await rooms_subscriptions.notify(member, {
-                                "type": event_type,
-                                "room_id": room_id,
-                                "room_type": room_type,
-                                "sender": username,
-                            })
-
-            except json.JSONDecodeError:
-                await websocket.send_json({
-                    "type": "error",
-                    "message": "Invalid JSON"
-                })
-
-    except WebSocketDisconnect:
-        manager.disconnect(websocket, room_id)
-        print(f"[WS] User {username} disconnected from room {room_id}")
-    except Exception as e:
-        print(f"[WS] Error in WebSocket connection: {e}")
-        manager.disconnect(websocket, room_id)
 
 
 @router.get("/{room_id}", response_model=RoomDetailResponse)
@@ -448,8 +347,9 @@ async def set_topic_endpoint(
     if not set_topic(room_id, request.topic):
         raise HTTPException(status_code=404, detail="Room not found")
 
-    await manager.broadcast_to_room(room_id, {
-        "type": "topic",
+    await bus.broadcast_to_room(room_id, {
+        "type": "room.topic",
+        "room_id": room_id,
         "topic": request.topic,
         "set_by": username,
     })

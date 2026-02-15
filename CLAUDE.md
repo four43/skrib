@@ -17,12 +17,12 @@ Read these files on demand when working on specific areas:
 ```
 backend/mini_chat/       # FastAPI app
   auth/                  # WebAuthn registration/login
-  rooms/                 # Chat rooms, DMs & WebSocket
+  rooms/                 # Chat rooms, DMs, IRC features (topic, roles)
+  ws/                    # Unified WebSocket bus (single connection per client)
   messages/              # Message search
   admin/                 # User management, settings
   database.py            # SQLite + WAL mode
   dependencies.py        # Auth middleware
-  subscriptions.py       # ListSubscriptionManager (WS push for list endpoints)
   main.py                # App entry & router registration
 
 frontend/src/            # Vanilla JS (Vite build)
@@ -45,15 +45,18 @@ frontend/src/            # Vanilla JS (Vite build)
 ## Room Types
 
 - **Channels**: `room_type='channel'`, names must be lowercase + hyphens (regex `^[a-z0-9]+(-[a-z0-9]+)*$`), displayed with `#` prefix
-- **DMs**: `room_type='dm'`, auto-generated `room_id` as `dm|user_a|user_b` (pipe-delimited, sorted), membership tracked in `room_members` table
+- **DMs**: `room_type='dm'`, auto-generated `room_id` as `dm|user_a|user_b` (pipe-delimited, sorted), membership tracked in `room_users` table
 - `GET /rooms` returns channels (where user is a member) and DMs (where user is a member), with `display_name` field
-- Room list is subscribable: same `/rooms` path serves both HTTP GET and WebSocket (upgrade). WS pushes `{"type": "update"}` when rooms change
 
-## List Subscriptions
+## Unified WebSocket Bus
 
-- `ListSubscriptionManager` (in `subscriptions.py`) provides per-user WebSocket push for any list endpoint
-- Pattern: HTTP GET returns data, WebSocket on same path subscribes to changes
-- Currently used for `/rooms`; extensible to `/users` for presence/typing
+- Single WS connection per client at `WS /api/ws?token=...`
+- Two namespaces: `system.*` (connection-level) and `room.*` (all room traffic)
+- **User-scoped** events (`room.update`, `room.new_message`) go to all of a user's tabs
+- **Room-scoped** events (`room.message`, `room.topic`) go only to tabs that sent `room.join`
+- Client sends `room.join`/`room.leave` when switching rooms (no WS teardown)
+- Messages sent via `room.message` (from client) or HTTP `POST /rooms/{room_id}/messages`
+- Implementation in `backend/mini_chat/ws/` (manager.py, handlers.py, routes.py)
 
 ## Running
 
