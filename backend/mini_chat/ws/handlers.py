@@ -7,6 +7,7 @@ from ..rooms.services import (
     get_room_members,
     get_room_role,
     get_notify_level,
+    get_unread_count_for_room,
     ChatRoom,
 )
 
@@ -95,11 +96,13 @@ async def handle_room(bus, ws: WebSocket, username: str, msg: dict):
             if member != username:
                 level = get_notify_level(room_id, member)
                 event_type = "room.new_message" if level == "all" else "room.update"
+                unread_count = get_unread_count_for_room(room_id, member)
                 await bus.notify_user(member, {
                     "type": event_type,
                     "room_id": room_id,
                     "room_type": room_type,
                     "sender": username,
+                    "unread_count": unread_count,
                 })
 
     else:

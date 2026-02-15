@@ -42,6 +42,7 @@ from .services import (
     mark_room_read,
     set_notify_level,
     get_notify_level,
+    get_unread_count_for_room,
     set_topic,
     get_room_info,
     set_room_role,
@@ -168,11 +169,13 @@ async def send_room_message(
         if member != username:
             level = get_notify_level(room_id, member)
             event_type = "room.new_message" if level == "all" else "room.update"
+            unread_count = get_unread_count_for_room(room_id, member)
             await bus.notify_user(member, {
                 "type": event_type,
                 "room_id": room_id,
                 "room_type": room_type,
                 "sender": username,
+                "unread_count": unread_count,
             })
 
     return SendMessageResponse(status="ok", message=message)

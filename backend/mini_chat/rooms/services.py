@@ -484,3 +484,16 @@ def get_unread_counts(username: str) -> Dict[str, int]:
             GROUP BY rm.room_id
         ''', (username,))
         return {row['room_id']: row['unread_count'] for row in cursor}
+
+
+def get_unread_count_for_room(room_id: str, username: str) -> int:
+    """Get unread message count for a specific room and user."""
+    with get_db() as conn:
+        cursor = conn.execute('''
+            SELECT COUNT(m.id) as unread_count
+            FROM room_users rm
+            LEFT JOIN messages m ON rm.room_id = m.room_id AND m.id > rm.last_read_message_id
+            WHERE rm.room_id = ? AND rm.username = ?
+        ''', (room_id, username))
+        row = cursor.fetchone()
+        return row['unread_count'] if row else 0
