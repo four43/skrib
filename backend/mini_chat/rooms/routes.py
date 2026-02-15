@@ -19,6 +19,7 @@ from .schemas import (
     RemoveMemberResponse,
     StoreRoomKeyRequest,
     RoomKeysResponse,
+    MarkReadRequest,
 )
 from .services import (
     get_user_rooms,
@@ -34,6 +35,7 @@ from .services import (
     remove_room_member,
     store_room_key,
     get_room_keys,
+    mark_room_read,
     ChatRoom,
 )
 from .websocket import manager
@@ -171,7 +173,31 @@ async def send_room_message(
         "data": message
     })
 
+    # Notify other room members so their sidebar unread counts refresh
+    room_type = get_room_type(room_id)
+    members = get_room_members(room_id)
+    for member in members:
+        if member != username:
+            await rooms_subscriptions.notify(member, {
+                "type": "new_message",
+                "room_id": room_id,
+                "room_type": room_type,
+                "sender": username,
+            })
+
     return SendMessageResponse(status="ok", message=message)
+
+
+@router.post("/{room_id}/read")
+async def mark_read_endpoint(
+    room_id: str,
+    request: MarkReadRequest,
+    username: str = Depends(require_auth),
+):
+    """Mark messages in a room as read up to a given message ID."""
+    _check_room_access(room_id, username)
+    mark_room_read(room_id, username, request.last_read_message_id)
+    return {"status": "ok"}
 
 
 @router.delete("/{room_id}", response_model=DeleteRoomResponse)
@@ -330,6 +356,17 @@ async def websocket_endpoint(websocket: WebSocket, room_id: str, token: Optional
                         "type": "message",
                         "data": message
                     })
+
+                    # Notify other room members so their sidebar unread counts refresh
+                    members = get_room_members(room_id)
+                    for member in members:
+                        if member != username:
+                            await rooms_subscriptions.notify(member, {
+                                "type": "new_message",
+                                "room_id": room_id,
+                                "room_type": room_type,
+                                "sender": username,
+                            })
 
             except json.JSONDecodeError:
                 await websocket.send_json({

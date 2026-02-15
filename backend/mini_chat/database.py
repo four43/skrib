@@ -105,11 +105,13 @@ def init_db():
             )
         ''')
 
-        # Room members table (for DMs)
+        # Room members table (membership, read positions, and encrypted room keys)
         conn.execute('''
             CREATE TABLE IF NOT EXISTS room_members (
                 room_id TEXT NOT NULL,
                 username TEXT NOT NULL,
+                last_read_message_id INTEGER NOT NULL DEFAULT 0,
+                encrypted_keys TEXT NOT NULL DEFAULT '{}',
                 PRIMARY KEY (room_id, username),
                 FOREIGN KEY (room_id) REFERENCES rooms(room_id),
                 FOREIGN KEY (username) REFERENCES users(username)
@@ -122,20 +124,6 @@ def init_db():
                 username TEXT PRIMARY KEY,
                 public_key TEXT NOT NULL,
                 created_at TEXT NOT NULL,
-                FOREIGN KEY (username) REFERENCES users(username)
-            )
-        ''')
-
-        # Room keys (encrypted per-user, per-epoch)
-        conn.execute('''
-            CREATE TABLE IF NOT EXISTS room_keys (
-                room_id TEXT NOT NULL,
-                username TEXT NOT NULL,
-                key_epoch INTEGER NOT NULL DEFAULT 0,
-                encrypted_key TEXT NOT NULL,
-                created_at TEXT NOT NULL,
-                PRIMARY KEY (room_id, username, key_epoch),
-                FOREIGN KEY (room_id) REFERENCES rooms(room_id),
                 FOREIGN KEY (username) REFERENCES users(username)
             )
         ''')

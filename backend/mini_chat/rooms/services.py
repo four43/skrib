@@ -1,4 +1,5 @@
 """Business logic for rooms."""
+import json
 import re
 from datetime import datetime
 from typing import List, Dict, Optional
@@ -29,13 +30,15 @@ class ChatRoom:
         timestamp = datetime.now().isoformat()
 
         with get_db() as conn:
-            conn.execute('''
+            cursor = conn.execute('''
                 INSERT INTO messages (room_id, username, message, timestamp)
                 VALUES (?, ?, ?, ?)
             ''', (self.room_id, username, message, timestamp))
+            message_id = cursor.lastrowid
             conn.commit()
 
         return {
+            'id': message_id,
             'username': username,
             'message': message,
             'timestamp': timestamp
@@ -91,6 +94,8 @@ def load_rooms_from_db():
 
 def get_user_rooms(username: str) -> List[Dict]:
     """Get rooms visible to a user: channels and DMs they're a member of."""
+    unread_counts = get_unread_counts(username)
+
     with get_db() as conn:
         # Get channels where user is a member
         cursor = conn.execute('''
@@ -106,6 +111,7 @@ def get_user_rooms(username: str) -> List[Dict]:
                 'room_type': 'channel',
                 'display_name': f"#{row['room_id']}",
                 'members': [],
+                'unread_count': unread_counts.get(row['room_id'], 0),
             })
 
         # Get DMs where user is a member
@@ -124,6 +130,7 @@ def get_user_rooms(username: str) -> List[Dict]:
                 'room_type': 'dm',
                 'display_name': dm_display_name(members, username),
                 'members': members,
+                'unread_count': unread_counts.get(room_id, 0),
             })
 
         return rooms
@@ -304,11 +311,20 @@ def remove_room_member(room_id: str, username: str) -> Dict:
 
 def store_room_key(room_id: str, username: str, key_epoch: int, encrypted_key: str):
     """Store an encrypted room key for a user at a given epoch."""
-    now = datetime.now().isoformat()
     with get_db() as conn:
+        cursor = conn.execute(
+            'SELECT encrypted_keys FROM room_members WHERE room_id = ? AND username = ?',
+            (room_id, username),
+        )
+        row = cursor.fetchone()
+        if not row:
+            return
+
+        keys = json.loads(row['encrypted_keys'])
+        keys[str(key_epoch)] = encrypted_key
         conn.execute(
-            'INSERT OR REPLACE INTO room_keys (room_id, username, key_epoch, encrypted_key, created_at) VALUES (?, ?, ?, ?, ?)',
-            (room_id, username, key_epoch, encrypted_key, now),
+            'UPDATE room_members SET encrypted_keys = ? WHERE room_id = ? AND username = ?',
+            (json.dumps(keys), room_id, username),
         )
         conn.commit()
 
@@ -317,7 +333,40 @@ def get_room_keys(room_id: str, username: str) -> List[Dict]:
     """Get all encrypted room keys for a user across all epochs."""
     with get_db() as conn:
         cursor = conn.execute(
-            'SELECT key_epoch, encrypted_key FROM room_keys WHERE room_id = ? AND username = ? ORDER BY key_epoch',
+            'SELECT encrypted_keys FROM room_members WHERE room_id = ? AND username = ?',
             (room_id, username),
         )
-        return [{'key_epoch': row['key_epoch'], 'encrypted_key': row['encrypted_key']} for row in cursor]
+        row = cursor.fetchone()
+        if not row:
+            return []
+
+        keys = json.loads(row['encrypted_keys'])
+        return [
+            {'key_epoch': int(epoch), 'encrypted_key': enc_key}
+            for epoch, enc_key in sorted(keys.items(), key=lambda x: int(x[0]))
+        ]
+
+
+def mark_room_read(room_id: str, username: str, message_id: int):
+    """Update the user's last-read position in a room."""
+    with get_db() as conn:
+        conn.execute('''
+            UPDATE room_members
+            SET last_read_message_id = MAX(last_read_message_id, ?)
+            WHERE room_id = ? AND username = ?
+        ''', (message_id, room_id, username))
+        conn.commit()
+
+
+def get_unread_counts(username: str) -> Dict[str, int]:
+    """Get unread message counts for all rooms the user is a member of."""
+    with get_db() as conn:
+        cursor = conn.execute('''
+            SELECT rm.room_id, COUNT(m.id) as unread_count
+            FROM room_members rm
+            JOIN rooms r ON rm.room_id = r.room_id AND r.deleted = 0
+            LEFT JOIN messages m ON rm.room_id = m.room_id AND m.id > rm.last_read_message_id
+            WHERE rm.username = ?
+            GROUP BY rm.room_id
+        ''', (username,))
+        return {row['room_id']: row['unread_count'] for row in cursor}

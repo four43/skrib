@@ -27,6 +27,7 @@ let userNicknames = {};  // Cache of username -> nickname (null if not set)
 let serverColor = '#6366f1';  // Cached server color for theme reset
 
 let roomMeta = {};  // Cache of room_id -> { room_type, display_name, members }
+const USE_NOTIFICATION_TAG = false;  // Group notifications per room (browser may throttle)
 let roomsWs = null;  // WebSocket subscription for room list updates
 let roomsWsReconnectTimeout = null;
 let privateKey = null;  // User's RSA-OAEP private key (loaded from IndexedDB)
@@ -492,6 +493,11 @@ async function checkSession() {
 async function initializeChatView() {
     document.getElementById('currentUser').textContent = `👤 ${currentUsername}`;
 
+    // Request notification permission
+    if ('Notification' in window && Notification.permission === 'default') {
+        Notification.requestPermission();
+    }
+
     if (currentRole === 'admin' || currentRole === 'moderator') {
         const badge = document.getElementById('adminBadge');
         badge.textContent = currentRole === 'admin' ? 'ADMIN' : 'MOD';
@@ -762,6 +768,14 @@ function createRoomItem(room) {
 
     item.appendChild(nameSpan);
 
+    // Unread badge
+    if (room.unread_count > 0 && currentRoom !== room.room_id) {
+        const badge = document.createElement('span');
+        badge.className = 'unread-badge';
+        badge.textContent = room.unread_count > 99 ? '99+' : room.unread_count;
+        item.appendChild(badge);
+    }
+
     if ((currentRole === 'admin' || currentRole === 'moderator') && room.room_type === 'channel') {
         const settingsBtn = document.createElement('button');
         settingsBtn.className = 'room-settings-btn';
@@ -800,6 +814,13 @@ function connectRoomsSubscription() {
             if (data.type === 'update') {
                 console.log('[WS:rooms] Room list updated, reloading...');
                 loadRooms();
+            } else if (data.type === 'new_message') {
+                console.log('[WS:rooms] New message notification:', data);
+                loadRooms();
+                // Show toast if the message is not in the currently active room
+                if (data.room_id !== currentRoom) {
+                    showNotification(data);
+                }
             }
         } catch (error) {
             console.error('[WS:rooms] Error parsing message:', error);
@@ -881,6 +902,55 @@ function getRoomFromHash() {
     return match ? decodeURIComponent(match[1]) : null;
 }
 
+function showNotification(data) {
+    console.log('[Notification] permission:', Notification.permission, 'hasFocus:', document.hasFocus(), 'room:', data.room_id);
+    if (Notification.permission !== 'granted') return;
+    if (document.hasFocus()) return;
+
+    const meta = roomMeta[data.room_id];
+    let roomLabel = data.room_id;
+    if (meta) {
+        roomLabel = meta.display_name;
+        if (meta.room_type === 'dm') {
+            const parts = roomLabel.split(', ');
+            roomLabel = parts.map(u => getDisplayName(u)).join(', ');
+        }
+    }
+
+    const senderName = getDisplayName(data.sender);
+    const title = data.room_type === 'dm' ? senderName : `${senderName} in ${roomLabel}`;
+    console.log('[Notification] Showing:', title);
+
+    const opts = { body: 'New message' };
+    if (USE_NOTIFICATION_TAG) {
+        opts.tag = data.room_id;
+        opts.renotify = true;
+    }
+    const notification = new Notification(title, opts);
+
+    notification.onclick = () => {
+        window.focus();
+        selectRoom(data.room_id);
+        notification.close();
+    };
+}
+
+async function markRoomAsRead(roomId, messageId) {
+    if (!messageId || messageId <= 0) return;
+    try {
+        await fetch(`${API_URL}/rooms/${encodeURIComponent(roomId)}/read`, {
+            method: 'POST',
+            headers: {
+                'Content-Type': 'application/json',
+                'Authorization': `Bearer ${sessionToken}`,
+            },
+            body: JSON.stringify({ last_read_message_id: messageId }),
+        });
+    } catch (error) {
+        console.error('[HTTP] Error marking room as read:', error);
+    }
+}
+
 function selectRoom(roomId) {
     // Don't do anything if already in this room
     if (currentRoom === roomId) {
@@ -927,7 +997,10 @@ function selectRoom(roomId) {
 
     // Load room encryption keys, then message history, then connect WebSocket
     loadRoomKeys(roomId).then(() => {
-        loadMessages();
+        loadMessages().then(async () => {
+            await markRoomAsRead(roomId, lastMessageId);
+            loadRooms();
+        });
         connectWebSocket(roomId);
     });
 
@@ -1010,6 +1083,9 @@ function handleWebSocketMessage(data) {
 
         case 'message':
             displayMessage(data.data);
+            if (data.data.id && currentRoom) {
+                markRoomAsRead(currentRoom, data.data.id);
+            }
             break;
 
         case 'error':

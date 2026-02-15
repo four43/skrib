@@ -18,3 +18,4 @@ A manual todo list of features I think of:
 - [ ] Message quoting and replying
 - [ ] Message pinning and starring
 - [ ] Message search and filtering
+- [ ] Server name and icon, customization

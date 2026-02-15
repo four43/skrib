@@ -8,6 +8,7 @@ class RoomInfo(BaseModel):
     room_type: str  # "channel" or "dm"
     display_name: str  # "#general" or "alice"
     members: List[str] = []
+    unread_count: int = 0
 
 
 class RoomListResponse(BaseModel):
@@ -87,3 +88,7 @@ class RoomKeyEntry(BaseModel):
 
 class RoomKeysResponse(BaseModel):
     keys: List[RoomKeyEntry]
+
+
+class MarkReadRequest(BaseModel):
+    last_read_message_id: int
