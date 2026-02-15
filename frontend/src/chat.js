@@ -776,17 +776,15 @@ function createRoomItem(room) {
         item.appendChild(badge);
     }
 
-    if ((currentRole === 'admin' || currentRole === 'moderator') && room.room_type === 'channel') {
-        const settingsBtn = document.createElement('button');
-        settingsBtn.className = 'room-settings-btn';
-        settingsBtn.textContent = '\u2699';
-        settingsBtn.title = 'Room settings';
-        settingsBtn.onclick = (e) => {
-            e.stopPropagation();
-            openRoomSettings(room.room_id);
-        };
-        item.appendChild(settingsBtn);
-    }
+    const settingsBtn = document.createElement('button');
+    settingsBtn.className = 'room-settings-btn';
+    settingsBtn.textContent = '\u2699';
+    settingsBtn.title = 'Room settings';
+    settingsBtn.onclick = (e) => {
+        e.stopPropagation();
+        openRoomSettings(room.room_id);
+    };
+    item.appendChild(settingsBtn);
 
     return item;
 }
@@ -1242,12 +1240,54 @@ function openRoomSettings(roomId) {
     const roomName = document.getElementById('roomSettingsName');
     modal.dataset.roomId = roomId;
     roomName.textContent = roomId;
+
+    // Set current notification level
+    const meta = roomMeta[roomId];
+    const select = document.getElementById('notifyLevelSelect');
+    select.value = (meta && meta.notify_level) || 'all';
+
+    // Only show danger zone for admin/moderator
+    const dangerSection = document.getElementById('roomSettingsDanger');
+    if (currentRole === 'admin' || currentRole === 'moderator') {
+        dangerSection.style.display = '';
+    } else {
+        dangerSection.style.display = 'none';
+    }
+
     modal.classList.add('open');
 }
 
 function closeRoomSettings() {
     const modal = document.getElementById('roomSettingsModal');
     modal.classList.remove('open');
+}
+
+async function updateNotifyLevel() {
+    const modal = document.getElementById('roomSettingsModal');
+    const roomId = modal.dataset.roomId;
+    const level = document.getElementById('notifyLevelSelect').value;
+
+    try {
+        const resp = await fetch(`${API_URL}/rooms/${encodeURIComponent(roomId)}/notify`, {
+            method: 'PUT',
+            headers: {
+                'Authorization': `Bearer ${sessionToken}`,
+                'Content-Type': 'application/json',
+            },
+            body: JSON.stringify({ notify_level: level }),
+        });
+
+        if (resp.ok) {
+            // Update local cache
+            if (roomMeta[roomId]) {
+                roomMeta[roomId].notify_level = level;
+            }
+        } else {
+            console.error('Failed to update notify level');
+        }
+    } catch (error) {
+        console.error('Failed to update notify level:', error);
+    }
 }
 
 async function deleteRoomAction() {
@@ -1405,6 +1445,7 @@ window.sendMessage = sendMessage;
 window.toggleSidebar = toggleSidebar;
 window.closeRoomSettings = closeRoomSettings;
 window.deleteRoomAction = deleteRoomAction;
+window.updateNotifyLevel = updateNotifyLevel;
 
 // Event listeners
 document.addEventListener('DOMContentLoaded', () => {

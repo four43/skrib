@@ -110,7 +110,15 @@
                     <span class="room-settings-label">Room name:</span>
                     <span id="roomSettingsName" class="room-settings-value"></span>
                 </div>
-                <div class="room-settings-danger">
+                <div class="room-settings-section">
+                    <h4>Notifications</h4>
+                    <select id="notifyLevelSelect" onchange="updateNotifyLevel()">
+                        <option value="all">All activity</option>
+                        <option value="mentions">Mentions only</option>
+                        <option value="muted">Muted</option>
+                    </select>
+                </div>
+                <div id="roomSettingsDanger" class="room-settings-danger">
                     <h4>Danger Zone</h4>
                     <p>Deleting a room hides it from the room list. Messages are preserved.</p>
                     <button class="delete-btn" onclick="deleteRoomAction()">Delete Room</button>

@@ -112,6 +112,7 @@ def init_db():
                 username TEXT NOT NULL,
                 last_read_message_id INTEGER NOT NULL DEFAULT 0,
                 encrypted_keys TEXT NOT NULL DEFAULT '{}',
+                notify_level TEXT NOT NULL DEFAULT 'all',
                 PRIMARY KEY (room_id, username),
                 FOREIGN KEY (room_id) REFERENCES rooms(room_id),
                 FOREIGN KEY (username) REFERENCES users(username)

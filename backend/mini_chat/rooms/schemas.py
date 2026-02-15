@@ -1,6 +1,6 @@
 """Pydantic schemas for rooms."""
 from pydantic import BaseModel
-from typing import List, Optional
+from typing import List, Literal, Optional
 
 
 class RoomInfo(BaseModel):
@@ -9,6 +9,7 @@ class RoomInfo(BaseModel):
     display_name: str  # "#general" or "alice"
     members: List[str] = []
     unread_count: int = 0
+    notify_level: str = 'all'  # "all", "mentions", "muted"
 
 
 class RoomListResponse(BaseModel):
@@ -92,3 +93,7 @@ class RoomKeysResponse(BaseModel):
 
 class MarkReadRequest(BaseModel):
     last_read_message_id: int
+
+
+class UpdateNotifyLevelRequest(BaseModel):
+    notify_level: Literal['all', 'mentions', 'muted']

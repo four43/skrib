@@ -20,6 +20,7 @@ from .schemas import (
     StoreRoomKeyRequest,
     RoomKeysResponse,
     MarkReadRequest,
+    UpdateNotifyLevelRequest,
 )
 from .services import (
     get_user_rooms,
@@ -36,6 +37,8 @@ from .services import (
     store_room_key,
     get_room_keys,
     mark_room_read,
+    set_notify_level,
+    get_notify_level,
     ChatRoom,
 )
 from .websocket import manager
@@ -178,8 +181,10 @@ async def send_room_message(
     members = get_room_members(room_id)
     for member in members:
         if member != username:
+            level = get_notify_level(room_id, member)
+            event_type = "new_message" if level == "all" else "update"
             await rooms_subscriptions.notify(member, {
-                "type": "new_message",
+                "type": event_type,
                 "room_id": room_id,
                 "room_type": room_type,
                 "sender": username,
@@ -198,6 +203,18 @@ async def mark_read_endpoint(
     _check_room_access(room_id, username)
     mark_room_read(room_id, username, request.last_read_message_id)
     return {"status": "ok"}
+
+
+@router.put("/{room_id}/notify")
+async def update_notify_level_endpoint(
+    room_id: str,
+    request: UpdateNotifyLevelRequest,
+    username: str = Depends(require_auth),
+):
+    """Set the notification level for the current user in a room."""
+    _check_room_access(room_id, username)
+    set_notify_level(room_id, username, request.notify_level)
+    return {"status": "ok", "notify_level": request.notify_level}
 
 
 @router.delete("/{room_id}", response_model=DeleteRoomResponse)
@@ -361,8 +378,10 @@ async def websocket_endpoint(websocket: WebSocket, room_id: str, token: Optional
                     members = get_room_members(room_id)
                     for member in members:
                         if member != username:
+                            level = get_notify_level(room_id, member)
+                            event_type = "new_message" if level == "all" else "update"
                             await rooms_subscriptions.notify(member, {
-                                "type": "new_message",
+                                "type": event_type,
                                 "room_id": room_id,
                                 "room_type": room_type,
                                 "sender": username,

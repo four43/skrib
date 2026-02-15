@@ -99,7 +99,7 @@ def get_user_rooms(username: str) -> List[Dict]:
     with get_db() as conn:
         # Get channels where user is a member
         cursor = conn.execute('''
-            SELECT r.room_id, r.room_type
+            SELECT r.room_id, r.room_type, rm.notify_level
             FROM rooms r
             JOIN room_members rm ON r.room_id = rm.room_id
             WHERE r.deleted = 0 AND r.room_type = 'channel' AND rm.username = ?
@@ -112,11 +112,12 @@ def get_user_rooms(username: str) -> List[Dict]:
                 'display_name': f"#{row['room_id']}",
                 'members': [],
                 'unread_count': unread_counts.get(row['room_id'], 0),
+                'notify_level': row['notify_level'],
             })
 
         # Get DMs where user is a member
         cursor = conn.execute('''
-            SELECT r.room_id, r.room_type
+            SELECT r.room_id, r.room_type, rm.notify_level
             FROM rooms r
             JOIN room_members rm ON r.room_id = rm.room_id
             WHERE r.deleted = 0 AND r.room_type = 'dm' AND rm.username = ?
@@ -131,6 +132,7 @@ def get_user_rooms(username: str) -> List[Dict]:
                 'display_name': dm_display_name(members, username),
                 'members': members,
                 'unread_count': unread_counts.get(room_id, 0),
+                'notify_level': row['notify_level'],
             })
 
         return rooms
@@ -345,6 +347,27 @@ def get_room_keys(room_id: str, username: str) -> List[Dict]:
             {'key_epoch': int(epoch), 'encrypted_key': enc_key}
             for epoch, enc_key in sorted(keys.items(), key=lambda x: int(x[0]))
         ]
+
+
+def set_notify_level(room_id: str, username: str, level: str):
+    """Set the notification level for a user in a room."""
+    with get_db() as conn:
+        conn.execute('''
+            UPDATE room_members SET notify_level = ?
+            WHERE room_id = ? AND username = ?
+        ''', (level, room_id, username))
+        conn.commit()
+
+
+def get_notify_level(room_id: str, username: str) -> str:
+    """Get the notification level for a user in a room."""
+    with get_db() as conn:
+        cursor = conn.execute(
+            'SELECT notify_level FROM room_members WHERE room_id = ? AND username = ?',
+            (room_id, username),
+        )
+        row = cursor.fetchone()
+        return row['notify_level'] if row else 'all'
 
 
 def mark_room_read(room_id: str, username: str, message_id: int):

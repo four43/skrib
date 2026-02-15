@@ -1339,6 +1339,28 @@ input:focus-visible {
     color: #1e293b;
 }
 
+.room-settings-section {
+    margin-bottom: 16px;
+}
+
+.room-settings-section h4 {
+    margin: 0 0 8px 0;
+    font-size: 14px;
+    font-weight: 700;
+    color: #1e293b;
+}
+
+.room-settings-section select {
+    width: 100%;
+    padding: 8px 12px;
+    border: 1px solid rgba(0, 0, 0, 0.15);
+    border-radius: 8px;
+    font-size: 14px;
+    background: white;
+    color: #1e293b;
+    cursor: pointer;
+}
+
 .room-settings-danger {
     border: 1px solid rgba(239, 68, 68, 0.2);
     border-radius: 10px;
