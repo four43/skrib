@@ -7,6 +7,7 @@ class RoomInfo(BaseModel):
     room_id: str
     room_type: str  # "channel" or "dm"
     display_name: str  # "#general" or "alice"
+    topic: str = ''
     members: List[str] = []
     unread_count: int = 0
     notify_level: str = 'all'  # "all", "mentions", "muted"
@@ -97,3 +98,26 @@ class MarkReadRequest(BaseModel):
 
 class UpdateNotifyLevelRequest(BaseModel):
     notify_level: Literal['all', 'mentions', 'muted']
+
+
+class MemberInfo(BaseModel):
+    username: str
+    room_role: str
+    joined_at: str | None
+
+
+class RoomDetailResponse(BaseModel):
+    room_id: str
+    room_type: str
+    topic: str
+    created_by: str | None
+    members: List[MemberInfo]
+
+
+class SetTopicRequest(BaseModel):
+    topic: str
+
+
+class SetRoomRoleRequest(BaseModel):
+    username: str
+    role: Literal['op', 'voice', 'member']

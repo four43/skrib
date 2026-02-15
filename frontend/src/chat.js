@@ -262,7 +262,8 @@ registerCommand('leave', async () => {
             currentRoom = null;
             lastMessageId = 0;
             history.replaceState(null, '', window.location.pathname);
-            document.getElementById('chatHeader').textContent = '[No room selected]';
+            document.getElementById('chatHeaderName').textContent = '[No room selected]';
+            document.getElementById('chatHeaderTopic').textContent = '';
             document.getElementById('messages').innerHTML = '<div class="empty-state"><p>Select a chat room to start</p></div>';
             await loadRooms();
         } else {
@@ -285,11 +286,6 @@ registerCommand('kick', async (args) => {
 
     if (!currentRoom) {
         displaySystemMessage('Please select a room first.');
-        return;
-    }
-
-    if (currentRole !== 'admin' && currentRole !== 'moderator') {
-        displaySystemMessage('Only admins and moderators can kick users.');
         return;
     }
 
@@ -318,7 +314,56 @@ registerCommand('kick', async (args) => {
         console.error('[CMD] Error kicking user:', error);
         displaySystemMessage('Failed to kick user. Please try again.');
     }
-}, 'Kick a user from the current channel (admin/mod only)');
+}, 'Kick a user from the current channel (room op/owner)');
+
+registerCommand('topic', async (args) => {
+    const topic = args.trim();
+
+    if (!currentRoom) {
+        displaySystemMessage('Please select a room first.');
+        return;
+    }
+
+    const meta = roomMeta[currentRoom];
+    if (meta && meta.room_type === 'dm') {
+        displaySystemMessage('Cannot set topic on a DM.');
+        return;
+    }
+
+    if (!topic) {
+        // Show current topic
+        const currentTopic = (meta && meta.topic) ? meta.topic : '(no topic set)';
+        displaySystemMessage(`Topic: ${currentTopic}`);
+        return;
+    }
+
+    try {
+        const response = await fetch(
+            `${API_URL}/rooms/${encodeURIComponent(currentRoom)}/topic`,
+            {
+                method: 'PUT',
+                headers: {
+                    'Authorization': `Bearer ${sessionToken}`,
+                    'Content-Type': 'application/json',
+                },
+                body: JSON.stringify({ topic }),
+            }
+        );
+
+        if (response.ok) {
+            // Update local cache and header
+            if (meta) meta.topic = topic;
+            document.getElementById('chatHeaderTopic').textContent = topic;
+            displaySystemMessage(`Topic set to: ${topic}`);
+        } else {
+            const data = await response.json();
+            displaySystemMessage(`Failed to set topic: ${data.detail || 'Unknown error'}`);
+        }
+    } catch (error) {
+        console.error('[CMD] Error setting topic:', error);
+        displaySystemMessage('Failed to set topic. Please try again.');
+    }
+}, 'Set or view the channel topic');
 
 // ---------------------------------------------------------------------------
 // E2E helpers
@@ -984,7 +1029,9 @@ function selectRoom(roomId) {
         const parts = displayName.split(', ');
         displayName = parts.map(u => getDisplayName(u)).join(', ');
     }
-    document.getElementById('chatHeader').textContent = displayName;
+    document.getElementById('chatHeaderName').textContent = displayName;
+    const topicEl = document.getElementById('chatHeaderTopic');
+    topicEl.textContent = (meta && meta.topic) ? meta.topic : '';
 
     document.querySelectorAll('.room-item').forEach(item => {
         item.classList.toggle('active', item.dataset.roomId === roomId);
@@ -1084,6 +1131,14 @@ function handleWebSocketMessage(data) {
             if (data.data.id && currentRoom) {
                 markRoomAsRead(currentRoom, data.data.id);
             }
+            break;
+
+        case 'topic':
+            if (currentRoom && roomMeta[currentRoom]) {
+                roomMeta[currentRoom].topic = data.topic;
+            }
+            document.getElementById('chatHeaderTopic').textContent = data.topic || '';
+            displaySystemMessage(`${data.set_by} set the topic: ${data.topic}`);
             break;
 
         case 'error':
@@ -1315,7 +1370,8 @@ async function deleteRoomAction() {
                 currentRoom = null;
                 lastMessageId = 0;
                 history.replaceState(null, '', window.location.pathname);
-                document.getElementById('chatHeader').textContent = '[No room selected]';
+                document.getElementById('chatHeaderName').textContent = '[No room selected]';
+            document.getElementById('chatHeaderTopic').textContent = '';
                 document.getElementById('messages').innerHTML = '<div class="empty-state"><p>Select a chat room to start</p></div>';
             }
             loadRooms();

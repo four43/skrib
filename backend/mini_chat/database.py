@@ -33,28 +33,22 @@ def get_db():
 def init_db():
     """Initialize the database with required tables."""
     with get_db() as conn:
-        # Users table
+        # Users table (consolidated: users + pending + preferences + encryption keys)
         conn.execute('''
             CREATE TABLE IF NOT EXISTS users (
                 username TEXT PRIMARY KEY,
                 credential_id TEXT NOT NULL,
                 public_key TEXT NOT NULL,
+                status TEXT NOT NULL DEFAULT 'pending',
                 role TEXT NOT NULL DEFAULT 'user',
-                approved BOOLEAN NOT NULL DEFAULT 1,
+                approval_code TEXT,
+                encryption_public_key TEXT,
+                color TEXT NOT NULL DEFAULT '#1976d2',
+                nickname TEXT,
+                theme_color TEXT,
+                created_at TEXT NOT NULL,
                 approved_at TEXT,
                 approved_by TEXT
-            )
-        ''')
-
-        # Pending users table
-        conn.execute('''
-            CREATE TABLE IF NOT EXISTS pending_users (
-                username TEXT PRIMARY KEY,
-                credential_id TEXT NOT NULL,
-                public_key TEXT NOT NULL,
-                approval_code TEXT NOT NULL UNIQUE,
-                registered_at TEXT NOT NULL,
-                approved BOOLEAN NOT NULL DEFAULT 0
             )
         ''')
 
@@ -98,18 +92,22 @@ def init_db():
             CREATE TABLE IF NOT EXISTS rooms (
                 room_id TEXT PRIMARY KEY,
                 room_type TEXT NOT NULL DEFAULT 'channel',
+                topic TEXT NOT NULL DEFAULT '',
                 created_at TEXT NOT NULL,
+                created_by TEXT,
                 deleted BOOLEAN NOT NULL DEFAULT 0,
                 deleted_at TEXT,
                 deleted_by TEXT
             )
         ''')
 
-        # Room members table (membership, read positions, and encrypted room keys)
+        # Room users table (membership, read positions, roles, and encrypted room keys)
         conn.execute('''
-            CREATE TABLE IF NOT EXISTS room_members (
+            CREATE TABLE IF NOT EXISTS room_users (
                 room_id TEXT NOT NULL,
                 username TEXT NOT NULL,
+                room_role TEXT NOT NULL DEFAULT 'member',
+                joined_at TEXT,
                 last_read_message_id INTEGER NOT NULL DEFAULT 0,
                 encrypted_keys TEXT NOT NULL DEFAULT '{}',
                 notify_level TEXT NOT NULL DEFAULT 'all',
@@ -119,26 +117,6 @@ def init_db():
             )
         ''')
 
-        # User encryption keys (for E2E encryption)
-        conn.execute('''
-            CREATE TABLE IF NOT EXISTS user_encryption_keys (
-                username TEXT PRIMARY KEY,
-                public_key TEXT NOT NULL,
-                created_at TEXT NOT NULL,
-                FOREIGN KEY (username) REFERENCES users(username)
-            )
-        ''')
-
-        # User preferences table
-        conn.execute('''
-            CREATE TABLE IF NOT EXISTS user_preferences (
-                username TEXT PRIMARY KEY,
-                color TEXT NOT NULL DEFAULT '#1976d2',
-                theme_color TEXT,
-                nickname TEXT,
-                FOREIGN KEY (username) REFERENCES users(username) ON DELETE CASCADE
-            )
-        ''')
 
         # Invite tokens table for invite-only registration mode
         conn.execute('''

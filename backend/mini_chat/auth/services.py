@@ -120,26 +120,28 @@ def create_pending_user(username: str, credential_id: str, public_key: str,
     approval_code = generate_approval_code()
     mode = get_registration_mode()
 
+    now = datetime.now().isoformat()
+
     with get_db() as conn:
         # Check if this is the first user
-        cursor = conn.execute('SELECT COUNT(*) as count FROM users')
+        cursor = conn.execute("SELECT COUNT(*) as count FROM users WHERE status = 'active'")
         user_count = cursor.fetchone()['count']
 
         if user_count == 0:
             # First user - auto-approve as admin
             conn.execute('''
-                INSERT INTO users (username, credential_id, public_key, role, approved, approved_at, approved_by)
-                VALUES (?, ?, ?, 'admin', 1, ?, 'system')
-            ''', (username, credential_id, public_key, datetime.now().isoformat()))
+                INSERT INTO users (username, credential_id, public_key, role, status, created_at, approved_at, approved_by)
+                VALUES (?, ?, ?, 'admin', 'active', ?, ?, 'system')
+            ''', (username, credential_id, public_key, now, now))
             conn.commit()
             return (approval_code, True)
 
         if mode == 'open':
             # Open mode - auto-approve immediately
             conn.execute('''
-                INSERT INTO users (username, credential_id, public_key, role, approved, approved_at, approved_by)
-                VALUES (?, ?, ?, 'user', 1, ?, 'OPEN_STATE')
-            ''', (username, credential_id, public_key, datetime.now().isoformat()))
+                INSERT INTO users (username, credential_id, public_key, role, status, created_at, approved_at, approved_by)
+                VALUES (?, ?, ?, 'user', 'active', ?, ?, 'OPEN_STATE')
+            ''', (username, credential_id, public_key, now, now))
             conn.commit()
             return (approval_code, True)
 
@@ -147,17 +149,17 @@ def create_pending_user(username: str, credential_id: str, public_key: str,
             # Invite-only mode with valid token - auto-approve
             consume_invite_token(invite_token, username)
             conn.execute('''
-                INSERT INTO users (username, credential_id, public_key, role, approved, approved_at, approved_by)
-                VALUES (?, ?, ?, 'user', 1, ?, 'INVITE')
-            ''', (username, credential_id, public_key, datetime.now().isoformat()))
+                INSERT INTO users (username, credential_id, public_key, role, status, created_at, approved_at, approved_by)
+                VALUES (?, ?, ?, 'user', 'active', ?, ?, 'INVITE')
+            ''', (username, credential_id, public_key, now, now))
             conn.commit()
             return (approval_code, True)
 
         # approval_required mode - require approval
         conn.execute('''
-            INSERT INTO pending_users (username, credential_id, public_key, approval_code, registered_at)
-            VALUES (?, ?, ?, ?, ?)
-        ''', (username, credential_id, public_key, approval_code, datetime.now().isoformat()))
+            INSERT INTO users (username, credential_id, public_key, status, approval_code, created_at)
+            VALUES (?, ?, ?, 'pending', ?, ?)
+        ''', (username, credential_id, public_key, approval_code, now))
         conn.commit()
         return (approval_code, False)
 
@@ -168,7 +170,7 @@ def get_user_credentials(username: str) -> Optional[dict]:
         cursor = conn.execute('''
             SELECT credential_id, public_key, role
             FROM users
-            WHERE username = ? AND approved = 1
+            WHERE username = ? AND status = 'active'
         ''', (username,))
         row = cursor.fetchone()
 
@@ -187,7 +189,7 @@ def get_user_by_credential(credential_id: str) -> Optional[dict]:
         cursor = conn.execute('''
             SELECT username, role
             FROM users
-            WHERE credential_id = ? AND approved = 1
+            WHERE credential_id = ? AND status = 'active'
         ''', (credential_id,))
         row = cursor.fetchone()
 
@@ -215,7 +217,7 @@ def get_user_from_session(token: str) -> Optional[Tuple[str, str]]:
             cursor = conn.execute('''
                 SELECT username, role
                 FROM users
-                WHERE username = ? AND approved = 1
+                WHERE username = ? AND status = 'active'
             ''', (username,))
             row = cursor.fetchone()
 

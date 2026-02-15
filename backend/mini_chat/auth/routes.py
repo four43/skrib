@@ -2,8 +2,6 @@
 from fastapi import APIRouter, HTTPException, Depends, Query
 from typing import Optional
 
-from datetime import datetime
-
 from .schemas import (
     RegistrationBeginResponse,
     RegistrationCompleteRequest,
@@ -152,11 +150,10 @@ async def store_encryption_key(
     username: str = Depends(require_auth),
 ):
     """Store the user's encryption public key (JWK)."""
-    now = datetime.now().isoformat()
     with get_db() as conn:
         conn.execute(
-            'INSERT OR REPLACE INTO user_encryption_keys (username, public_key, created_at) VALUES (?, ?, ?)',
-            (username, request.public_key, now),
+            'UPDATE users SET encryption_public_key = ? WHERE username = ?',
+            (request.public_key, username),
         )
         conn.commit()
     return {"status": "ok"}
@@ -170,10 +167,10 @@ async def get_encryption_key(
     """Get a user's encryption public key."""
     with get_db() as conn:
         cursor = conn.execute(
-            'SELECT public_key FROM user_encryption_keys WHERE username = ?',
-            (target_username,),
+            'SELECT encryption_public_key FROM users WHERE username = ? AND status = ?',
+            (target_username, 'active'),
         )
         row = cursor.fetchone()
-    if not row:
+    if not row or not row['encryption_public_key']:
         raise HTTPException(status_code=404, detail="Encryption key not found for user")
-    return EncryptionKeyResponse(username=target_username, public_key=row['public_key'])
+    return EncryptionKeyResponse(username=target_username, public_key=row['encryption_public_key'])

@@ -46,7 +46,7 @@ class RejectUserRequest(BaseModel):
 class UserInfo(BaseModel):
     username: str
     role: str
-    approved: bool
+    status: str
     approved_at: str | None
     approved_by: str | None
 

@@ -14,7 +14,6 @@ from .schemas import (
 )
 from .services import (
     get_user_preferences,
-    create_default_preferences,
     update_user_preferences,
     get_all_user_preferences,
     get_pending_users,
@@ -110,7 +109,7 @@ async def get_user_preferences_endpoint(
 
     prefs = get_user_preferences(target_username)
     if not prefs:
-        prefs = create_default_preferences(target_username)
+        raise HTTPException(status_code=404, detail="User not found")
     return GetPreferencesResponse(**prefs)
 
 

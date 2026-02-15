@@ -99,9 +99,9 @@ def get_user_rooms(username: str) -> List[Dict]:
     with get_db() as conn:
         # Get channels where user is a member
         cursor = conn.execute('''
-            SELECT r.room_id, r.room_type, rm.notify_level
+            SELECT r.room_id, r.room_type, r.topic, rm.notify_level
             FROM rooms r
-            JOIN room_members rm ON r.room_id = rm.room_id
+            JOIN room_users rm ON r.room_id = rm.room_id
             WHERE r.deleted = 0 AND r.room_type = 'channel' AND rm.username = ?
         ''', (username,))
         rooms = []
@@ -110,6 +110,7 @@ def get_user_rooms(username: str) -> List[Dict]:
                 'room_id': row['room_id'],
                 'room_type': 'channel',
                 'display_name': f"#{row['room_id']}",
+                'topic': row['topic'],
                 'members': [],
                 'unread_count': unread_counts.get(row['room_id'], 0),
                 'notify_level': row['notify_level'],
@@ -119,7 +120,7 @@ def get_user_rooms(username: str) -> List[Dict]:
         cursor = conn.execute('''
             SELECT r.room_id, r.room_type, rm.notify_level
             FROM rooms r
-            JOIN room_members rm ON r.room_id = rm.room_id
+            JOIN room_users rm ON r.room_id = rm.room_id
             WHERE r.deleted = 0 AND r.room_type = 'dm' AND rm.username = ?
         ''', (username,))
 
@@ -130,6 +131,7 @@ def get_user_rooms(username: str) -> List[Dict]:
                 'room_id': room_id,
                 'room_type': 'dm',
                 'display_name': dm_display_name(members, username),
+                'topic': '',
                 'members': members,
                 'unread_count': unread_counts.get(room_id, 0),
                 'notify_level': row['notify_level'],
@@ -142,7 +144,7 @@ def get_room_members(room_id: str) -> List[str]:
     """Get members of a room."""
     with get_db() as conn:
         cursor = conn.execute(
-            'SELECT username FROM room_members WHERE room_id = ?',
+            'SELECT username FROM room_users WHERE room_id = ?',
             (room_id,)
         )
         return [row['username'] for row in cursor]
@@ -154,7 +156,7 @@ def get_all_rooms() -> List[str]:
         return list(ROOMS.keys())
 
 
-def create_room(room_id: str, room_type: str = 'channel') -> bool:
+def create_room(room_id: str, room_type: str = 'channel', created_by: str = None) -> bool:
     """Create a new room."""
     with ROOMS_LOCK:
         if room_id in ROOMS:
@@ -164,8 +166,8 @@ def create_room(room_id: str, room_type: str = 'channel') -> bool:
     now = datetime.now().isoformat()
     with get_db() as conn:
         conn.execute(
-            'INSERT OR IGNORE INTO rooms (room_id, room_type, created_at) VALUES (?, ?, ?)',
-            (room_id, room_type, now)
+            'INSERT OR IGNORE INTO rooms (room_id, room_type, created_at, created_by) VALUES (?, ?, ?, ?)',
+            (room_id, room_type, now, created_by)
         )
         conn.commit()
     return True
@@ -203,8 +205,8 @@ def create_or_get_dm(creator: str, other_users: List[str]) -> Dict:
         )
         for user in all_users:
             conn.execute(
-                'INSERT OR IGNORE INTO room_members (room_id, username) VALUES (?, ?)',
-                (room_id, user)
+                'INSERT OR IGNORE INTO room_users (room_id, username, room_role, joined_at) VALUES (?, ?, ?, ?)',
+                (room_id, user, 'member', now)
             )
         conn.commit()
 
@@ -255,7 +257,7 @@ def ensure_room_exists(room_id: str):
             ROOMS[room_id] = 'channel'
 
 
-def add_room_member(room_id: str, username: str) -> Dict:
+def add_room_member(room_id: str, username: str, room_role: str = 'member') -> Dict:
     """Add a user as a member of a room.
 
     Returns dict with 'status': 'ok', 'already_member', 'user_not_found', or 'room_not_found'.
@@ -263,6 +265,7 @@ def add_room_member(room_id: str, username: str) -> Dict:
     if not room_exists(room_id):
         return {'status': 'room_not_found'}
 
+    now = datetime.now().isoformat()
     with get_db() as conn:
         cursor = conn.execute(
             'SELECT username FROM users WHERE username = ?', (username,)
@@ -271,15 +274,15 @@ def add_room_member(room_id: str, username: str) -> Dict:
             return {'status': 'user_not_found'}
 
         cursor = conn.execute(
-            'SELECT 1 FROM room_members WHERE room_id = ? AND username = ?',
+            'SELECT 1 FROM room_users WHERE room_id = ? AND username = ?',
             (room_id, username),
         )
         if cursor.fetchone():
             return {'status': 'already_member'}
 
         conn.execute(
-            'INSERT INTO room_members (room_id, username) VALUES (?, ?)',
-            (room_id, username),
+            'INSERT INTO room_users (room_id, username, room_role, joined_at) VALUES (?, ?, ?, ?)',
+            (room_id, username, room_role, now),
         )
         conn.commit()
 
@@ -296,14 +299,14 @@ def remove_room_member(room_id: str, username: str) -> Dict:
 
     with get_db() as conn:
         cursor = conn.execute(
-            'SELECT 1 FROM room_members WHERE room_id = ? AND username = ?',
+            'SELECT 1 FROM room_users WHERE room_id = ? AND username = ?',
             (room_id, username),
         )
         if not cursor.fetchone():
             return {'status': 'not_member'}
 
         conn.execute(
-            'DELETE FROM room_members WHERE room_id = ? AND username = ?',
+            'DELETE FROM room_users WHERE room_id = ? AND username = ?',
             (room_id, username),
         )
         conn.commit()
@@ -315,7 +318,7 @@ def store_room_key(room_id: str, username: str, key_epoch: int, encrypted_key: s
     """Store an encrypted room key for a user at a given epoch."""
     with get_db() as conn:
         cursor = conn.execute(
-            'SELECT encrypted_keys FROM room_members WHERE room_id = ? AND username = ?',
+            'SELECT encrypted_keys FROM room_users WHERE room_id = ? AND username = ?',
             (room_id, username),
         )
         row = cursor.fetchone()
@@ -325,7 +328,7 @@ def store_room_key(room_id: str, username: str, key_epoch: int, encrypted_key: s
         keys = json.loads(row['encrypted_keys'])
         keys[str(key_epoch)] = encrypted_key
         conn.execute(
-            'UPDATE room_members SET encrypted_keys = ? WHERE room_id = ? AND username = ?',
+            'UPDATE room_users SET encrypted_keys = ? WHERE room_id = ? AND username = ?',
             (json.dumps(keys), room_id, username),
         )
         conn.commit()
@@ -335,7 +338,7 @@ def get_room_keys(room_id: str, username: str) -> List[Dict]:
     """Get all encrypted room keys for a user across all epochs."""
     with get_db() as conn:
         cursor = conn.execute(
-            'SELECT encrypted_keys FROM room_members WHERE room_id = ? AND username = ?',
+            'SELECT encrypted_keys FROM room_users WHERE room_id = ? AND username = ?',
             (room_id, username),
         )
         row = cursor.fetchone()
@@ -353,7 +356,7 @@ def set_notify_level(room_id: str, username: str, level: str):
     """Set the notification level for a user in a room."""
     with get_db() as conn:
         conn.execute('''
-            UPDATE room_members SET notify_level = ?
+            UPDATE room_users SET notify_level = ?
             WHERE room_id = ? AND username = ?
         ''', (level, room_id, username))
         conn.commit()
@@ -363,7 +366,7 @@ def get_notify_level(room_id: str, username: str) -> str:
     """Get the notification level for a user in a room."""
     with get_db() as conn:
         cursor = conn.execute(
-            'SELECT notify_level FROM room_members WHERE room_id = ? AND username = ?',
+            'SELECT notify_level FROM room_users WHERE room_id = ? AND username = ?',
             (room_id, username),
         )
         row = cursor.fetchone()
@@ -374,11 +377,89 @@ def mark_room_read(room_id: str, username: str, message_id: int):
     """Update the user's last-read position in a room."""
     with get_db() as conn:
         conn.execute('''
-            UPDATE room_members
+            UPDATE room_users
             SET last_read_message_id = MAX(last_read_message_id, ?)
             WHERE room_id = ? AND username = ?
         ''', (message_id, room_id, username))
         conn.commit()
+
+
+def get_room_role(room_id: str, username: str) -> Optional[str]:
+    """Get a user's role in a room. Returns None if not a member."""
+    with get_db() as conn:
+        cursor = conn.execute(
+            'SELECT room_role FROM room_users WHERE room_id = ? AND username = ?',
+            (room_id, username),
+        )
+        row = cursor.fetchone()
+        return row['room_role'] if row else None
+
+
+def set_topic(room_id: str, topic: str) -> bool:
+    """Set a room's topic. Returns False if room not found."""
+    if not room_exists(room_id):
+        return False
+    with get_db() as conn:
+        conn.execute(
+            'UPDATE rooms SET topic = ? WHERE room_id = ?',
+            (topic, room_id),
+        )
+        conn.commit()
+    return True
+
+
+def get_room_info(room_id: str) -> Optional[Dict]:
+    """Get full room details including topic and members with roles."""
+    with get_db() as conn:
+        cursor = conn.execute(
+            'SELECT room_id, room_type, topic, created_by FROM rooms WHERE room_id = ? AND deleted = 0',
+            (room_id,),
+        )
+        room = cursor.fetchone()
+        if not room:
+            return None
+
+        cursor = conn.execute(
+            'SELECT username, room_role, joined_at FROM room_users WHERE room_id = ?',
+            (room_id,),
+        )
+        members = [
+            {'username': row['username'], 'room_role': row['room_role'], 'joined_at': row['joined_at']}
+            for row in cursor
+        ]
+
+    return {
+        'room_id': room['room_id'],
+        'room_type': room['room_type'],
+        'topic': room['topic'],
+        'created_by': room['created_by'],
+        'members': members,
+    }
+
+
+def set_room_role(room_id: str, target_username: str, role: str) -> Dict:
+    """Set a user's role in a room.
+
+    Returns dict with 'status': 'ok', 'not_member', or 'room_not_found'.
+    """
+    if not room_exists(room_id):
+        return {'status': 'room_not_found'}
+
+    with get_db() as conn:
+        cursor = conn.execute(
+            'SELECT 1 FROM room_users WHERE room_id = ? AND username = ?',
+            (room_id, target_username),
+        )
+        if not cursor.fetchone():
+            return {'status': 'not_member'}
+
+        conn.execute(
+            'UPDATE room_users SET room_role = ? WHERE room_id = ? AND username = ?',
+            (role, room_id, target_username),
+        )
+        conn.commit()
+
+    return {'status': 'ok'}
 
 
 def get_unread_counts(username: str) -> Dict[str, int]:
@@ -386,7 +467,7 @@ def get_unread_counts(username: str) -> Dict[str, int]:
     with get_db() as conn:
         cursor = conn.execute('''
             SELECT rm.room_id, COUNT(m.id) as unread_count
-            FROM room_members rm
+            FROM room_users rm
             JOIN rooms r ON rm.room_id = r.room_id AND r.deleted = 0
             LEFT JOIN messages m ON rm.room_id = m.room_id AND m.id > rm.last_read_message_id
             WHERE rm.username = ?

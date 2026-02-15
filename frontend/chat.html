@@ -43,7 +43,10 @@
             <div class="sidebar-overlay" onclick="toggleSidebar()"></div>
 
             <div class="chat-area">
-                <div class="chat-header" id="chatHeader">[No room selected]</div>
+                <div class="chat-header" id="chatHeader">
+                    <span id="chatHeaderName">[No room selected]</span>
+                    <span id="chatHeaderTopic" class="chat-header-topic"></span>
+                </div>
                 <div class="messages" id="messages">
                     <div class="empty-state">
                         <p>Select a chat room to start</p>

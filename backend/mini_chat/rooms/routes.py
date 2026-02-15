@@ -21,6 +21,10 @@ from .schemas import (
     RoomKeysResponse,
     MarkReadRequest,
     UpdateNotifyLevelRequest,
+    RoomDetailResponse,
+    MemberInfo,
+    SetTopicRequest,
+    SetRoomRoleRequest,
 )
 from .services import (
     get_user_rooms,
@@ -30,6 +34,7 @@ from .services import (
     room_exists,
     get_room_type,
     get_room_members,
+    get_room_role,
     create_or_get_dm,
     validate_channel_name,
     add_room_member,
@@ -39,6 +44,9 @@ from .services import (
     mark_room_read,
     set_notify_level,
     get_notify_level,
+    set_topic,
+    get_room_info,
+    set_room_role,
     ChatRoom,
 )
 from .websocket import manager
@@ -94,11 +102,11 @@ async def create_new_room(
             detail="Room name must be lowercase letters, numbers, and hyphens only (e.g. 'my-room')"
         )
 
-    if not create_room(request.room_id, room_type='channel'):
+    if not create_room(request.room_id, room_type='channel', created_by=username):
         raise HTTPException(status_code=400, detail="Room already exists")
 
-    # Add creator as the first member
-    add_room_member(request.room_id, username)
+    # Add creator as owner
+    add_room_member(request.room_id, username, room_role='owner')
 
     # Notify creator — new channel appears in their room list
     await rooms_subscriptions.notify(username, {"type": "update"})
@@ -220,9 +228,13 @@ async def update_notify_level_endpoint(
 @router.delete("/{room_id}", response_model=DeleteRoomResponse)
 async def delete_room_endpoint(
     room_id: str,
-    username: str = Depends(require_admin)
+    username: str = Depends(require_auth)
 ):
-    """Soft-delete a chat room (admin only)."""
+    """Soft-delete a chat room. Requires room owner or global admin."""
+    room_role = get_room_role(room_id, username)
+    global_role = _get_global_role(username)
+    if room_role != 'owner' and global_role != 'admin':
+        raise HTTPException(status_code=403, detail="Room owner or admin required")
     if not delete_room(room_id, username):
         raise HTTPException(status_code=404, detail="Room not found")
 
@@ -283,14 +295,17 @@ async def leave_room_endpoint(
 async def kick_member_endpoint(
     room_id: str,
     target_username: str,
-    username: str = Depends(require_moderator),
+    username: str = Depends(require_auth),
 ):
-    """Kick a member from a channel. Requires moderator or admin."""
+    """Kick a member from a channel. Requires room owner/op or global admin/moderator."""
     room_type = get_room_type(room_id)
     if room_type == 'dm':
         raise HTTPException(status_code=400, detail="Cannot kick from a DM")
     if not room_type:
         raise HTTPException(status_code=404, detail="Room not found")
+
+    # Check permission: room owner/op OR global admin/moderator
+    _require_room_op_or_global_mod(room_id, username)
 
     result = remove_room_member(room_id, target_username)
 
@@ -401,6 +416,70 @@ async def websocket_endpoint(websocket: WebSocket, room_id: str, token: Optional
         manager.disconnect(websocket, room_id)
 
 
+@router.get("/{room_id}", response_model=RoomDetailResponse)
+async def get_room_detail(
+    room_id: str,
+    username: str = Depends(require_auth),
+):
+    """Get detailed room info including topic and members with roles."""
+    _check_room_access(room_id, username)
+    info = get_room_info(room_id)
+    if not info:
+        raise HTTPException(status_code=404, detail="Room not found")
+    return RoomDetailResponse(
+        room_id=info['room_id'],
+        room_type=info['room_type'],
+        topic=info['topic'],
+        created_by=info['created_by'],
+        members=[MemberInfo(**m) for m in info['members']],
+    )
+
+
+@router.put("/{room_id}/topic")
+async def set_topic_endpoint(
+    room_id: str,
+    request: SetTopicRequest,
+    username: str = Depends(require_auth),
+):
+    """Set a room's topic. Requires room owner/op or global admin."""
+    _check_room_access(room_id, username)
+    _require_room_op_or_global_mod(room_id, username)
+
+    if not set_topic(room_id, request.topic):
+        raise HTTPException(status_code=404, detail="Room not found")
+
+    await manager.broadcast_to_room(room_id, {
+        "type": "topic",
+        "topic": request.topic,
+        "set_by": username,
+    })
+
+    return {"status": "ok", "topic": request.topic}
+
+
+@router.put("/{room_id}/role")
+async def set_room_role_endpoint(
+    room_id: str,
+    request: SetRoomRoleRequest,
+    username: str = Depends(require_auth),
+):
+    """Set a member's role in a room. Requires room owner."""
+    _check_room_access(room_id, username)
+
+    room_role = get_room_role(room_id, username)
+    global_role = _get_global_role(username)
+    if room_role != 'owner' and global_role != 'admin':
+        raise HTTPException(status_code=403, detail="Room owner or admin required")
+
+    result = set_room_role(room_id, request.username, request.role)
+    if result['status'] == 'not_member':
+        raise HTTPException(status_code=400, detail="User is not a member of this room")
+    if result['status'] == 'room_not_found':
+        raise HTTPException(status_code=404, detail="Room not found")
+
+    return {"status": "ok", "username": request.username, "role": request.role}
+
+
 def _check_room_access(room_id: str, username: str):
     """Verify room exists and user has access."""
     if not room_exists(room_id):
@@ -411,3 +490,25 @@ def _check_room_access(room_id: str, username: str):
         members = get_room_members(room_id)
         if username not in members:
             raise HTTPException(status_code=403, detail="Not a member of this DM")
+
+
+def _get_global_role(username: str) -> str:
+    """Get a user's global role."""
+    from ..database import get_db
+    with get_db() as conn:
+        cursor = conn.execute(
+            'SELECT role FROM users WHERE username = ?', (username,)
+        )
+        row = cursor.fetchone()
+        return row['role'] if row else 'user'
+
+
+def _require_room_op_or_global_mod(room_id: str, username: str):
+    """Raise 403 unless the user is room owner/op or global admin/moderator."""
+    room_role = get_room_role(room_id, username)
+    if room_role in ('owner', 'op'):
+        return
+    global_role = _get_global_role(username)
+    if global_role in ('admin', 'moderator'):
+        return
+    raise HTTPException(status_code=403, detail="Room op or moderator required")

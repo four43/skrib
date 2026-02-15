@@ -560,6 +560,18 @@ input:focus-visible {
     font-size: 15px;
     color: #1e293b;
     background: rgba(255, 255, 255, 0.4);
+    display: flex;
+    align-items: baseline;
+    gap: 12px;
+}
+
+.chat-header-topic {
+    font-weight: 400;
+    font-size: 13px;
+    color: #64748b;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
 }
 
 .messages {

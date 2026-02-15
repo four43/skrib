@@ -10,7 +10,10 @@
       "mcp__playwright__browser_take_screenshot",
       "mcp__playwright__browser_resize",
       "mcp__playwright__browser_wait_for",
-      "mcp__playwright__browser_close"
+      "mcp__playwright__browser_close",
+      "Bash(python:*)",
+      "mcp__playwright__browser_console_messages",
+      "mcp__playwright__browser_tabs"
     ]
   }
 }

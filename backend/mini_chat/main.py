@@ -53,10 +53,10 @@ async def startup_event():
     # Count users
     from .database import get_db, get_setting
     with get_db() as conn:
-        cursor = conn.execute('SELECT COUNT(*) as count FROM users')
+        cursor = conn.execute("SELECT COUNT(*) as count FROM users WHERE status = 'active'")
         user_count = cursor.fetchone()['count']
 
-        cursor = conn.execute('SELECT COUNT(*) as count FROM pending_users')
+        cursor = conn.execute("SELECT COUNT(*) as count FROM users WHERE status = 'pending'")
         pending_count = cursor.fetchone()['count']
 
         reg_mode = get_setting('registration_mode', 'closed')

@@ -17,7 +17,7 @@ def get_username_from_token(authorization: Optional[str] = Header(None)) -> Opti
         username = decoded.split(':')[0]
 
         with get_db() as conn:
-            cursor = conn.execute('SELECT username FROM users WHERE username = ?', (username,))
+            cursor = conn.execute("SELECT username FROM users WHERE username = ? AND status = 'active'", (username,))
             if cursor.fetchone():
                 return username
     except:
@@ -67,7 +67,7 @@ def verify_token(token: str) -> Optional[str]:
         username = decoded.split(':')[0]
 
         with get_db() as conn:
-            cursor = conn.execute('SELECT username FROM users WHERE username = ?', (username,))
+            cursor = conn.execute("SELECT username FROM users WHERE username = ? AND status = 'active'", (username,))
             if cursor.fetchone():
                 return username
     except:
