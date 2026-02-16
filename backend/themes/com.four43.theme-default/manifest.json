@@ -1,0 +1,58 @@
+{
+  "id": "com.four43.theme-default",
+  "name": "Default Theme",
+  "version": "1.0.0",
+  "description": "Default dark theme for Mini Chat",
+  "author": "Four43",
+  "type": "theme",
+  "variants": [
+    {
+      "id": "dark",
+      "name": "Dark",
+      "default": true
+    },
+    {
+      "id": "light",
+      "name": "Light"
+    }
+  ],
+  "assets": {
+    "css": [
+      "css/base.css",
+      "css/components.css",
+      "css/rooms.css"
+    ],
+    "images": {
+      "logo": "assets/logo.png",
+      "favicon": "assets/favicon.ico"
+    }
+  },
+  "customization": {
+    "colors": {
+      "primary": {
+        "type": "color",
+        "default": "#6366f1",
+        "description": "Primary accent color"
+      },
+      "background": {
+        "type": "color",
+        "default": "#1e1e2e",
+        "description": "Main background color"
+      }
+    },
+    "fonts": {
+      "family": {
+        "type": "select",
+        "options": ["system-ui", "Inter", "Roboto", "Arial"],
+        "default": "system-ui",
+        "description": "Font family"
+      },
+      "size": {
+        "type": "select",
+        "options": ["small", "medium", "large"],
+        "default": "medium",
+        "description": "Base font size"
+      }
+    }
+  }
+}

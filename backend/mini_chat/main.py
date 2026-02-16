@@ -27,11 +27,11 @@ from .messages.routes import router as messages_router
 from .server.routes import router as server_router
 from .users.routes import router as preferences_router
 from .ws.routes import router as ws_router
+from .themes.routes import router as themes_router
 
 # Import plugin system
 from .plugins import registry
 from .plugins.routes import router as plugins_router
-from .plugins.typing_plugin import TypingPlugin
 
 # Create FastAPI app
 app = FastAPI(title=APP_TITLE, version=APP_VERSION)
@@ -75,15 +75,8 @@ async def startup_event():
     # Initialize plugin system
     print("\n[Plugins] Initializing plugin system...")
 
-    # Register built-in plugins
-    try:
-        typing_plugin = TypingPlugin()
-        registry.register(typing_plugin)
-    except Exception as e:
-        print(f"[Plugins] Failed to register typing plugin: {e}")
-
-    # Discover additional plugins
-    # registry.discover_plugins()  # Uncomment to enable auto-discovery
+    # Discover and load distributed plugins
+    registry.discover_plugins()
 
     # Register plugin WebSocket namespaces
     from . import ws
@@ -124,6 +117,7 @@ app.include_router(server_router, prefix="/api")
 app.include_router(preferences_router, prefix="/api")
 app.include_router(ws_router, prefix="/api")
 app.include_router(plugins_router, prefix="/api")
+app.include_router(themes_router, prefix="/api")
 
 
 @app.get("/")

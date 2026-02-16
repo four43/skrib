@@ -1,5 +1,6 @@
 import './style.css';
-import { API_URL, escapeHtml, loadAndApplyTheme, applyThemeColor } from './utils.js';
+import { API_URL, escapeHtml } from './utils.js';
+import { loadTheme } from './theme-manager.js';
 import {
     loadPrivateKey,
     generateRoomKey,
@@ -104,62 +105,31 @@ async function loadPlugins() {
     if (pluginsLoaded) return;
 
     try {
-        console.log('[Plugins] Fetching plugin manifest...');
-        const response = await fetch(`${API_URL}/plugins/manifest`, {
-            headers: {
-                'Authorization': `Bearer ${sessionToken}`
-            }
-        });
+        console.log('[Plugins] Fetching plugins...');
+        const response = await fetch(`${API_URL}/plugins/distributed`);
 
         if (!response.ok) {
-            console.error('[Plugins] Failed to fetch manifest:', response.status);
+            console.log('[Plugins] No plugins available');
             return;
         }
 
-        const manifest = await response.json();
-        const plugins = manifest.plugins || [];
-
+        const plugins = await response.json();
         console.log(`[Plugins] Found ${plugins.length} plugins:`, plugins.map(p => p.name).join(', '));
 
-        // Load each plugin's frontend assets
+        // Load each plugin
         for (const plugin of plugins) {
-            const scripts = plugin.scripts || [];
+            try {
+                console.log(`[Plugins] Loading plugin: ${plugin.name} (${plugin.id})`);
 
-            for (const scriptPath of scripts) {
-                try {
-                    console.log(`[Plugins] Loading script for ${plugin.name}: ${scriptPath}`);
+                // Load the main entry file
+                const scriptUrl = `${API_URL}/plugins/distributed/${plugin.id}/file/${plugin.entry}`;
+                console.log(`[Plugins] Loading entry: ${scriptUrl}`);
 
-                    // Dynamically import the plugin script
-                    // Scripts should be served from backend (we'll implement this next)
-                    const module = await import(`${API_URL}/plugins/${plugin.name}/assets/${scriptPath}`);
+                // Load the plugin script
+                await loadPluginScript(scriptUrl, plugin);
 
-                    // If the module has an init function, call it
-                    if (module.init && typeof module.init === 'function') {
-                        await module.init({
-                            registerHandler: window.registerPluginHandler,
-                            sendMessage: (msg) => ws?.send(JSON.stringify(msg)),
-                            currentRoom: () => currentRoom,
-                            currentUsername: () => currentUsername,
-                            displaySystemMessage,
-                        });
-                    }
-                } catch (error) {
-                    console.error(`[Plugins] Failed to load script ${scriptPath} for ${plugin.name}:`, error);
-                }
-            }
-
-            // Load styles
-            const styles = plugin.styles || [];
-            for (const stylePath of styles) {
-                try {
-                    const link = document.createElement('link');
-                    link.rel = 'stylesheet';
-                    link.href = `${API_URL}/plugins/${plugin.name}/assets/${stylePath}`;
-                    document.head.appendChild(link);
-                    console.log(`[Plugins] Loaded stylesheet for ${plugin.name}: ${stylePath}`);
-                } catch (error) {
-                    console.error(`[Plugins] Failed to load style ${stylePath} for ${plugin.name}:`, error);
-                }
+            } catch (error) {
+                console.error(`[Plugins] Failed to load plugin ${plugin.id}:`, error);
             }
         }
 
@@ -168,6 +138,52 @@ async function loadPlugins() {
     } catch (error) {
         console.error('[Plugins] Error loading plugins:', error);
     }
+}
+
+/**
+ * Load a plugin script and initialize it
+ */
+function loadPluginScript(scriptUrl, plugin) {
+    return new Promise((resolve, reject) => {
+        const script = document.createElement('script');
+        script.type = 'text/javascript';
+        script.src = scriptUrl;
+
+        script.onload = () => {
+            console.log(`[Plugins] Script loaded: ${plugin.name}`);
+
+            // Try to find and initialize the plugin
+            // The plugin should expose itself via window[PluginName]
+            const pluginNamespace = plugin.namespace || plugin.id.split('.').pop();
+            const PluginClass = window[`${pluginNamespace.charAt(0).toUpperCase() + pluginNamespace.slice(1)}Plugin`];
+
+            if (PluginClass && PluginClass.init) {
+                PluginClass.init({
+                    registerHandler: window.registerPluginHandler,
+                    sendMessage: (msg) => ws?.send(JSON.stringify(msg)),
+                    currentRoom: () => currentRoom,
+                    currentUsername: () => currentUsername,
+                    displaySystemMessage,
+                }).then(() => {
+                    console.log(`[Plugins] Initialized: ${plugin.name}`);
+                    resolve();
+                }).catch((error) => {
+                    console.error(`[Plugins] Failed to initialize ${plugin.name}:`, error);
+                    reject(error);
+                });
+            } else {
+                console.warn(`[Plugins] Plugin ${plugin.name} does not expose expected interface`);
+                resolve();
+            }
+        };
+
+        script.onerror = () => {
+            console.error(`[Plugins] Failed to load script: ${scriptUrl}`);
+            reject(new Error(`Failed to load script: ${scriptUrl}`));
+        };
+
+        document.head.appendChild(script);
+    });
 }
 
 // ---------------------------------------------------------------------------
@@ -209,7 +225,7 @@ registerCommand('invite', async (args) => {
     try {
         // 1. Add member to room
         const memberResp = await fetch(
-            `${API_URL}/rooms/${encodeURIComponent(currentRoom)}/invite`,
+            `${API_URL}/rooms/${encodeURIComponent(currentRoom)}/members`,
             {
                 method: 'POST',
                 headers: {
@@ -357,8 +373,8 @@ registerCommand('leave', async () => {
             currentRoom = null;
             lastMessageId = 0;
             history.replaceState(null, '', window.location.pathname);
-            document.getElementById('chatHeaderName').textContent = '[No room selected]';
-            document.getElementById('chatHeaderTopic').textContent = '';
+            document.getElementById('chat-header-name').textContent = '[No room selected]';
+            document.getElementById('chat-header-topic').textContent = '';
             document.getElementById('messages').innerHTML = '<div class="empty-state"><p>Select a chat room to start</p></div>';
             await loadRooms();
         } else {
@@ -453,7 +469,7 @@ registerCommand('topic', async (args) => {
         if (response.ok) {
             // Update local cache and header
             if (meta) meta.topic = topic;
-            document.getElementById('chatHeaderTopic').textContent = topic;
+            document.getElementById('chat-header-topic').textContent = topic;
             displaySystemMessage(`Topic set to: ${topic}`);
         } else {
             const data = await response.json();
@@ -580,9 +596,6 @@ async function initDMRoomKey(roomId, otherUsernames) {
     }
 }
 
-// Load server theme immediately (before auth check) so page renders with correct color
-loadAndApplyTheme().then(color => { serverColor = color; });
-
 // Check session and redirect if not authenticated
 checkSession();
 
@@ -608,6 +621,9 @@ async function checkSession() {
             currentUsername = username;
             currentRole = data.role;
             localStorage.setItem('role', data.role);
+
+            // Load user's theme preferences
+            await loadTheme(username, sessionToken);
 
             // Load E2E encryption private key from IndexedDB
             try {
@@ -636,7 +652,7 @@ async function checkSession() {
 }
 
 async function initializeChatView() {
-    document.getElementById('currentUser').textContent = `👤 ${currentUsername}`;
+    document.getElementById('current-user').textContent = `👤 ${currentUsername}`;
 
     // Request notification permission
     if ('Notification' in window && Notification.permission === 'default') {
@@ -644,10 +660,10 @@ async function initializeChatView() {
     }
 
     if (currentRole === 'admin' || currentRole === 'moderator') {
-        const badge = document.getElementById('adminBadge');
+        const badge = document.getElementById('admin-badge');
         badge.textContent = currentRole === 'admin' ? 'ADMIN' : 'MOD';
         badge.classList.remove('hidden');
-        document.getElementById('adminPanelBtn').classList.remove('hidden');
+        document.getElementById('admin-panel-btn').classList.remove('hidden');
     }
 
     await loadRooms();
@@ -726,7 +742,7 @@ function getDisplayName(username) {
 window.getDisplayName = getDisplayName;
 
 function toggleSettingsPanel() {
-    const panel = document.getElementById('settingsPanel');
+    const panel = document.getElementById('settings-panel');
     panel.classList.toggle('open');
 }
 
@@ -739,16 +755,16 @@ async function loadUserSettings() {
         });
         if (response.ok) {
             const data = await response.json();
-            const nicknameInput = document.getElementById('userNickname');
+            const nicknameInput = document.getElementById('user-nickname');
             if (nicknameInput) {
                 nicknameInput.value = data.nickname || '';
             }
-            const colorInput = document.getElementById('userColor');
+            const colorInput = document.getElementById('user-color');
             if (colorInput) {
                 colorInput.value = data.color;
             }
             // Apply user's theme color override if set
-            const themeInput = document.getElementById('userThemeColor');
+            const themeInput = document.getElementById('user-theme-color');
             if (themeInput) {
                 themeInput.value = data.theme_color || serverColor;
             }
@@ -762,7 +778,7 @@ async function loadUserSettings() {
 }
 
 async function updateUserColor() {
-    const color = document.getElementById('userColor').value;
+    const color = document.getElementById('user-color').value;
     try {
         const response = await fetch(`${API_URL}/users/${encodeURIComponent(currentUsername)}`, {
             method: 'PATCH',
@@ -787,7 +803,7 @@ async function updateUserColor() {
 }
 
 async function updateUserThemeColor() {
-    const themeColor = document.getElementById('userThemeColor').value;
+    const themeColor = document.getElementById('user-theme-color').value;
     try {
         const response = await fetch(`${API_URL}/users/${encodeURIComponent(currentUsername)}`, {
             method: 'PATCH',
@@ -825,7 +841,7 @@ async function resetUserThemeColor() {
 }
 
 async function updateUserNickname() {
-    const nickname = document.getElementById('userNickname').value.trim();
+    const nickname = document.getElementById('user-nickname').value.trim();
     try {
         const response = await fetch(`${API_URL}/users/${encodeURIComponent(currentUsername)}`, {
             method: 'PATCH',
@@ -855,7 +871,7 @@ async function updateUserNickname() {
 }
 
 async function clearUserNickname() {
-    document.getElementById('userNickname').value = '';
+    document.getElementById('user-nickname').value = '';
     await updateUserNickname();
 }
 
@@ -866,8 +882,8 @@ async function loadRooms() {
         });
         const data = await response.json();
 
-        const channelList = document.getElementById('channelList');
-        const dmList = document.getElementById('dmList');
+        const channelList = document.getElementById('channel-list');
+        const dmList = document.getElementById('dm-list');
         channelList.innerHTML = '';
         dmList.innerHTML = '';
 
@@ -1072,7 +1088,7 @@ function handleRoomMessage(action, data) {
                 if (roomMeta[currentRoom]) {
                     roomMeta[currentRoom].topic = data.topic;
                 }
-                document.getElementById('chatHeaderTopic').textContent = data.topic || '';
+                document.getElementById('chat-header-topic').textContent = data.topic || '';
                 displaySystemMessage(`${data.set_by} set the topic: ${data.topic}`);
             }
             break;
@@ -1087,20 +1103,20 @@ function handleRoomMessage(action, data) {
 }
 
 function openCreateRoomModal() {
-    const modal = document.getElementById('createRoomModal');
-    const input = document.getElementById('newRoomInput');
+    const modal = document.getElementById('create-room-modal');
+    const input = document.getElementById('new-room-input');
     input.value = '';
     modal.classList.add('open');
     setTimeout(() => input.focus(), 100);
 }
 
 function closeCreateRoomModal() {
-    const modal = document.getElementById('createRoomModal');
+    const modal = document.getElementById('create-room-modal');
     modal.classList.remove('open');
 }
 
 async function createRoom() {
-    const input = document.getElementById('newRoomInput');
+    const input = document.getElementById('new-room-input');
     const roomId = input.value.trim().toLowerCase();
 
     if (!roomId) {
@@ -1225,8 +1241,8 @@ function selectRoom(roomId) {
         const parts = displayName.split(', ');
         displayName = parts.map(u => getDisplayName(u)).join(', ');
     }
-    document.getElementById('chatHeaderName').textContent = displayName;
-    const topicEl = document.getElementById('chatHeaderTopic');
+    document.getElementById('chat-header-name').textContent = displayName;
+    const topicEl = document.getElementById('chat-header-topic');
     topicEl.textContent = (meta && meta.topic) ? meta.topic : '';
 
     document.querySelectorAll('.room-item').forEach(item => {
@@ -1384,7 +1400,7 @@ async function loadMessages() {
 }
 
 async function sendMessage() {
-    const message = document.getElementById('messageInput').value.trim();
+    const message = document.getElementById('message-input').value.trim();
 
     if (!currentRoom) {
         alert('Please select a room first');
@@ -1395,7 +1411,7 @@ async function sendMessage() {
 
     // Slash command interception
     if (message.startsWith('/')) {
-        document.getElementById('messageInput').value = '';
+        document.getElementById('message-input').value = '';
         parseAndExecuteCommand(message);
         return;
     }
@@ -1436,7 +1452,7 @@ async function sendMessage() {
         ws.send(JSON.stringify(payload));
 
         // Clear input
-        document.getElementById('messageInput').value = '';
+        document.getElementById('message-input').value = '';
     } catch (error) {
         console.error('Error sending message:', error);
         alert('Failed to send message');
@@ -1444,14 +1460,14 @@ async function sendMessage() {
 }
 
 function openRoomSettings(roomId) {
-    const modal = document.getElementById('roomSettingsModal');
+    const modal = document.getElementById('room-settings-modal');
     const roomName = document.getElementById('roomSettingsName');
     modal.dataset.roomId = roomId;
     roomName.textContent = roomId;
 
     // Set current notification level
     const meta = roomMeta[roomId];
-    const select = document.getElementById('notifyLevelSelect');
+    const select = document.getElementById('notify-level-select');
     select.value = (meta && meta.notify_level) || 'all';
 
     // Only show danger zone for admin/moderator
@@ -1466,14 +1482,14 @@ function openRoomSettings(roomId) {
 }
 
 function closeRoomSettings() {
-    const modal = document.getElementById('roomSettingsModal');
+    const modal = document.getElementById('room-settings-modal');
     modal.classList.remove('open');
 }
 
 async function updateNotifyLevel() {
-    const modal = document.getElementById('roomSettingsModal');
+    const modal = document.getElementById('room-settings-modal');
     const roomId = modal.dataset.roomId;
-    const level = document.getElementById('notifyLevelSelect').value;
+    const level = document.getElementById('notify-level-select').value;
 
     try {
         const resp = await fetch(`${API_URL}/rooms/${encodeURIComponent(roomId)}/members/${encodeURIComponent(currentUsername)}`, {
@@ -1499,7 +1515,7 @@ async function updateNotifyLevel() {
 }
 
 async function deleteRoomAction() {
-    const modal = document.getElementById('roomSettingsModal');
+    const modal = document.getElementById('room-settings-modal');
     const roomId = modal.dataset.roomId;
 
     if (!confirm(`Are you sure you want to delete room "${roomId}"? The room will be hidden but messages are preserved.`)) {
@@ -1522,8 +1538,8 @@ async function deleteRoomAction() {
                 currentRoom = null;
                 lastMessageId = 0;
                 history.replaceState(null, '', window.location.pathname);
-                document.getElementById('chatHeaderName').textContent = '[No room selected]';
-            document.getElementById('chatHeaderTopic').textContent = '';
+                document.getElementById('chat-header-name').textContent = '[No room selected]';
+            document.getElementById('chat-header-topic').textContent = '';
                 document.getElementById('messages').innerHTML = '<div class="empty-state"><p>Select a chat room to start</p></div>';
             }
             loadRooms();
@@ -1540,33 +1556,33 @@ async function deleteRoomAction() {
 // --- DM Modal ---
 
 function openDMModal() {
-    const modal = document.getElementById('dmModal');
-    const userList = document.getElementById('dmUserList');
+    const modal = document.getElementById('dm-modal');
+    const userList = document.getElementById('dm-user-list');
     userList.innerHTML = '<p style="color: #999;">Loading users...</p>';
     modal.classList.add('open');
     loadDMUserList();
 }
 
 function closeDMModal() {
-    const modal = document.getElementById('dmModal');
+    const modal = document.getElementById('dm-modal');
     modal.classList.remove('open');
 }
 
 function updateDMStartButton() {
-    const btn = document.getElementById('dmStartBtn');
-    const checked = document.querySelectorAll('#dmUserList input[type="checkbox"]:checked');
+    const btn = document.getElementById('dm-start-btn');
+    const checked = document.querySelectorAll('#dm-user-list input[type="checkbox"]:checked');
     btn.style.display = checked.length > 0 ? '' : 'none';
 }
 
 async function loadDMUserList() {
     try {
-        const response = await fetch(`${API_URL}/users/list`, {
+        const response = await fetch(`${API_URL}/users`, {
             headers: { 'Authorization': `Bearer ${sessionToken}` }
         });
         const data = await response.json();
 
-        const userList = document.getElementById('dmUserList');
-        const otherUsers = data.usernames.filter(u => u !== currentUsername);
+        const userList = document.getElementById('dm-user-list');
+        const otherUsers = data.users.map(u => u.username).filter(u => u !== currentUsername);
 
         if (otherUsers.length === 0) {
             userList.innerHTML = '<p style="color: #999;">No other users to message</p>';
@@ -1586,15 +1602,15 @@ async function loadDMUserList() {
             userList.appendChild(label);
         });
 
-        document.getElementById('dmStartBtn').style.display = 'none';
+        document.getElementById('dm-start-btn').style.display = 'none';
     } catch (error) {
         console.error('Error loading user list:', error);
-        document.getElementById('dmUserList').innerHTML = '<p style="color: #999;">Failed to load users</p>';
+        document.getElementById('dm-user-list').innerHTML = '<p style="color: #999;">Failed to load users</p>';
     }
 }
 
 async function startDMFromModal() {
-    const checked = document.querySelectorAll('#dmUserList input[type="checkbox"]:checked');
+    const checked = document.querySelectorAll('#dm-user-list input[type="checkbox"]:checked');
     const targets = Array.from(checked).map(cb => cb.value);
     if (targets.length === 0) return;
     await startDM(targets);
@@ -1657,22 +1673,157 @@ window.updateNotifyLevel = updateNotifyLevel;
 
 // Event listeners
 document.addEventListener('DOMContentLoaded', () => {
-    const messageInput = document.getElementById('messageInput');
+    // Message input - Enter key
+    const messageInput = document.getElementById('message-input');
     if (messageInput) {
         messageInput.addEventListener('keypress', (e) => {
             if (e.key === 'Enter') sendMessage();
         });
     }
 
-    const newRoomInput = document.getElementById('newRoomInput');
+    // Send button
+    const sendButton = document.getElementById('send-button');
+    if (sendButton) {
+        sendButton.addEventListener('click', sendMessage);
+    }
+
+    // Menu toggle (mobile)
+    const menuToggle = document.getElementById('menu-toggle');
+    if (menuToggle) {
+        menuToggle.addEventListener('click', toggleSidebar);
+    }
+
+    // Sidebar overlay (mobile)
+    const sidebarOverlay = document.getElementById('sidebar-overlay');
+    if (sidebarOverlay) {
+        sidebarOverlay.addEventListener('click', toggleSidebar);
+    }
+
+    // Add channel button
+    const addChannelBtn = document.getElementById('add-channel-btn');
+    if (addChannelBtn) {
+        addChannelBtn.addEventListener('click', openCreateRoomModal);
+    }
+
+    // Add DM button
+    const addDmBtn = document.getElementById('add-dm-btn');
+    if (addDmBtn) {
+        addDmBtn.addEventListener('click', openDMModal);
+    }
+
+    // Settings button
+    const sidebarSettingsBtn = document.getElementById('sidebar-settings-btn');
+    if (sidebarSettingsBtn) {
+        sidebarSettingsBtn.addEventListener('click', toggleSettingsPanel);
+    }
+
+    // Settings panel close button
+    const settingsCloseBtn = document.getElementById('settings-close-btn');
+    if (settingsCloseBtn) {
+        settingsCloseBtn.addEventListener('click', toggleSettingsPanel);
+    }
+
+    // Settings logout button
+    const settingsLogoutBtn = document.getElementById('settings-logout-btn');
+    if (settingsLogoutBtn) {
+        settingsLogoutBtn.addEventListener('click', logout);
+    }
+
+    // User color input
+    const userColorInput = document.getElementById('user-color');
+    if (userColorInput) {
+        userColorInput.addEventListener('change', updateUserColor);
+    }
+
+    // User theme color input
+    const userThemeColorInput = document.getElementById('user-theme-color');
+    if (userThemeColorInput) {
+        userThemeColorInput.addEventListener('change', updateUserThemeColor);
+    }
+
+    // Reset theme color button
+    const resetThemeColorBtn = document.getElementById('reset-theme-color-btn');
+    if (resetThemeColorBtn) {
+        resetThemeColorBtn.addEventListener('click', resetUserThemeColor);
+    }
+
+    // Clear nickname button
+    const clearNicknameBtn = document.getElementById('clear-nickname-btn');
+    if (clearNicknameBtn) {
+        clearNicknameBtn.addEventListener('click', clearUserNickname);
+    }
+
+    // Nickname input - change event
+    const nicknameInput = document.getElementById('user-nickname');
+    if (nicknameInput) {
+        nicknameInput.addEventListener('change', updateUserNickname);
+    }
+
+    // Create room modal - input enter key
+    const newRoomInput = document.getElementById('new-room-input');
     if (newRoomInput) {
         newRoomInput.addEventListener('keypress', (e) => {
             if (e.key === 'Enter') createRoom();
         });
     }
 
-    const nicknameInput = document.getElementById('userNickname');
-    if (nicknameInput) {
-        nicknameInput.addEventListener('change', updateUserNickname);
+    // Create room modal - close button
+    const createRoomCloseBtn = document.getElementById('create-room-close-btn');
+    if (createRoomCloseBtn) {
+        createRoomCloseBtn.addEventListener('click', closeCreateRoomModal);
+    }
+
+    // Create room modal - backdrop
+    const createRoomBackdrop = document.getElementById('create-room-backdrop');
+    if (createRoomBackdrop) {
+        createRoomBackdrop.addEventListener('click', closeCreateRoomModal);
+    }
+
+    // Create room modal - submit button
+    const createRoomSubmitBtn = document.getElementById('create-room-submit-btn');
+    if (createRoomSubmitBtn) {
+        createRoomSubmitBtn.addEventListener('click', createRoom);
+    }
+
+    // Room settings modal - close button
+    const roomSettingsCloseBtn = document.getElementById('room-settings-close-btn');
+    if (roomSettingsCloseBtn) {
+        roomSettingsCloseBtn.addEventListener('click', closeRoomSettings);
+    }
+
+    // Room settings modal - backdrop
+    const roomSettingsBackdrop = document.getElementById('room-settings-backdrop');
+    if (roomSettingsBackdrop) {
+        roomSettingsBackdrop.addEventListener('click', closeRoomSettings);
+    }
+
+    // Room settings - notify level select
+    const notifyLevelSelect = document.getElementById('notify-level-select');
+    if (notifyLevelSelect) {
+        notifyLevelSelect.addEventListener('change', updateNotifyLevel);
+    }
+
+    // Room settings - delete button
+    const deleteRoomBtn = document.getElementById('delete-room-btn');
+    if (deleteRoomBtn) {
+        deleteRoomBtn.addEventListener('click', deleteRoomAction);
+    }
+
+    // DM modal - close button
+    const dmModalCloseBtn = document.getElementById('dm-modal-close-btn');
+    if (dmModalCloseBtn) {
+        dmModalCloseBtn.addEventListener('click', closeDMModal);
+    }
+
+    // DM modal - backdrop
+    const dmModalBackdrop = document.getElementById('dm-modal-backdrop');
+    if (dmModalBackdrop) {
+        dmModalBackdrop.addEventListener('click', closeDMModal);
+    }
+
+    // DM modal - start button
+    const dmStartBtn = document.getElementById('dm-start-btn');
+    if (dmStartBtn) {
+        dmStartBtn.addEventListener('click', startDMFromModal);
     }
 });

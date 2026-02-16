@@ -13,7 +13,12 @@
       "mcp__playwright__browser_close",
       "Bash(python:*)",
       "mcp__playwright__browser_console_messages",
-      "mcp__playwright__browser_tabs"
+      "mcp__playwright__browser_tabs",
+      "Bash(sqlite3:*)",
+      "Bash(npm test:*)",
+      "Bash(curl:*)",
+      "Grep",
+      "mcp__playwright__browser_network_requests"
     ]
   }
 }

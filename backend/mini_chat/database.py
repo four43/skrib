@@ -52,6 +52,13 @@ def init_db():
             )
         ''')
 
+        # Add theme_name column if it doesn't exist (migration)
+        try:
+            conn.execute('ALTER TABLE users ADD COLUMN theme_name TEXT')
+        except Exception:
+            # Column already exists
+            pass
+
         # Challenges table for WebAuthn
         conn.execute('''
             CREATE TABLE IF NOT EXISTS challenges (

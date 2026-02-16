@@ -7,160 +7,159 @@
 </head>
 <body>
     <!-- Chat View -->
-    <div id="chatView" class="container">
+    <div id="chat-view" class="container">
         <div class="header">
-            <div style="display: flex; align-items: center; gap: 10px;">
-                <button class="menu-toggle" onclick="toggleSidebar()">☰</button>
+            <div class="header-brand">
+                <button id="menu-toggle" class="menu-toggle">☰</button>
                 <h1>Mini-Chat</h1>
             </div>
             <div class="header-actions">
-                <a id="adminPanelBtn" class="admin-btn hidden" href="/admin.html">Admin Panel</a>
+                <a id="admin-panel-btn" class="admin-btn hidden" href="/admin.html">Admin Panel</a>
             </div>
         </div>
 
         <div class="main">
-            <div class="sidebar">
+            <div id="sidebar" class="sidebar">
                 <div class="sidebar-section">
                     <div class="sidebar-section-header">
                         <span>Channels</span>
-                        <button class="add-room-btn" onclick="openCreateRoomModal()" title="Create channel">+</button>
+                        <button id="add-channel-btn" class="add-room-btn" title="Create channel">+</button>
                     </div>
-                    <div class="room-list" id="channelList"></div>
+                    <div class="room-list" id="channel-list"></div>
                 </div>
                 <div class="sidebar-section">
                     <div class="sidebar-section-header">
                         <span>Direct Messages</span>
-                        <button class="add-room-btn" onclick="openDMModal()" title="New message">+</button>
+                        <button id="add-dm-btn" class="add-room-btn" title="New message">+</button>
                     </div>
-                    <div class="room-list" id="dmList"></div>
+                    <div class="room-list" id="dm-list"></div>
                 </div>
                 <div class="sidebar-footer">
-                    <button class="sidebar-settings-btn" onclick="toggleSettingsPanel()">⚙️ Settings</button>
+                    <button id="sidebar-settings-btn" class="sidebar-settings-btn">⚙️ Settings</button>
                 </div>
             </div>
 
             <!-- Sidebar Overlay for Mobile -->
-            <div class="sidebar-overlay" onclick="toggleSidebar()"></div>
+            <div id="sidebar-overlay" class="sidebar-overlay"></div>
 
             <div class="chat-area">
-                <div class="chat-header" id="chatHeader">
-                    <span id="chatHeaderName">[No room selected]</span>
-                    <span id="chatHeaderTopic" class="chat-header-topic"></span>
+                <div class="chat-header" id="chat-header">
+                    <span id="chat-header-name">[No room selected]</span>
+                    <span id="chat-header-topic" class="chat-header-topic"></span>
                 </div>
                 <div class="messages" id="messages">
                     <div class="empty-state">
                         <p>Select a chat room to start</p>
-                        <p class="mobile-hint" style="font-size: 12px; margin-top: 10px; color: #999;">Tap ☰ to see rooms</p>
+                        <p class="mobile-hint">Tap ☰ to see rooms</p>
                     </div>
                 </div>
                 <div class="input-area">
-                    <input type="text" id="messageInput" class="message-input" placeholder="Type a message...">
-                    <button class="send-button" onclick="sendMessage()">Send</button>
+                    <input type="text" id="message-input" class="message-input" placeholder="Type a message...">
+                    <button id="send-button" class="send-button">Send</button>
                 </div>
             </div>
         </div>
     </div>
 
     <!-- Settings Panel -->
-    <div id="settingsPanel" class="settings-panel">
+    <div id="settings-panel" class="settings-panel">
         <div class="settings-panel-header">
             <h2>⚙️ Settings</h2>
-            <button class="close-btn" onclick="toggleSettingsPanel()">✕</button>
+            <button id="settings-close-btn" class="close-btn">✕</button>
         </div>
 
         <div class="settings-section settings-user-info">
             <div class="settings-user-identity">
-                <span id="currentUser" class="settings-username"></span>
-                <span id="adminBadge" class="admin-badge hidden">ADMIN</span>
+                <span id="current-user" class="settings-username"></span>
+                <span id="admin-badge" class="admin-badge hidden">ADMIN</span>
             </div>
-            <button class="settings-logout-btn" onclick="logout()">Logout</button>
+            <button id="settings-logout-btn" class="settings-logout-btn">Logout</button>
         </div>
 
         <div class="settings-section">
             <h3>Display Preferences</h3>
             <div class="preference-item">
-                <label for="userNickname">Nickname:</label>
-                <div style="display: flex; align-items: center; gap: 8px;">
-                    <input type="text" id="userNickname" maxlength="32" placeholder="Enter nickname..."
-                           style="flex: 1; padding: 4px 8px; border: 1px solid rgba(255,255,255,0.2); border-radius: 4px; font-size: 14px; background: rgba(255,255,255,0.1); color: inherit;">
-                    <button class="theme-reset-btn" onclick="clearUserNickname()">Clear</button>
+                <label for="user-nickname">Nickname:</label>
+                <div class="preference-input-group">
+                    <input type="text" id="user-nickname" class="preference-input" maxlength="32" placeholder="Enter nickname...">
+                    <button id="clear-nickname-btn" class="theme-reset-btn">Clear</button>
                 </div>
             </div>
             <div class="preference-item">
-                <label for="userColor">Your username color:</label>
-                <input type="color" id="userColor" value="#1976d2" onchange="updateUserColor()">
+                <label for="user-color">Your username color:</label>
+                <input type="color" id="user-color" value="#1976d2">
             </div>
             <div class="preference-item">
-                <label for="userThemeColor">Theme color:</label>
-                <div style="display: flex; align-items: center; gap: 8px;">
-                    <input type="color" id="userThemeColor" value="#6366f1" onchange="updateUserThemeColor()">
-                    <button class="theme-reset-btn" onclick="resetUserThemeColor()">Reset</button>
+                <label for="user-theme-color">Theme color:</label>
+                <div class="preference-input-group">
+                    <input type="color" id="user-theme-color" value="#6366f1">
+                    <button id="reset-theme-color-btn" class="theme-reset-btn">Reset</button>
                 </div>
             </div>
         </div>
     </div>
 
     <!-- Room Settings Modal -->
-    <div id="roomSettingsModal" class="room-settings-modal">
-        <div class="room-settings-backdrop" onclick="closeRoomSettings()"></div>
+    <div id="room-settings-modal" class="room-settings-modal">
+        <div id="room-settings-backdrop" class="room-settings-backdrop"></div>
         <div class="room-settings-content">
             <div class="room-settings-header">
                 <h3>Room Settings</h3>
-                <button class="close-btn" onclick="closeRoomSettings()">&times;</button>
+                <button id="room-settings-close-btn" class="close-btn">&times;</button>
             </div>
             <div class="room-settings-body">
                 <div class="room-settings-name-row">
                     <span class="room-settings-label">Room name:</span>
-                    <span id="roomSettingsName" class="room-settings-value"></span>
+                    <span id="room-settings-name" class="room-settings-value"></span>
                 </div>
                 <div class="room-settings-section">
                     <h4>Notifications</h4>
-                    <select id="notifyLevelSelect" onchange="updateNotifyLevel()">
+                    <select id="notify-level-select">
                         <option value="all">All activity</option>
                         <option value="mentions">Mentions only</option>
                         <option value="muted">Muted</option>
                     </select>
                 </div>
-                <div id="roomSettingsDanger" class="room-settings-danger">
+                <div id="room-settings-danger" class="room-settings-danger">
                     <h4>Danger Zone</h4>
                     <p>Deleting a room hides it from the room list. Messages are preserved.</p>
-                    <button class="delete-btn" onclick="deleteRoomAction()">Delete Room</button>
+                    <button id="delete-room-btn" class="delete-btn">Delete Room</button>
                 </div>
             </div>
         </div>
     </div>
 
     <!-- Create Room Modal -->
-    <div id="createRoomModal" class="room-settings-modal">
-        <div class="room-settings-backdrop" onclick="closeCreateRoomModal()"></div>
+    <div id="create-room-modal" class="room-settings-modal">
+        <div id="create-room-backdrop" class="room-settings-backdrop"></div>
         <div class="room-settings-content">
             <div class="room-settings-header">
                 <h3>Create Channel</h3>
-                <button class="close-btn" onclick="closeCreateRoomModal()">&times;</button>
+                <button id="create-room-close-btn" class="close-btn">&times;</button>
             </div>
             <div class="room-settings-body">
                 <div class="form-group">
-                    <label for="newRoomInput">Channel name</label>
-                    <input type="text" id="newRoomInput" placeholder="e.g. general, my-channel"
+                    <label for="new-room-input">Channel name</label>
+                    <input type="text" id="new-room-input" placeholder="e.g. general, my-channel"
                            pattern="[a-z0-9]+(-[a-z0-9]+)*">
                     <p class="form-hint">Lowercase letters, numbers, and hyphens only</p>
                 </div>
-                <button class="create-room-submit-btn" onclick="createRoom()">Create</button>
+                <button id="create-room-submit-btn" class="create-room-submit-btn">Create</button>
             </div>
         </div>
     </div>
 
     <!-- DM Modal -->
-    <div id="dmModal" class="room-settings-modal">
-        <div class="room-settings-backdrop" onclick="closeDMModal()"></div>
+    <div id="dm-modal" class="room-settings-modal">
+        <div id="dm-modal-backdrop" class="room-settings-backdrop"></div>
         <div class="room-settings-content">
             <div class="room-settings-header">
                 <h3>New Direct Message</h3>
-                <button class="close-btn" onclick="closeDMModal()">&times;</button>
+                <button id="dm-modal-close-btn" class="close-btn">&times;</button>
             </div>
             <div class="room-settings-body">
-                <div id="dmUserList" class="dm-user-list"></div>
-                <button id="dmStartBtn" onclick="startDMFromModal()" style="display:none; margin-top: 12px;">Start Conversation</button>
+                <div id="dm-user-list" class="dm-user-list"></div>
+                <button id="dm-start-btn" class="hidden">Start Conversation</button>
             </div>
         </div>
     </div>

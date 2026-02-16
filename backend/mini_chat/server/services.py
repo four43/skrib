@@ -70,4 +70,5 @@ def get_system_status() -> Dict:
         'messages_count': messages_count,
         'registration_mode': get_registration_mode(),
         'server_color': get_setting('server_color', '#6366f1'),
+        'default_theme': get_setting('default_theme', 'com.four43.theme-default'),
     }

@@ -1,11 +1,11 @@
 """Users API routes — preferences and user management."""
+from typing import Optional
+
 from fastapi import APIRouter, Depends, HTTPException
 
 from ..dependencies import require_auth, require_admin, require_moderator, get_username_from_token
 from pydantic import BaseModel
 from .schemas import (
-    GetPreferencesResponse,
-    PendingUsersResponse,
     UpdatePendingUserRequest,
     UsersListResponse,
     UserProfile,
@@ -15,7 +15,6 @@ from .services import (
     get_user_preferences,
     update_user_preferences,
     get_all_user_preferences,
-    get_pending_users,
     approve_user,
     reject_user,
     get_all_users,
@@ -29,17 +28,13 @@ router = APIRouter(prefix="/users", tags=["users"])
 # --- User management (admin/moderator) ---
 
 @router.get("", response_model=UsersListResponse)
-async def list_all_users(_: str = Depends(require_moderator)):
-    """Get list of all users."""
-    users = get_all_users()
+async def list_all_users(
+    status: Optional[str] = None,
+    _: str = Depends(require_auth)
+):
+    """Get list of all users, optionally filtered by status (e.g., ?status=pending)."""
+    users = get_all_users(status=status)
     return UsersListResponse(users=users)
-
-
-@router.get("/pending", response_model=PendingUsersResponse)
-async def list_pending_users(admin: str = Depends(require_moderator)):
-    """Get list of pending user approvals."""
-    pending = get_pending_users()
-    return PendingUsersResponse(pending=pending)
 
 
 @router.patch("/pending/{approval_code}")
@@ -68,15 +63,6 @@ async def delete_user(username: str, _: str = Depends(require_admin)):
             detail="Cannot delete user (not found or last admin)",
         )
     return {"status": "ok"}
-
-
-# --- User list (authenticated, non-admin) ---
-
-@router.get("/list")
-async def list_usernames(_: str = Depends(require_auth)):
-    """Get list of all usernames (for DM picker)."""
-    users = get_all_users()
-    return {"usernames": [u['username'] for u in users]}
 
 
 # --- User profile and properties ---
@@ -117,6 +103,7 @@ async def get_user_profile(
             status=row['status'],
             color=prefs['color'],
             theme_color=prefs.get('theme_color'),
+            theme_name=prefs.get('theme_name'),
             nickname=prefs.get('nickname'),
         )
 
@@ -147,14 +134,15 @@ async def update_user(
             if not is_admin:
                 raise HTTPException(status_code=403, detail="Not authorized")
 
-    # Update preferences (color, theme_color, nickname) - users can update their own
-    if updates.color is not None or updates.theme_color is not None or updates.nickname is not None:
+    # Update preferences (color, theme_color, theme_name, nickname) - users can update their own
+    if updates.color is not None or updates.theme_color is not None or updates.theme_name is not None or updates.nickname is not None:
         if not is_self and not is_admin:
             raise HTTPException(status_code=403, detail="You can only change your own preferences")
         update_user_preferences(
             target_username,
             color=updates.color,
             theme_color=updates.theme_color,
+            theme_name=updates.theme_name,
             nickname=updates.nickname
         )
 
@@ -176,23 +164,3 @@ async def update_user(
 async def get_all_user_colors(username: str = Depends(require_auth)):
     """Get all users' color preferences (for efficient message rendering)."""
     return get_all_user_preferences()
-
-
-@router.get("/{target_username}/preferences", response_model=GetPreferencesResponse)
-async def get_user_preferences_endpoint(
-    target_username: str,
-    username: str = Depends(get_username_from_token),
-):
-    """Get user preferences. Users can access their own, admins can access any."""
-    if target_username != username:
-        from ..database import get_db
-        with get_db() as conn:
-            cursor = conn.execute('SELECT role FROM users WHERE username = ?', (username,))
-            row = cursor.fetchone()
-            if not row or row['role'] != 'admin':
-                raise HTTPException(status_code=403, detail="Not authorized")
-
-    prefs = get_user_preferences(target_username)
-    if not prefs:
-        raise HTTPException(status_code=404, detail="User not found")
-    return GetPreferencesResponse(**prefs)

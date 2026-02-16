@@ -212,13 +212,13 @@ async def delete_room_endpoint(
     return DeleteRoomResponse(status="ok", room_id=room_id)
 
 
-@router.post("/{room_id}/invite")
-async def invite_member(
+@router.post("/{room_id}/members")
+async def add_member(
     room_id: str,
     request: InviteRequest,
     username: str = Depends(require_auth),
 ):
-    """Invite a member to a room (IRC INVITE verb)."""
+    """Add a member to a room."""
     _check_room_access(room_id, username)
 
     result = add_room_member(room_id, request.username)

@@ -4,6 +4,10 @@ export const API_URL = import.meta.env.VITE_API_URL || '/api';
 
 export function showStatus(elementId, message, type) {
     const statusDiv = document.getElementById(elementId);
+    if (!statusDiv) {
+        console.error(`showStatus: element with id '${elementId}' not found`);
+        return;
+    }
     statusDiv.className = `status ${type}`;
     statusDiv.innerHTML = message;
 }

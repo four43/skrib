@@ -12,6 +12,7 @@ class GetPreferencesResponse(BaseModel):
     username: str
     color: str
     theme_color: Optional[str] = None
+    theme_name: Optional[str] = None
     nickname: Optional[str] = None
 
 
@@ -54,6 +55,8 @@ class UserInfo(BaseModel):
     status: str
     approved_at: str | None
     approved_by: str | None
+    approval_code: Optional[str] = None  # For pending users
+    created_at: Optional[str] = None  # Registration timestamp
 
 
 class UserProfile(BaseModel):
@@ -63,6 +66,7 @@ class UserProfile(BaseModel):
     status: str
     color: str
     theme_color: Optional[str] = None
+    theme_name: Optional[str] = None
     nickname: Optional[str] = None
 
 
@@ -70,6 +74,7 @@ class UserUpdateRequest(BaseModel):
     """Request body for updating user properties via PATCH."""
     color: Optional[str] = None
     theme_color: Optional[str] = None
+    theme_name: Optional[str] = None
     nickname: Optional[str] = None
     role: Optional[str] = None  # Admin only
 

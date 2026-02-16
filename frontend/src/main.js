@@ -219,14 +219,14 @@ function logout() {
     if (adminPollInterval) clearInterval(adminPollInterval);
 
     document.getElementById('authView').classList.remove('hidden');
-    document.getElementById('chatView').classList.add('hidden');
+    document.getElementById('chat-view').classList.add('hidden');
     document.getElementById('adminPanel').classList.remove('open');
     showLogin();
 }
 
 function showChatView() {
     document.getElementById('authView').classList.add('hidden');
-    document.getElementById('chatView').classList.remove('hidden');
+    document.getElementById('chat-view').classList.remove('hidden');
     document.getElementById('currentUser').textContent = `👤 ${currentUsername}`;
 
     if (currentRole === 'admin') {
@@ -298,7 +298,7 @@ async function toggleRegistration() {
 
 async function loadPendingUsers() {
     try {
-        const resp = await fetch(`${API_URL}/users/pending`, {
+        const resp = await fetch(`${API_URL}/users?status=pending`, {
             headers: { 'Authorization': `Bearer ${sessionToken}` }
         });
         const data = await resp.json();
@@ -306,16 +306,16 @@ async function loadPendingUsers() {
         const pendingList = document.getElementById('pendingList');
         const pendingCount = document.getElementById('pendingCount');
 
-        pendingCount.textContent = data.pending.length;
+        pendingCount.textContent = data.users.length;
 
-        if (data.pending.length === 0) {
+        if (data.users.length === 0) {
             pendingList.innerHTML = '<p style="color: #999;">No pending approvals</p>';
         } else {
-            pendingList.innerHTML = data.pending.map(user => `
+            pendingList.innerHTML = data.users.map(user => `
                 <div class="pending-user">
                     <h4>👤 ${user.username}</h4>
                     <div class="code">Code: ${user.approval_code}</div>
-                    <div style="font-size: 12px; color: #666;">${new Date(user.registered_at).toLocaleString()}</div>
+                    <div style="font-size: 12px; color: #666;">${new Date(user.created_at).toLocaleString()}</div>
                     <div class="pending-user-actions">
                         <button class="approve-btn" onclick="window.approveUser('${user.approval_code}')">✓ Approve</button>
                         <button class="reject-btn" onclick="window.rejectUser('${user.approval_code}')">✕ Reject</button>
@@ -461,7 +461,7 @@ async function loadRooms() {
         const response = await fetch(`${API_URL}/rooms`);
         const data = await response.json();
 
-        const roomList = document.getElementById('roomList');
+        const roomList = document.getElementById('room-list');
         roomList.innerHTML = '';
 
         data.rooms.forEach(room => {
@@ -566,7 +566,7 @@ async function loadMessages() {
 }
 
 async function sendMessage() {
-    const message = document.getElementById('messageInput').value.trim();
+    const message = document.getElementById('message-input').value.trim();
 
     if (!currentRoom) {
         alert('Please select a room first');
@@ -598,7 +598,7 @@ async function sendMessage() {
                 alert(data.detail);
             }
         } else {
-            document.getElementById('messageInput').value = '';
+            document.getElementById('message-input').value = '';
             loadMessages();
         }
     } catch (error) {
@@ -650,7 +650,7 @@ window.sendMessage = sendMessage;
 
 // Event listeners
 document.addEventListener('DOMContentLoaded', () => {
-    const messageInput = document.getElementById('messageInput');
+    const messageInput = document.getElementById('message-input');
     if (messageInput) {
         messageInput.addEventListener('keypress', (e) => {
             if (e.key === 'Enter') sendMessage();

@@ -1,13 +1,14 @@
 import './style.css';
-import { API_URL, showStatus, arrayBufferToBase64, base64ToArrayBuffer, friendlyError, loadAndApplyTheme } from './utils.js';
+import { API_URL, showStatus, arrayBufferToBase64, base64ToArrayBuffer, friendlyError } from './utils.js';
 import { generateEncryptionKeyPair, exportPublicKey, storePrivateKey } from './crypto.js';
+import { loadTheme } from './theme-manager.js';
 
 // Get invite token from URL if present
 const urlParams = new URLSearchParams(window.location.search);
 const inviteToken = urlParams.get('invite');
 
-// Load theme and check if registration is allowed
-loadAndApplyTheme();
+// Load default theme (no authentication on register page)
+loadTheme();
 checkRegistrationAccess();
 
 async function checkRegistrationAccess() {
@@ -16,10 +17,10 @@ async function checkRegistrationAccess() {
         const data = await resp.json();
 
         if (data.registration_mode === 'closed') {
-            showStatus('registerStatus', '❌ Registration is currently closed', 'error');
+            showStatus('register-status', '❌ Registration is currently closed', 'error');
             disableRegistration();
         } else if (data.registration_mode === 'invite_only' && !inviteToken) {
-            showStatus('registerStatus', '❌ Registration requires an invite link', 'error');
+            showStatus('register-status', '❌ Registration requires an invite link', 'error');
             disableRegistration();
         }
     } catch (error) {
@@ -29,7 +30,7 @@ async function checkRegistrationAccess() {
 
 function disableRegistration() {
     const registerBtn = document.querySelector('#registerForm button[type="submit"]');
-    const usernameInput = document.getElementById('registerUsername');
+    const usernameInput = document.getElementById('register-username');
     if (registerBtn) registerBtn.disabled = true;
     if (usernameInput) usernameInput.disabled = true;
 }
@@ -50,7 +51,7 @@ function validateUsername(username) {
 }
 
 async function register() {
-    const input = document.getElementById('registerUsername');
+    const input = document.getElementById('register-username');
 
     // Let the browser show its native constraint popups first
     if (!input.checkValidity()) {
@@ -70,7 +71,7 @@ async function register() {
     }
 
     try {
-        showStatus('registerStatus', 'Starting registration...', 'info');
+        showStatus('register-status', 'Starting registration...', 'info');
 
         // Pass invite token as query param if present
         const beginUrl = inviteToken
@@ -80,14 +81,14 @@ async function register() {
         const beginData = await beginResp.json();
 
         if (beginData.detail) {
-            showStatus('registerStatus', `❌ ${beginData.detail}`, 'error');
+            showStatus('register-status', `❌ ${beginData.detail}`, 'error');
             return;
         }
 
         const challenge = base64ToArrayBuffer(beginData.challenge);
         const userId = new TextEncoder().encode(username);
 
-        showStatus('registerStatus', '🔐 Please authenticate with your device...', 'info');
+        showStatus('register-status', '🔐 Please authenticate with your device...', 'info');
 
         const credential = await navigator.credentials.create({
             publicKey: {
@@ -137,11 +138,11 @@ async function register() {
         const completeData = await completeResp.json();
 
         if (completeData.detail) {
-            showStatus('registerStatus', `❌ ${completeData.detail}`, 'error');
+            showStatus('register-status', `❌ ${completeData.detail}`, 'error');
         } else if (completeData.status === 'approved') {
             // Generate E2E encryption key pair and upload public key
             try {
-                showStatus('registerStatus', '🔑 Generating encryption keys...', 'info');
+                showStatus('register-status', '🔑 Generating encryption keys...', 'info');
                 const keyPair = await generateEncryptionKeyPair();
                 const publicKeyJwk = await exportPublicKey(keyPair);
                 await storePrivateKey(username, keyPair.privateKey);
@@ -188,7 +189,7 @@ async function register() {
                 // Non-fatal: user can still chat, keys will be generated on next login
             }
 
-            showStatus('registerStatus',
+            showStatus('register-status',
                 `<div class="approval-code">
                     <h3>✅ Registration Complete!</h3>
                     <p>Your account has been approved. Redirecting to chat...</p>
@@ -199,7 +200,7 @@ async function register() {
                 window.location.href = '/chat.html';
             }, 2000);
         } else {
-            showStatus('registerStatus',
+            showStatus('register-status',
                 `<div class="approval-code">
                     <h3>⏳ Registration Pending Approval</h3>
                     <p>Please provide this code to the administrator:</p>
@@ -212,7 +213,7 @@ async function register() {
 
     } catch (error) {
         console.error(error);
-        showStatus('registerStatus', `❌ ${friendlyError(error)}`, 'error');
+        showStatus('register-status', `❌ ${friendlyError(error)}`, 'error');
     }
 }
 
@@ -226,17 +227,32 @@ window.goToLogin = goToLogin;
 
 // Real-time validation: red outline on invalid input
 document.addEventListener('DOMContentLoaded', () => {
-    const input = document.getElementById('registerUsername');
-    if (!input) return;
+    const input = document.getElementById('register-username');
+    if (input) {
+        input.addEventListener('input', () => {
+            const val = input.value;
+            // Empty is neutral (not red), only flag once the user has typed something
+            if (!val) {
+                input.classList.remove('invalid');
+                return;
+            }
+            const error = validateUsername(val);
+            input.classList.toggle('invalid', error !== null);
+        });
+    }
 
-    input.addEventListener('input', () => {
-        const val = input.value;
-        // Empty is neutral (not red), only flag once the user has typed something
-        if (!val) {
-            input.classList.remove('invalid');
-            return;
-        }
-        const error = validateUsername(val);
-        input.classList.toggle('invalid', error !== null);
-    });
+    // Form submit
+    const form = document.getElementById('register-form');
+    if (form) {
+        form.addEventListener('submit', (e) => {
+            e.preventDefault();
+            register();
+        });
+    }
+
+    // Go to login button
+    const goToLoginButton = document.getElementById('go-to-login-button');
+    if (goToLoginButton) {
+        goToLoginButton.addEventListener('click', goToLogin);
+    }
 });

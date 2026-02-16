@@ -7,26 +7,26 @@
 </head>
 <body>
     <!-- Register View -->
-    <div id="authView" class="auth-container">
+    <div id="auth-view" class="auth-container">
         <div class="auth-box">
-            <form id="registerForm" onsubmit="register(); return false;" novalidate>
+            <form id="register-form" novalidate>
                 <h1>📝 Register</h1>
                 <p>Create a new account</p>
 
-                <div id="registerStatus"></div>
+                <div id="register-status"></div>
 
                 <div class="form-group">
-                    <label for="registerUsername">Choose a Username</label>
-                    <input type="text" id="registerUsername" placeholder="e.g. cool_user42"
+                    <label for="register-username">Choose a Username</label>
+                    <input type="text" id="register-username" placeholder="e.g. cool_user42"
                            required minlength="4" maxlength="15"
                            pattern="[a-zA-Z0-9_]{4,15}"
                            title="4–15 characters: letters, numbers, and underscores only"
                            autocomplete="username">
-                    <small style="color: #94a3b8;">4–15 characters: letters, numbers, underscores only</small>
+                    <small class="form-hint-small">4–15 characters: letters, numbers, underscores only</small>
                 </div>
 
-                <button type="submit">Register</button>
-                <button type="button" class="link-button" onclick="goToLogin()">Already registered? Sign in</button>
+                <button type="submit" id="register-submit-button">Register</button>
+                <button type="button" id="go-to-login-button" class="link-button">Already registered? Sign in</button>
             </form>
         </div>
     </div>

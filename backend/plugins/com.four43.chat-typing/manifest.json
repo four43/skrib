@@ -1,0 +1,18 @@
+{
+  "id": "com.four43.chat-typing",
+  "name": "Typing Indicators",
+  "version": "1.0.0",
+  "description": "Shows real-time typing indicators for users in chat rooms",
+  "author": "Four43",
+  "entry": "frontend/plugin.js",
+  "namespace": "com.four43.chat-typing",
+  "permissions": [
+    "websocket.send",
+    "websocket.receive",
+    "dom.input",
+    "dom.message-area"
+  ],
+  "hooks": {
+    "onRoomChange": true
+  }
+}

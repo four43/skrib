@@ -30,6 +30,7 @@ async def get_server_info(username: str = Depends(get_username_from_token)):
     # Get public info
     registration_mode = get_registration_mode()
     server_color = get_setting('server_color', '#6366f1') or '#6366f1'
+    default_theme = get_setting('default_theme', 'com.four43.theme-default') or 'com.four43.theme-default'
 
     # Check if user is admin
     is_admin = False
@@ -46,7 +47,8 @@ async def get_server_info(username: str = Depends(get_username_from_token)):
     else:
         return ServerInfoResponse(
             registration_mode=registration_mode,
-            server_color=server_color
+            server_color=server_color,
+            default_theme=default_theme
         )
 
 
@@ -61,6 +63,9 @@ async def update_server(
 
     if updates.server_color is not None:
         set_setting('server_color', updates.server_color)
+
+    if updates.default_theme is not None:
+        set_setting('default_theme', updates.default_theme)
 
     # Return updated server info
     status = get_system_status()

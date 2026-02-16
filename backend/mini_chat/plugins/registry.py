@@ -1,6 +1,8 @@
 """Plugin registry for managing Mini Chat plugins."""
 import os
+import sys
 import importlib
+import importlib.util
 import inspect
 from typing import Dict, Optional
 from .base import Plugin
@@ -52,6 +54,18 @@ class PluginRegistry:
         # Register the plugin
         self.plugins[plugin.name] = plugin
         print(f"[Plugins] Registered plugin: {plugin.name} v{plugin.version}")
+
+        # Create plugin's database table if schema provided
+        schema = plugin.get_table_schema()
+        if schema:
+            from ..database import get_db
+            try:
+                with get_db() as conn:
+                    conn.execute(schema)
+                    conn.commit()
+                print(f"[Plugins]   - Created table: plugin_{plugin.name}")
+            except Exception as e:
+                print(f"[Plugins]   - Warning: Failed to create table for {plugin.name}: {e}")
 
         # Register room types
         for room_type in plugin.room_types:
@@ -114,8 +128,9 @@ class PluginRegistry:
     def discover_plugins(self, plugins_dir: str = None):
         """Auto-discover plugins in the plugins/ directory.
 
-        Scans for Python modules in the plugins directory and looks for
-        Plugin subclass instances to register.
+        Scans for:
+        1. Python modules in mini_chat/plugins/*.py
+        2. Distributed plugins in backend/plugins/*/backend/plugin.py
 
         Args:
             plugins_dir: Directory to scan (defaults to this module's directory)
@@ -123,9 +138,9 @@ class PluginRegistry:
         if plugins_dir is None:
             plugins_dir = os.path.dirname(os.path.abspath(__file__))
 
-        print(f"[Plugins] Discovering plugins in: {plugins_dir}")
+        print(f"[Plugins] Discovering built-in plugins in: {plugins_dir}")
 
-        # Scan for Python files
+        # Scan for Python files in mini_chat/plugins/
         for filename in os.listdir(plugins_dir):
             if not filename.endswith('.py') or filename.startswith('_'):
                 continue
@@ -151,6 +166,58 @@ class PluginRegistry:
 
             except Exception as e:
                 print(f"[Plugins] Failed to load module {module_name}: {e}")
+
+        # Also scan for distributed plugins with backend components
+        self._discover_distributed_plugins()
+
+    def _discover_distributed_plugins(self):
+        """Discover distributed plugins with backend/plugin.py files."""
+        from pathlib import Path
+
+        # Distributed plugins are in backend/plugins/
+        distributed_dir = Path(__file__).parent.parent.parent / "plugins"
+
+        if not distributed_dir.exists():
+            return
+
+        print(f"[Plugins] Discovering distributed plugins in: {distributed_dir}")
+
+        for plugin_dir in distributed_dir.iterdir():
+            if not plugin_dir.is_dir():
+                continue
+
+            # Check if plugin has a backend component
+            backend_file = plugin_dir / "backend" / "plugin.py"
+            if not backend_file.exists():
+                continue
+
+            plugin_id = plugin_dir.name
+            print(f"[Plugins] Found distributed plugin with backend: {plugin_id}")
+
+            try:
+                # Load the backend plugin module
+                spec = importlib.util.spec_from_file_location(
+                    f"distributed_plugin_{plugin_id}",
+                    backend_file
+                )
+                if spec and spec.loader:
+                    module = importlib.util.module_from_spec(spec)
+                    sys.modules[spec.name] = module
+                    spec.loader.exec_module(module)
+
+                    # Look for Plugin subclasses
+                    for name, obj in inspect.getmembers(module):
+                        if (inspect.isclass(obj) and
+                            issubclass(obj, Plugin) and
+                            obj != Plugin):
+                            try:
+                                plugin_instance = obj()
+                                self.register(plugin_instance)
+                            except Exception as e:
+                                print(f"[Plugins] Failed to instantiate {name} from {plugin_id}: {e}")
+
+            except Exception as e:
+                print(f"[Plugins] Failed to load distributed plugin {plugin_id}: {e}")
 
     def get_manifest(self) -> dict:
         """Get plugin manifest for frontend consumption.

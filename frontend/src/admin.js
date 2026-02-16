@@ -1,14 +1,12 @@
 import './style.css';
-import { API_URL, escapeHtml, loadAndApplyTheme } from './utils.js';
+import { API_URL, escapeHtml } from './utils.js';
+import { loadTheme } from './theme-manager.js';
 
 let sessionToken = null;
 let currentUsername = null;
 let currentRole = null;
 let adminPollInterval = null;
 let currentRegMode = 'closed';
-
-// Load server theme immediately
-loadAndApplyTheme();
 
 // Check session and redirect if not authenticated or not admin/mod
 checkSession();
@@ -38,6 +36,9 @@ async function checkSession() {
                 window.location.href = '/chat.html';
                 return;
             }
+
+            // Load user's theme preferences
+            await loadTheme(username, sessionToken);
 
             // Hide admin-only sections for moderators
             if (currentRole === 'moderator') {
@@ -71,7 +72,7 @@ async function loadAdminSettings() {
         if (data.registration_mode === 'invite_only') {
             loadInviteTokens();
         }
-        const serverColorPicker = document.getElementById('serverColorPicker');
+        const serverColorPicker = document.getElementById('server-color-picker');
         if (serverColorPicker && data.server_color) {
             serverColorPicker.value = data.server_color;
         }
@@ -91,7 +92,7 @@ const REG_MODE_DESCRIPTIONS = {
 };
 
 function updateRegModeSlider(mode) {
-    const slider = document.getElementById('regModeSlider');
+    const slider = document.getElementById('reg-mode-slider');
     const index = REG_MODES.indexOf(mode);
     if (index >= 0) {
         slider.value = index;
@@ -103,8 +104,8 @@ function updateRegModeSlider(mode) {
 }
 
 function updateRegModeLabel() {
-    const slider = document.getElementById('regModeSlider');
-    const desc = document.getElementById('regModeDescription');
+    const slider = document.getElementById('reg-mode-slider');
+    const desc = document.getElementById('reg-mode-description');
     const mode = REG_MODES[slider.value];
     desc.textContent = REG_MODE_DESCRIPTIONS[mode];
 
@@ -115,7 +116,7 @@ function updateRegModeLabel() {
 }
 
 async function setRegistrationMode() {
-    const slider = document.getElementById('regModeSlider');
+    const slider = document.getElementById('reg-mode-slider');
     const mode = REG_MODES[slider.value];
 
     try {
@@ -135,7 +136,7 @@ async function setRegistrationMode() {
 }
 
 function updateInviteSectionVisibility(mode) {
-    const section = document.getElementById('inviteSection');
+    const section = document.getElementById('invite-section');
     if (mode === 'invite_only') {
         section.classList.remove('hidden');
         loadInviteTokens();
@@ -159,7 +160,7 @@ function updatePendingPoll() {
 // Server color
 
 async function updateServerColor() {
-    const color = document.getElementById('serverColorPicker').value;
+    const color = document.getElementById('server-color-picker').value;
     try {
         const response = await fetch(`${API_URL}/server`, {
             method: 'PATCH',
@@ -198,7 +199,7 @@ async function loadInviteTokens() {
             headers: { 'Authorization': `Bearer ${sessionToken}` }
         });
         const data = await resp.json();
-        const inviteList = document.getElementById('inviteList');
+        const inviteList = document.getElementById('invite-list');
 
         if (data.invites.length === 0) {
             inviteList.innerHTML = '<p style="color: #999; font-size: 13px;">No invite links yet</p>';
@@ -249,24 +250,24 @@ async function deleteInvite(token) {
 
 async function loadPendingUsers() {
     try {
-        const resp = await fetch(`${API_URL}/users/pending`, {
+        const resp = await fetch(`${API_URL}/users?status=pending`, {
             headers: { 'Authorization': `Bearer ${sessionToken}` }
         });
         const data = await resp.json();
 
-        const pendingList = document.getElementById('pendingList');
-        const pendingCount = document.getElementById('pendingCount');
+        const pendingList = document.getElementById('pending-list');
+        const pendingCount = document.getElementById('pending-count');
 
-        pendingCount.textContent = data.pending.length;
+        pendingCount.textContent = data.users.length;
 
-        if (data.pending.length === 0) {
+        if (data.users.length === 0) {
             pendingList.innerHTML = '<p style="color: #999;">No pending approvals</p>';
         } else {
-            pendingList.innerHTML = data.pending.map(user => `
+            pendingList.innerHTML = data.users.map(user => `
                 <div class="pending-user">
                     <h4>👤 ${user.username}</h4>
                     <div class="code">Code: ${user.approval_code}</div>
-                    <div style="font-size: 12px; color: #666;">${new Date(user.registered_at).toLocaleString()}</div>
+                    <div style="font-size: 12px; color: #666;">${new Date(user.created_at).toLocaleString()}</div>
                     <div class="pending-user-actions">
                         <button class="approve-btn" onclick="window.approveUser('${user.approval_code}')">✓ Approve</button>
                         <button class="reject-btn" onclick="window.rejectUser('${user.approval_code}')">✕ Reject</button>
@@ -327,8 +328,8 @@ async function loadAllUsers() {
         });
         const data = await resp.json();
 
-        const usersList = document.getElementById('usersList');
-        const userCount = document.getElementById('userCount');
+        const usersList = document.getElementById('users-list');
+        const userCount = document.getElementById('user-count');
 
         userCount.textContent = data.users.length;
 
@@ -427,7 +428,7 @@ async function loadUserPreferences() {
         if (!response.ok) return;
 
         const data = await response.json();
-        const preferencesList = document.getElementById('userPreferencesList');
+        const preferencesList = document.getElementById('user-preferences-list');
 
         const prefsPromises = data.users.map(async (user) => {
             const prefsResponse = await fetch(`${API_URL}/users/${user.username}/preferences`, {
@@ -489,3 +490,25 @@ window.setUserRole = setUserRole;
 window.deleteUser = deleteUser;
 window.updateServerColor = updateServerColor;
 window.updateUserColorAdmin = updateUserColorAdmin;
+
+// Event listeners
+document.addEventListener('DOMContentLoaded', () => {
+    // Server color picker
+    const serverColorPicker = document.getElementById('server-color-picker');
+    if (serverColorPicker) {
+        serverColorPicker.addEventListener('change', updateServerColor);
+    }
+
+    // Registration mode slider
+    const regModeSlider = document.getElementById('reg-mode-slider');
+    if (regModeSlider) {
+        regModeSlider.addEventListener('input', updateRegModeLabel);
+        regModeSlider.addEventListener('change', setRegistrationMode);
+    }
+
+    // Generate invite button
+    const generateInviteBtn = document.getElementById('generate-invite-btn');
+    if (generateInviteBtn) {
+        generateInviteBtn.addEventListener('click', generateInviteLink);
+    }
+});

@@ -83,11 +83,8 @@ backend/mini_chat/
 
 | Method | Endpoint | Description |
 | --- | --- | --- |
-| GET | `/users` | List all users (admin only) |
-| GET | `/users/list` | List usernames (authenticated, for DM picker) |
-| GET | `/users/pending` | List pending approvals (admin only) |
-| POST | `/users/pending/approve` | Approve a user (admin only) |
-| POST | `/users/pending/reject` | Reject a user (admin only) |
+| GET | `/users` | List all users (authenticated). Use `?status=pending` to filter by status |
+| PATCH | `/users/pending/{approval_code}` | Approve or reject a pending user (admin only) |
 | DELETE | `/users/{username}` | Delete a user (admin only) |
 | PUT | `/users/{username}/role` | Set user role (admin only) |
 | GET | `/users/preferences/colors` | All users' color preferences |

@@ -1,9 +1,10 @@
 import './style.css';
-import { API_URL, showStatus, arrayBufferToBase64, base64ToArrayBuffer, friendlyError, loadAndApplyTheme } from './utils.js';
+import { API_URL, showStatus, arrayBufferToBase64, base64ToArrayBuffer, friendlyError } from './utils.js';
 import { loadPrivateKey, generateEncryptionKeyPair, exportPublicKey, storePrivateKey, exportStoredPublicKey } from './crypto.js';
+import { loadTheme } from './theme-manager.js';
 
-// Load theme, check session, then check registration mode
-loadAndApplyTheme();
+// Load default theme (no authentication on login page)
+loadTheme();
 checkSession().then(() => checkRegistrationMode());
 
 async function checkSession() {
@@ -34,17 +35,17 @@ async function checkSession() {
 
 async function login() {
     try {
-        showStatus('authStatus', 'Starting login...', 'info');
+        showStatus('auth-status', 'Starting login...', 'info');
 
         const beginResp = await fetch(`${API_URL}/auth/login/begin`);
         const beginData = await beginResp.json();
 
         if (beginData.detail) {
-            showStatus('authStatus', `❌ ${beginData.detail}`, 'error');
+            showStatus('auth-status', `❌ ${beginData.detail}`, 'error');
             return;
         }
 
-        showStatus('authStatus', '🔐 Please authenticate with your device...', 'info');
+        showStatus('auth-status', '🔐 Please authenticate with your device...', 'info');
 
         const challenge = base64ToArrayBuffer(beginData.challenge);
 
@@ -69,7 +70,7 @@ async function login() {
         const completeData = await completeResp.json();
 
         if (completeData.detail) {
-            showStatus('authStatus', `❌ ${completeData.detail}`, 'error');
+            showStatus('auth-status', `❌ ${completeData.detail}`, 'error');
         } else {
             // Store session data
             localStorage.setItem('session_token', completeData.session_token);
@@ -109,7 +110,7 @@ async function login() {
 
     } catch (error) {
         console.error(error);
-        showStatus('authStatus', `❌ ${friendlyError(error)}`, 'error');
+        showStatus('auth-status', `❌ ${friendlyError(error)}`, 'error');
     }
 }
 
@@ -119,7 +120,7 @@ async function checkRegistrationMode() {
         const data = await resp.json();
         // Show register button for approval_required and open modes
         if (data.registration_mode === 'approval_required' || data.registration_mode === 'open') {
-            document.getElementById('registerSection').classList.remove('hidden');
+            document.getElementById('register-section').classList.remove('hidden');
         }
         // For closed and invite_only, register section stays hidden
     } catch (error) {
@@ -131,6 +132,19 @@ function goToRegister() {
     window.location.href = '/register.html';
 }
 
-// Expose functions to window for inline event handlers
+// Expose functions to window for inline event handlers (backwards compatibility)
 window.login = login;
 window.goToRegister = goToRegister;
+
+// Event listeners
+document.addEventListener('DOMContentLoaded', () => {
+    const loginButton = document.getElementById('login-button');
+    if (loginButton) {
+        loginButton.addEventListener('click', login);
+    }
+
+    const goToRegisterButton = document.getElementById('go-to-register-button');
+    if (goToRegisterButton) {
+        goToRegisterButton.addEventListener('click', goToRegister);
+    }
+});

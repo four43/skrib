@@ -9,14 +9,14 @@ def get_user_preferences(username: str) -> Optional[Dict]:
     """Get preferences for a user. Returns None if not found."""
     with get_db() as conn:
         cursor = conn.execute(
-            'SELECT username, color, theme_color, nickname FROM users WHERE username = ? AND status = ?',
+            'SELECT username, color, theme_color, theme_name, nickname FROM users WHERE username = ? AND status = ?',
             (username, 'active')
         )
         row = cursor.fetchone()
         return dict(row) if row else None
 
 
-def update_user_preferences(username: str, color: Optional[str] = None, theme_color: Optional[str] = None, nickname: Optional[str] = None) -> bool:
+def update_user_preferences(username: str, color: Optional[str] = None, theme_color: Optional[str] = None, theme_name: Optional[str] = None, nickname: Optional[str] = None) -> bool:
     """Update user preferences on the users table."""
     with get_db() as conn:
         updates = []
@@ -28,6 +28,10 @@ def update_user_preferences(username: str, color: Optional[str] = None, theme_co
             # Empty string means "use server default"
             updates.append('theme_color = ?')
             params.append(theme_color if theme_color != '' else None)
+        if theme_name is not None:
+            # Empty string means "use server default"
+            updates.append('theme_name = ?')
+            params.append(theme_name if theme_name != '' else None)
         if nickname is not None:
             # Empty string means "clear nickname, use username"
             trimmed = nickname.strip()
@@ -49,18 +53,6 @@ def get_all_user_preferences() -> Dict[str, Dict]:
     with get_db() as conn:
         cursor = conn.execute("SELECT username, color, nickname FROM users WHERE status = 'active'")
         return {row['username']: {'color': row['color'], 'nickname': row['nickname']} for row in cursor}
-
-
-def get_pending_users() -> List[Dict]:
-    """Get all pending users."""
-    with get_db() as conn:
-        cursor = conn.execute('''
-            SELECT username, approval_code, created_at as registered_at
-            FROM users
-            WHERE status = 'pending'
-            ORDER BY created_at DESC
-        ''')
-        return [dict(row) for row in cursor]
 
 
 def approve_user(approval_code: str, admin_username: str) -> bool:
@@ -100,15 +92,26 @@ def reject_user(approval_code: str) -> bool:
         return cursor.rowcount > 0
 
 
-def get_all_users() -> List[Dict]:
-    """Get all active users."""
+def get_all_users(status: Optional[str] = None) -> List[Dict]:
+    """Get all users, optionally filtered by status."""
     with get_db() as conn:
-        cursor = conn.execute('''
-            SELECT username, role, status, approved_at, approved_by
+        query = '''
+            SELECT username, role, status, approved_at, approved_by, approval_code, created_at
             FROM users
-            WHERE status = 'active'
-            ORDER BY username
-        ''')
+        '''
+        params = []
+
+        if status:
+            query += ' WHERE status = ?'
+            params.append(status)
+        else:
+            # Default to active users only if no status filter
+            query += ' WHERE status = ?'
+            params.append('active')
+
+        query += ' ORDER BY created_at DESC, username'
+
+        cursor = conn.execute(query, params)
         return [dict(row) for row in cursor]
 
 
