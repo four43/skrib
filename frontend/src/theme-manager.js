@@ -42,14 +42,14 @@ export async function fetchUserThemePreferences(username, token) {
         if (!data.theme_name) {
             const serverResp = await fetch(`${API_URL}/server`);
             const serverInfo = await serverResp.json();
-            data.theme_name = serverInfo.default_theme || 'com.four43.theme-default';
+            data.theme_name = serverInfo.default_theme || 'four43.theme-default';
         }
 
         return data;
     } catch (error) {
         console.error('[Theme] Failed to fetch preferences:', error);
         return {
-            theme_name: 'com.four43.theme-default',
+            theme_name: 'four43.theme-default',
             theme_color: null,
             nickname: null
         };
@@ -225,10 +225,10 @@ export async function loadTheme(username = null, token = null) {
         try {
             const resp = await fetch(`${API_URL}/server`);
             const serverInfo = await resp.json();
-            loadThemeCSS(serverInfo.default_theme || 'com.four43.theme-default');
+            loadThemeCSS(serverInfo.default_theme || 'four43.theme-default');
         } catch (error) {
             console.error('[Theme] Failed to fetch server info, using fallback theme:', error);
-            loadThemeCSS('com.four43.theme-default');
+            loadThemeCSS('four43.theme-default');
         }
     }
 }

@@ -1,0 +1,14 @@
+{
+  "id": "four43.room-type-todo",
+  "name": "Todo List",
+  "version": "1.0.0",
+  "description": "Collaborative todo lists. Create, assign, and track tasks together in real-time.",
+  "author": "Four43",
+  "entry": "frontend/plugin.js",
+  "permissions": [
+    "websocket.send",
+    "websocket.receive",
+    "database.todo_items"
+  ],
+  "hooks": {}
+}

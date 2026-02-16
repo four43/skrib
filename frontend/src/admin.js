@@ -100,7 +100,7 @@ async function loadAdminSettings() {
         updateRegModeSlider(data.registration_mode);
 
         // Default theme
-        currentDefaultTheme = data.default_theme || 'com.four43.theme-default';
+        currentDefaultTheme = data.default_theme || 'four43.theme-default';
         loadAdminThemeList();
 
         // Users

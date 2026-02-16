@@ -102,9 +102,9 @@ async function loadUserSettings() {
                 try {
                     const serverResp = await fetch(`${API_URL}/server`);
                     const serverInfo = await serverResp.json();
-                    currentThemeName = serverInfo.default_theme || 'com.four43.theme-default';
+                    currentThemeName = serverInfo.default_theme || 'four43.theme-default';
                 } catch (e) {
-                    currentThemeName = 'com.four43.theme-default';
+                    currentThemeName = 'four43.theme-default';
                 }
             }
             // Apply user's theme color override if set

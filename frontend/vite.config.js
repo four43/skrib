@@ -22,7 +22,7 @@ export default defineConfig({
     host: '0.0.0.0',
     proxy: {
       '/api': {
-        target: 'http://host.docker.internal:8000',
+        target: process.env.VITE_API_TARGET || 'http://host.docker.internal:8000',
         changeOrigin: true,
         secure: false,
         ws: true,

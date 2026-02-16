@@ -187,7 +187,7 @@ function loadPluginScript(scriptUrl, plugin) {
 
             // Try to find and initialize the plugin
             // Plugin exposes itself using its full ID with capitalized first char + "Plugin"
-            // E.g., "com.four43.message-reactions" → window["Com.four43.message-reactionsPlugin"]
+            // E.g., "four43.message-reactions" → window["Four43.message-reactionsPlugin"]
             const pluginNamespace = plugin.id;
             const PluginClass = window[`${pluginNamespace.charAt(0).toUpperCase() + pluginNamespace.slice(1)}Plugin`];
 

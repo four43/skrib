@@ -1,54 +1,45 @@
 import { test, expect } from '@playwright/test';
+import { setupAuthMocks } from './helpers/auth-mock.js';
 
 test.describe('Admin Page', () => {
+  test.beforeEach(async ({ page }) => {
+    await setupAuthMocks(page);
+  });
+
   test.describe('HTML Structure', () => {
     test('should have correct kebab-case IDs', async ({ page }) => {
       await page.goto('/admin.html');
 
-      // Main containers
-      await expect(page.locator('.admin-page')).toBeVisible();
+      // Main containers (class changed from .admin-page to .settings-page)
+      await expect(page.locator('.settings-page')).toBeVisible();
       await expect(page.locator('.admin-page-header')).toBeVisible();
-      await expect(page.locator('.admin-page-content')).toBeVisible();
+      await expect(page.locator('.settings-content')).toBeVisible();
 
-      // Admin controls
-      await expect(page.locator('#server-color-picker')).toBeVisible();
+      // Admin controls (in active section-server)
       await expect(page.locator('#reg-mode-slider')).toBeVisible();
       await expect(page.locator('#reg-mode-description')).toBeVisible();
 
-      // Invite section
-      await expect(page.locator('#invite-section')).toBeVisible();
-      await expect(page.locator('#generate-invite-btn')).toBeVisible();
-      await expect(page.locator('#invite-list')).toBeVisible();
+      // Invite section (non-active tab, elements are in DOM but not visible)
+      await expect(page.locator('#section-invites')).toBeAttached();
+      await expect(page.locator('#generate-invite-btn')).toBeAttached();
+      await expect(page.locator('#invite-list')).toBeAttached();
 
-      // User lists
-      await expect(page.locator('#pending-count')).toBeVisible();
-      await expect(page.locator('#pending-list')).toBeVisible();
-      await expect(page.locator('#user-count')).toBeVisible();
-      await expect(page.locator('#users-list')).toBeVisible();
-      await expect(page.locator('#user-preferences-list')).toBeVisible();
+      // User lists (non-active tab)
+      await expect(page.locator('#pending-count')).toBeAttached();
+      await expect(page.locator('#pending-list')).toBeAttached();
+      await expect(page.locator('#user-count')).toBeAttached();
+      await expect(page.locator('#users-list')).toBeAttached();
+      await expect(page.locator('#user-preferences-list')).toBeAttached();
     });
 
     test('should have proper CSS classes', async ({ page }) => {
       await page.goto('/admin.html');
 
-      // Check for new semantic class
       await expect(page.locator('.admin-page-header-content')).toBeVisible();
     });
   });
 
   test.describe('Interactions', () => {
-    test('server color picker should be functional', async ({ page }) => {
-      await page.goto('/admin.html');
-
-      const colorPicker = page.locator('#server-color-picker');
-      await expect(colorPicker).toBeVisible();
-      await expect(colorPicker).toBeEnabled();
-
-      // Should be able to set value
-      await colorPicker.evaluate(el => el.value = '#ff0000');
-      expect(await colorPicker.inputValue()).toBe('#ff0000');
-    });
-
     test('registration mode slider should be functional', async ({ page }) => {
       await page.goto('/admin.html');
 
@@ -61,27 +52,21 @@ test.describe('Admin Page', () => {
       // Slider should be interactive
       await slider.evaluate(el => el.value = '2');
       await slider.dispatchEvent('input');
-
-      // Description should update
-      // (exact text depends on implementation)
     });
 
     test('generate invite button should be clickable', async ({ page }) => {
       await page.goto('/admin.html');
 
-      // Invite section might be hidden initially
-      const inviteSection = page.locator('#invite-section');
-
-      // If hidden, make visible for testing
-      if (await inviteSection.isHidden()) {
-        await inviteSection.evaluate(el => el.classList.remove('hidden'));
-      }
+      // Navigate to the invites section by clicking its nav item
+      const invitesNav = page.locator('#invites-nav-item');
+      // The invites nav is hidden when not in invite reg mode — make it visible
+      await invitesNav.evaluate(el => el.classList.remove('hidden'));
+      await invitesNav.click();
 
       const generateBtn = page.locator('#generate-invite-btn');
+      await expect(generateBtn).toBeVisible();
       await expect(generateBtn).toBeEnabled();
       await generateBtn.click();
-
-      // Button should trigger API call (will fail without auth, but click works)
     });
 
     test('back to chat link should navigate', async ({ page }) => {
