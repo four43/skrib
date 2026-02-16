@@ -102,7 +102,7 @@ async def get_theme_manifest(theme_id: str):
     """Get a theme's manifest.
 
     Args:
-        theme_id: ID of the theme (e.g., 'com.four43.theme-default')
+        theme_id: ID of the theme (e.g., 'four43.theme-default')
 
     Returns:
         ThemeInfo: Theme manifest data
@@ -116,7 +116,7 @@ async def get_theme_file(theme_id: str, file_path: str):
     Serve a theme file (CSS, images, etc.).
 
     Args:
-        theme_id: ID of the theme (e.g., 'com.four43.theme-default')
+        theme_id: ID of the theme (e.g., 'four43.theme-default')
         file_path: Path to file relative to theme directory
 
     Returns:
@@ -184,7 +184,7 @@ async def get_theme_css(theme_id: str):
     Convenience endpoint to get combined theme CSS.
 
     Args:
-        theme_id: ID of the theme (e.g., 'com.four43.theme-default')
+        theme_id: ID of the theme (e.g., 'four43.theme-default')
 
     Returns:
         Combined CSS from all files listed in the theme's manifest

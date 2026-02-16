@@ -42,6 +42,7 @@ class RoomTypeChatPlugin(Plugin):
     """
 
     def __init__(self):
+        super().__init__()
         # Wire up the DB provider for services module
         services_module.init_db_provider(self.get_plugin_db)
         # Inject ChatRoom into routes module (so it uses the same services instance)
@@ -49,7 +50,7 @@ class RoomTypeChatPlugin(Plugin):
 
     @property
     def id(self) -> str:
-        return "com.four43.room-type-chat"
+        return "four43.room-type-chat"
 
     @property
     def name(self) -> str:

@@ -59,6 +59,6 @@ def get_system_status() -> Dict:
     """Get system status."""
     return {
         'registration_mode': get_registration_mode(),
-        'default_theme': get_setting('default_theme', 'com.four43.theme-default'),
+        'default_theme': get_setting('default_theme', 'four43.theme-default'),
         'name': get_setting('server_name', 'My Server'),
     }

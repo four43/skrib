@@ -40,6 +40,7 @@ class MessageReactionsPlugin(Plugin):
     """
 
     def __init__(self):
+        super().__init__()
         # Wire up the DB provider for the database module
         db_module.init_db_provider(self.get_plugin_db)
         # Inject into routes and ws_handlers copies of the db module
@@ -51,7 +52,7 @@ class MessageReactionsPlugin(Plugin):
     @property
     def id(self) -> str:
         """Full plugin ID matching manifest."""
-        return "com.four43.message-reactions"
+        return "four43.message-reactions"
 
     @property
     def name(self) -> str:
@@ -95,10 +96,10 @@ class MessageReactionsPlugin(Plugin):
         """Return frontend JavaScript and CSS files."""
         return {
             "scripts": [
-                "/api/plugins/com.four43.message-reactions/file/frontend/plugin.js"
+                "/api/plugins/four43.message-reactions/file/frontend/plugin.js"
             ],
             "styles": [
-                "/api/plugins/com.four43.message-reactions/file/frontend/plugin.css"
+                "/api/plugins/four43.message-reactions/file/frontend/plugin.css"
             ],
             "config": {
                 "common_emojis": ['👍', '❤️', '😂', '😮', '😢', '🎉', '🚀', '👀']

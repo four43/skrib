@@ -18,13 +18,14 @@ class ChatTypingPlugin(Plugin):
     """
 
     def __init__(self):
+        super().__init__()
         # Track who's typing in which room (ephemeral, no DB)
         # room_id -> {username: last_typing_time}
         self.typing_state = {}
 
     @property
     def name(self) -> str:
-        return "com.four43.chat-typing"
+        return "four43.chat-typing"
 
     @property
     def version(self) -> str:
@@ -34,13 +35,13 @@ class ChatTypingPlugin(Plugin):
         """Register the typing namespace handler."""
 
         async def handle_typing(bus, ws, username, msg):
-            """Handle com.four43.chat-typing:* messages from clients."""
+            """Handle four43.chat-typing:* messages from clients."""
             action = msg["type"].split(":", 1)[1]  # Get action after namespace
             room_id = msg.get("room_id")
 
             if not room_id:
                 await ws.send_json({
-                    "type": "com.four43.chat-typing:error",
+                    "type": "four43.chat-typing:error",
                     "message": "room_id required"
                 })
                 return
@@ -56,10 +57,10 @@ class ChatTypingPlugin(Plugin):
                 await bus.broadcast_to_room(
                     room_id,
                     {
-                        "type": "com.four43.chat-typing:user_typing",
+                        "type": "four43.chat-typing:user_typing",
                         "room_id": room_id,
                         "username": username,
-                        "typing": True
+                        "is_typing": True
                     },
                     exclude_user=username
                 )
@@ -75,24 +76,24 @@ class ChatTypingPlugin(Plugin):
                 await bus.broadcast_to_room(
                     room_id,
                     {
-                        "type": "com.four43.chat-typing:user_typing",
+                        "type": "four43.chat-typing:user_typing",
                         "room_id": room_id,
                         "username": username,
-                        "typing": False
+                        "is_typing": False
                     },
                     exclude_user=username
                 )
 
         # Register the namespace
-        bus.register_namespace("com.four43.chat-typing", handle_typing)
+        bus.register_namespace("four43.chat-typing", handle_typing)
 
     def get_frontend_assets(self) -> dict:
         """Return frontend assets."""
         return {
-            "scripts": ["/api/plugins/com.four43.chat-typing/file/frontend/plugin.js"],
+            "scripts": ["/api/plugins/four43.chat-typing/file/frontend/plugin.js"],
             "styles": [],
             "config": {
-                "plugin_id": "com.four43.chat-typing",
-                "namespace": "com.four43.chat-typing"
+                "plugin_id": "four43.chat-typing",
+                "namespace": "four43.chat-typing"
             }
         }

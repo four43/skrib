@@ -1,15 +1,14 @@
 {
-  "id": "com.four43.chat-typing",
-  "name": "Typing Indicators",
+  "id": "four43.message-reactions",
+  "name": "Message Reactions",
   "version": "1.0.0",
-  "description": "Shows real-time typing indicators for users in chat rooms",
+  "description": "Add emoji reactions to messages with real-time updates",
   "author": "Four43",
   "entry": "frontend/plugin.js",
   "permissions": [
     "websocket.send",
     "websocket.receive",
-    "dom.input",
-    "dom.message-area"
+    "dom.messages"
   ],
   "hooks": {
     "onRoomChange": true

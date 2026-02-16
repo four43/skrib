@@ -1,5 +1,5 @@
 {
-  "id": "com.four43.room-type-chat",
+  "id": "four43.room-type-chat",
   "name": "Chat Room",
   "version": "1.0.0",
   "description": "Provides text-based chat rooms. Handles message storage, delivery, and history.",

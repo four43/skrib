@@ -1,5 +1,5 @@
 /**
- * Typing Indicators Plugin (com.four43.chat-typing)
+ * Typing Indicators Plugin (four43.chat-typing)
  *
  * Displays real-time typing indicators showing which users are currently typing in the active room.
  */
@@ -25,7 +25,7 @@ const TypingPlugin = (function() {
         console.log('[Typing Plugin] Initializing...');
 
         // Register the namespace handler
-        ctx.registerHandler('com.four43.chat-typing', handleTypingMessage);
+        ctx.registerHandler('four43.chat-typing', handleTypingMessage);
 
         // Set up message input listeners (DOM might not be ready yet, retry if needed)
         let retryCount = 0;
@@ -112,7 +112,7 @@ const TypingPlugin = (function() {
         // Debounce: only send if enough time has passed
         if (now - lastTypingSent >= TYPING_DEBOUNCE_MS) {
             context.sendMessage({
-                type: 'com.four43.chat-typing:start',
+                type: 'four43.chat-typing:start',
                 room_id: room
             });
             lastTypingSent = now;
@@ -135,7 +135,7 @@ const TypingPlugin = (function() {
         typingTimer = null;
 
         context.sendMessage({
-            type: 'com.four43.chat-typing:stop',
+            type: 'four43.chat-typing:stop',
             room_id: room
         });
     }
@@ -144,7 +144,7 @@ const TypingPlugin = (function() {
      * Update the typing indicator display
      */
     function updateTypingIndicator() {
-        const indicator = document.getElementById('com-four43-chat-typing-indicator');
+        const indicator = document.getElementById('four43-chat-typing-indicator');
 
         if (!indicator) {
             console.error('[Typing Plugin] Typing indicator element not found in DOM');
@@ -192,7 +192,7 @@ const TypingPlugin = (function() {
      */
     function createTypingIndicatorUI() {
         // Check if already exists
-        if (document.getElementById('com-four43-chat-typing-indicator')) {
+        if (document.getElementById('four43-chat-typing-indicator')) {
             console.log('[Typing Plugin] Typing indicator already exists');
             return;
         }
@@ -209,7 +209,7 @@ const TypingPlugin = (function() {
 
         // Create the typing indicator element with namespaced ID
         const indicator = document.createElement('div');
-        indicator.id = 'com-four43-chat-typing-indicator';
+        indicator.id = 'four43-chat-typing-indicator';
         indicator.className = 'typing-indicator';
         indicator.style.display = 'none';
         indicator.style.padding = '8px 16px';
@@ -249,6 +249,6 @@ if (typeof module !== 'undefined' && module.exports) {
 
 // Export for plugin loader using full namespaced ID to prevent collisions
 // The loader capitalizes the first character of the ID and adds "Plugin"
-// For ID "com.four43.chat-typing" → "Com.four43.chat-typingPlugin"
+// For ID "four43.chat-typing" → "Four43.chat-typingPlugin"
 // @ts-ignore - Dynamic property access is intentional for namespacing
-window["Com.four43.chat-typingPlugin"] = TypingPlugin;
+window["Four43.chat-typingPlugin"] = TypingPlugin;

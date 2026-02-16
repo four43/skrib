@@ -20,7 +20,7 @@ To install manually:
 ```bash
 # Extract plugin to plugins directory
 cd backend/plugins
-unzip com.four43.message-reactions.zip
+unzip four43.message-reactions.zip
 
 # Restart backend (database tables are created automatically)
 ```
@@ -197,7 +197,7 @@ const COMMON_EMOJIS = ['👍', '❤️', '😂', '😮', '😢', '🎉', '🚀',
 Modify `frontend/plugin.css` to match your theme:
 
 ```css
-.com-four43-reaction-btn {
+.four43-reaction-btn {
     /* Customize appearance */
     border-radius: 16px;
     padding: 4px 10px;

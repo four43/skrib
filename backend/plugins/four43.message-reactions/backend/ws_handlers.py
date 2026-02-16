@@ -9,7 +9,7 @@ db = importlib.util.module_from_spec(_db_spec)
 _db_spec.loader.exec_module(db)
 
 # Plugin namespace - must match plugin ID
-PLUGIN_NAMESPACE = "com.four43.message-reactions"
+PLUGIN_NAMESPACE = "four43.message-reactions"
 
 
 async def handle_reaction(bus, ws, username, msg):

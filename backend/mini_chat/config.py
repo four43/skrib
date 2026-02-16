@@ -1,11 +1,12 @@
 """Configuration settings for the application."""
+import os
 from pathlib import Path
 
 # Project root (backend directory)
 BACKEND_ROOT = Path(__file__).parent.parent
 
 # Database configuration
-DB_DIR = BACKEND_ROOT.parent / "data"
+DB_DIR = Path(os.getenv('MINICHAT_DATA_DIR', str(BACKEND_ROOT.parent / "data")))
 DB_FILE = str(DB_DIR / "chat.db")
 DB_TIMEOUT = 30.0  # 30 seconds timeout for busy database
 

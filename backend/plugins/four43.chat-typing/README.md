@@ -12,7 +12,7 @@ Shows real-time typing indicators when users are typing in chat rooms.
 
 ## Installation
 
-1. Extract the plugin to `backend/plugins/com.four43.chat-typing/`
+1. Extract the plugin to `backend/plugins/four43.chat-typing/`
 2. Restart the backend server
 3. The plugin will be automatically loaded by the frontend
 

@@ -1,5 +1,5 @@
 /**
- * Chat Room Type Plugin (com.four43.room-type-chat)
+ * Chat Room Type Plugin (four43.room-type-chat)
  *
  * Handles message rendering, history loading, sending, read receipts,
  * and notifications for chat room types.
@@ -11,7 +11,7 @@ const RoomTypeChatPlugin = (function() {
     // Plugin-owned state
     let lastMessageId = 0;
     let isLoadingMessages = false;
-    const PLUGIN_ID = 'com.four43.room-type-chat';
+    const PLUGIN_ID = 'four43.room-type-chat';
     let PLUGIN_API = '';
 
     const USE_NOTIFICATION_TAG = false;
@@ -301,5 +301,5 @@ if (typeof module !== 'undefined' && module.exports) {
 }
 
 // Export for plugin loader
-// ID "com.four43.room-type-chat" -> "Com.four43.room-type-chatPlugin"
-window["Com.four43.room-type-chatPlugin"] = RoomTypeChatPlugin;
+// ID "four43.room-type-chat" -> "Four43.room-type-chatPlugin"
+window["Four43.room-type-chatPlugin"] = RoomTypeChatPlugin;

@@ -4,10 +4,10 @@ Mini Chat uses a plugin architecture to extend functionality without modifying c
 
 ## Plugin Structure
 
-Each plugin lives in `backend/plugins/{plugin-id}/` using reverse-domain naming:
+Each plugin lives in `backend/plugins/{plugin-id}/` using GitHub-style `owner.repo` naming:
 
 ```
-backend/plugins/com.four43.example-plugin/
+backend/plugins/four43.example-plugin/
   manifest.json           # Required: metadata
   backend/
     plugin.py             # Required: Plugin subclass
@@ -26,7 +26,7 @@ The `manifest.json` declares metadata and frontend integration:
 
 ```json
 {
-  "id": "com.four43.message-reactions",
+  "id": "four43.message-reactions",
   "name": "Message Reactions",
   "version": "1.0.0",
   "description": "Add emoji reactions to messages",
@@ -51,7 +51,7 @@ from mini_chat.plugins.base import Plugin
 class MyPlugin(Plugin):
     @property
     def id(self) -> str:
-        return "com.four43.my-plugin"
+        return "four43.my-plugin"
 
     @property
     def name(self) -> str:
@@ -64,7 +64,7 @@ class MyPlugin(Plugin):
 
 **Identity** (required abstract properties):
 
-- `id` -- Reverse-domain plugin ID (must match directory name)
+- `id` -- Plugin ID in `owner.name` format (must match directory name)
 - `name` -- Short identifier
 - `version` -- Semver string
 
@@ -96,12 +96,12 @@ class MyPlugin(Plugin):
 
 ### Frontend: Registering with the Plugin Context
 
-Frontend plugins are plain scripts (not ES modules) loaded via `<script>` tag injection at runtime. A plugin exposes itself on `window` using the naming convention: plugin ID `com.four43.example` becomes `window["Com.four43.examplePlugin"]`.
+Frontend plugins are plain scripts (not ES modules) loaded via `<script>` tag injection at runtime. A plugin exposes itself on `window` using the naming convention: plugin ID `four43.example` becomes `window["Four43.examplePlugin"]`.
 
 The plugin object must have an `init(ctx)` method. The context provides:
 
 ```javascript
-window["Com.four43.myPluginPlugin"] = {
+window["Four43.myPluginPlugin"] = {
     init(ctx) {
         // ctx.registerHandler(namespace, handler)       -- register a WS namespace handler
         // ctx.registerRoomTypeHandler({...})             -- register a room type handler
@@ -120,7 +120,7 @@ There are two types of frontend handlers:
 **Namespace handlers** -- for feature plugins that operate on their own WS namespace:
 
 ```javascript
-ctx.registerHandler('com.four43.my-plugin', function(action, data, ctx) {
+ctx.registerHandler('four43.my-plugin', function(action, data, ctx) {
     if (action === 'update') { /* handle update */ }
 });
 ```
@@ -180,10 +180,10 @@ async def handle_room_action(self, bus, ws, username, msg, action):
 
 ```python
 def register_ws_namespace(self, bus):
-    bus.register_namespace("com.four43.my-plugin", self.handle_ws)
+    bus.register_namespace("four43.my-plugin", self.handle_ws)
 
 async def handle_ws(self, bus, ws, username, msg):
-    action = msg["type"].split(":", 1)[1]  # e.g., "com.four43.my-plugin:update" -> "update"
+    action = msg["type"].split(":", 1)[1]  # e.g., "four43.my-plugin:update" -> "update"
     # handle action...
 ```
 
@@ -266,7 +266,7 @@ with self.get_plugin_db() as conn:
 ### Storage Patterns
 
 - **No persistence** -- Typing indicators use in-memory dicts only
-- **Plugin-scoped DB** -- Messages are stored in `data/plugins/com.four43.room-type-chat.db`; reactions in `data/plugins/com.four43.message-reactions.db`
+- **Plugin-scoped DB** -- Messages are stored in `data/plugins/four43.room-type-chat.db`; reactions in `data/plugins/four43.message-reactions.db`
 - **Core settings table** -- Plugin enable/disable state is stored in core's `settings` table with keys like `plugin:{id}:enabled`
 
 ### Cross-Plugin Data Access
@@ -279,18 +279,18 @@ This pattern supports eventual process isolation -- these method calls would bec
 
 | Plugin | Type | Persistence | Description |
 |--------|------|-------------|-------------|
-| `com.four43.room-type-chat` | Room Type | Own DB (`messages` table) | Text messaging, read receipts, E2E encryption |
-| `com.four43.chat-typing` | Feature | None (in-memory) | Real-time typing indicators |
-| `com.four43.message-reactions` | Feature | Own DB (`message_reactions` table) | Emoji reactions with real-time sync |
+| `four43.room-type-chat` | Room Type | Own DB (`messages` table) | Text messaging, read receipts, E2E encryption |
+| `four43.chat-typing` | Feature | None (in-memory) | Real-time typing indicators |
+| `four43.message-reactions` | Feature | Own DB (`message_reactions` table) | Emoji reactions with real-time sync |
 
 ## CSS Namespacing
 
-Frontend plugins use their reverse-domain ID as CSS class prefixes to avoid collisions:
+Frontend plugins use their plugin ID as CSS class prefixes to avoid collisions:
 
 ```css
-.com-four43-reactions-container { }
-.com-four43-reaction-btn { }
-#com-four43-chat-typing-indicator { }
+.four43-reactions-container { }
+.four43-reaction-btn { }
+#four43-chat-typing-indicator { }
 ```
 
 ## Admin API

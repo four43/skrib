@@ -86,7 +86,7 @@ def init_db():
             )
         ''')
 
-        # Messages table is now managed by the chat plugin (com.four43.room-type-chat)
+        # Messages table is now managed by the chat plugin (four43.room-type-chat)
 
         # Rooms table
         conn.execute('''
@@ -165,7 +165,7 @@ def init_db():
         # Set default theme (env var override on first startup only)
         cursor = conn.execute("SELECT value FROM settings WHERE key = 'default_theme'")
         if not cursor.fetchone():
-            default_theme = os.getenv('MINICHAT_DEFAULT_THEME', 'com.four43.theme-default')
+            default_theme = os.getenv('MINICHAT_DEFAULT_THEME', 'four43.theme-default')
             conn.execute(
                 "INSERT INTO settings (key, value) VALUES ('default_theme', ?)",
                 (default_theme,)

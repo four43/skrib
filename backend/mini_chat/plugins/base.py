@@ -1,4 +1,5 @@
 """Base plugin interface for Mini Chat plugin system."""
+import logging
 import sqlite3
 import threading
 from contextlib import contextmanager
@@ -16,6 +17,13 @@ PLUGINS_DB_DIR.mkdir(parents=True, exist_ok=True)
 _plugin_local = threading.local()
 
 
+class _PluginLogFormatter(logging.Formatter):
+    """Formats log messages as [plugin_id][LEVEL] Message."""
+
+    def format(self, record: logging.LogRecord) -> str:
+        return f"[{record.name}][{record.levelname}] {record.getMessage()}"
+
+
 class Plugin(ABC):
     """Base class for all Mini Chat plugins.
 
@@ -27,6 +35,14 @@ class Plugin(ABC):
     - State Management Plugins: Store plugin-specific data
     - UI Enhancement Plugins: Frontend-only enhancements
     """
+
+    def __init__(self):
+        self.logger = logging.getLogger(f"plugin.{self.id}")
+        if not self.logger.handlers:
+            handler = logging.StreamHandler()
+            handler.setFormatter(_PluginLogFormatter())
+            self.logger.addHandler(handler)
+        self.logger.propagate = False
 
     @property
     def id(self) -> str:

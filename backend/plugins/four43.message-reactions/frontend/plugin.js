@@ -7,7 +7,7 @@
 const ReactionsPlugin = (function() {
     let context = null;
     const COMMON_EMOJIS = ['👍', '❤️', '😂', '😮', '😢', '🎉', '🚀', '👀'];
-    const PLUGIN_ID = 'com.four43.message-reactions';
+    const PLUGIN_ID = 'four43.message-reactions';
     const API_BASE = `/api/plugins/${PLUGIN_ID}/reactions`;
 
     /**
@@ -72,18 +72,18 @@ const ReactionsPlugin = (function() {
      */
     function attachReactionButton(messageElement) {
         const messageId = messageElement.dataset.messageId;
-        if (!messageId || messageElement.querySelector('.com-four43-reactions-container')) {
+        if (!messageId || messageElement.querySelector('.four43-reactions-container')) {
             return;
         }
 
         // Create reactions container
         const container = document.createElement('div');
-        container.className = 'com-four43-reactions-container';
+        container.className = 'four43-reactions-container';
         container.dataset.messageId = messageId;
 
         // Create add reaction button
         const addBtn = document.createElement('button');
-        addBtn.className = 'com-four43-reaction-add-btn';
+        addBtn.className = 'four43-reaction-add-btn';
         addBtn.textContent = '＋';
         addBtn.title = 'Add reaction';
         addBtn.onclick = (e) => {
@@ -120,17 +120,17 @@ const ReactionsPlugin = (function() {
      */
     function showEmojiPicker(messageId, button) {
         // Remove any existing picker
-        const existingPicker = document.querySelector('.com-four43-emoji-picker');
+        const existingPicker = document.querySelector('.four43-emoji-picker');
         if (existingPicker) existingPicker.remove();
 
         // Create emoji picker
         const picker = document.createElement('div');
-        picker.className = 'com-four43-emoji-picker';
+        picker.className = 'four43-emoji-picker';
 
         COMMON_EMOJIS.forEach(emoji => {
             const btn = document.createElement('button');
             btn.textContent = emoji;
-            btn.className = 'com-four43-emoji-btn';
+            btn.className = 'four43-emoji-btn';
             btn.onclick = (e) => {
                 e.stopPropagation();
                 addReaction(messageId, emoji);
@@ -197,7 +197,7 @@ const ReactionsPlugin = (function() {
      * Add reaction to UI (real-time update)
      */
     function addReactionToUI(messageId, emoji, username) {
-        const container = document.querySelector(`.com-four43-reactions-container[data-message-id="${messageId}"]`);
+        const container = document.querySelector(`.four43-reactions-container[data-message-id="${messageId}"]`);
         if (!container) return;
 
         let reactionBtn = container.querySelector(`[data-emoji="${emoji}"]`);
@@ -221,7 +221,7 @@ const ReactionsPlugin = (function() {
      * Remove reaction from UI (real-time update)
      */
     function removeReactionFromUI(messageId, emoji, username) {
-        const container = document.querySelector(`.com-four43-reactions-container[data-message-id="${messageId}"]`);
+        const container = document.querySelector(`.four43-reactions-container[data-message-id="${messageId}"]`);
         if (!container) return;
 
         const reactionBtn = container.querySelector(`[data-emoji="${emoji}"]`);
@@ -246,14 +246,14 @@ const ReactionsPlugin = (function() {
      * Update or create reaction display
      */
     function updateReactionDisplay(messageId, emoji, usernames) {
-        const container = document.querySelector(`.com-four43-reactions-container[data-message-id="${messageId}"]`);
+        const container = document.querySelector(`.four43-reactions-container[data-message-id="${messageId}"]`);
         if (!container) return;
 
         let reactionBtn = container.querySelector(`[data-emoji="${emoji}"]`);
         if (!reactionBtn) {
             // Create new reaction button
             reactionBtn = document.createElement('button');
-            reactionBtn.className = 'com-four43-reaction-btn';
+            reactionBtn.className = 'four43-reaction-btn';
             reactionBtn.dataset.emoji = emoji;
             reactionBtn.dataset.usernames = JSON.stringify(usernames);
 
@@ -272,7 +272,7 @@ const ReactionsPlugin = (function() {
             reactionBtn.onclick = () => toggleReaction(messageId, emoji);
 
             // Insert before add button
-            const addBtn = container.querySelector('.com-four43-reaction-add-btn');
+            const addBtn = container.querySelector('.four43-reaction-add-btn');
             container.insertBefore(reactionBtn, addBtn);
         } else {
             // Update existing button
@@ -302,7 +302,7 @@ const ReactionsPlugin = (function() {
     function toggleReaction(messageId, emoji) {
         const currentUser = context.currentUsername();
         const reactionBtn = document.querySelector(
-            `.com-four43-reactions-container[data-message-id="${messageId}"] [data-emoji="${emoji}"]`
+            `.four43-reactions-container[data-message-id="${messageId}"] [data-emoji="${emoji}"]`
         );
 
         if (reactionBtn) {
@@ -320,7 +320,7 @@ const ReactionsPlugin = (function() {
      */
     function onRoomChange() {
         // Close any open emoji pickers
-        const picker = document.querySelector('.com-four43-emoji-picker');
+        const picker = document.querySelector('.four43-emoji-picker');
         if (picker) picker.remove();
     }
 
@@ -333,6 +333,6 @@ const ReactionsPlugin = (function() {
 
 // Export for plugin loader using full namespaced ID to prevent collisions
 // The loader capitalizes the first character of the namespace and adds "Plugin"
-// For namespace "com.four43.message-reactions" → "Com.four43.message-reactionsPlugin"
+// For namespace "four43.message-reactions" → "Four43.message-reactionsPlugin"
 // @ts-ignore - Dynamic property access is intentional for namespacing
-window["Com.four43.message-reactionsPlugin"] = ReactionsPlugin;
+window["Four43.message-reactionsPlugin"] = ReactionsPlugin;

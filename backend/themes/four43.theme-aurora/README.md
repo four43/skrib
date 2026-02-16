@@ -17,7 +17,7 @@ Thanks!
 ## Structure
 
 ```
-com.four43.theme-default/
+four43.theme-default/
   manifest.json           # Theme metadata
   css/
     base.css             # Base styles and variables
@@ -39,7 +39,7 @@ Users can customize:
 
 ## Installation
 
-1. Extract to `backend/themes/com.four43.theme-default/`
+1. Extract to `backend/themes/four43.theme-default/`
 2. Restart backend server
 3. Theme will be available in user preferences
 
