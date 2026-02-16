@@ -13,7 +13,9 @@ dependencies = [
     "fastapi",
     "uvicorn[standard]",
     "pydantic",
-    "requests"
+    "requests",
+    "pywebpush",
+    "py-vapid",
 ]
 
 [project.optional-dependencies]

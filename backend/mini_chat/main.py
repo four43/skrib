@@ -146,6 +146,13 @@ async def read_root():
     raise HTTPException(status_code=404, detail="Frontend not found")
 
 
+# Catch-all static mount for production: serves manifest.json, sw.js, icons,
+# and HTML pages from the Vite build output. Registered last so API routes
+# and /assets take priority.
+if STATIC_DIR.exists():
+    app.mount("/", StaticFiles(directory=str(STATIC_DIR), html=True), name="static-root")
+
+
 def signal_handler(sig, frame):
     """Handle shutdown signals."""
     print("\nShutting down chat server...")

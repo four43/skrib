@@ -31,8 +31,7 @@ test.describe('App Page', () => {
       await expect(page.locator('#chat-header-name')).toBeVisible();
       await expect(page.locator('#chat-header-topic')).toBeAttached(); // empty span, hidden when no topic set
       await expect(page.locator('#messages')).toBeVisible();
-      await expect(page.locator('#message-input')).toBeVisible();
-      await expect(page.locator('#send-button')).toBeVisible();
+      // #message-input and #send-button are created dynamically by the room type plugin on room selection
     });
 
     test('modals should have correct IDs', async ({ page }) => {
@@ -75,27 +74,8 @@ test.describe('App Page', () => {
       await menuToggle.click({ force: true });
     });
 
-    test('send button should be clickable', async ({ page }) => {
-      await page.goto('/app.html');
-
-      const sendButton = page.locator('#send-button');
-      await expect(sendButton).toBeEnabled();
-
-      // Type a message
-      const messageInput = page.locator('#message-input');
-      await messageInput.fill('Test message');
-
-      // Click send (will fail without real backend, but button works)
-      await sendButton.click();
-    });
-
-    test('message input Enter key should work', async ({ page }) => {
-      await page.goto('/app.html');
-
-      const messageInput = page.locator('#message-input');
-      await messageInput.fill('Test message');
-      await messageInput.press('Enter');
-    });
+    // send button and message input are created dynamically by the room type plugin
+    // on room selection — tested in e2e tests with a running backend
 
     test('add channel button should open modal', async ({ page }) => {
       await page.goto('/app.html');
