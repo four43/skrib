@@ -57,6 +57,11 @@ const RoomTypeTodoPlugin = (function() {
     function onRoomLeft(roomId) {
         items = [];
         editingItemId = null;
+        // Restore the messages div className so other room types render correctly
+        const messagesDiv = document.getElementById('messages');
+        if (messagesDiv) {
+            messagesDiv.className = 'messages';
+        }
     }
 
     function onRoomAction(action, data) {
@@ -145,7 +150,13 @@ const RoomTypeTodoPlugin = (function() {
         });
         messagesDiv.appendChild(filterBar);
 
-        // Add item form
+        // Items list
+        const listEl = document.createElement('div');
+        listEl.className = 'todo-list';
+        listEl.id = 'todo-items-list';
+        messagesDiv.appendChild(listEl);
+
+        // Add item form (at the bottom, mirroring chat input)
         const addForm = document.createElement('div');
         addForm.className = 'todo-add-form';
         addForm.innerHTML = `
@@ -183,12 +194,6 @@ const RoomTypeTodoPlugin = (function() {
         });
 
         messagesDiv.appendChild(addForm);
-
-        // Items list
-        const listEl = document.createElement('div');
-        listEl.className = 'todo-list';
-        listEl.id = 'todo-items-list';
-        messagesDiv.appendChild(listEl);
     }
 
     function renderItems() {
@@ -223,7 +228,7 @@ const RoomTypeTodoPlugin = (function() {
             } else if (filter === 'active') {
                 empty.textContent = 'All caught up! No active tasks.';
             } else {
-                empty.textContent = 'No tasks yet. Add one above!';
+                empty.textContent = 'No tasks yet. Add one below!';
             }
             listEl.appendChild(empty);
             return;

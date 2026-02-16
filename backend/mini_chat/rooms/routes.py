@@ -102,6 +102,13 @@ async def create_dm(
     if not targets:
         raise HTTPException(status_code=400, detail="At least one other user is required")
 
+    # Validate the room type is provided by an enabled plugin
+    if request.room_type not in registry.room_type_map:
+        raise HTTPException(
+            status_code=400,
+            detail=f"Unsupported room type: '{request.room_type}'"
+        )
+
     # Verify all target users exist
     from ..database import get_db
     with get_db() as conn:
@@ -113,7 +120,7 @@ async def create_dm(
             if not cursor.fetchone():
                 raise HTTPException(status_code=404, detail=f"User not found: {target}")
 
-    room = create_or_get_dm(username, targets)
+    room = create_or_get_dm(username, targets, room_type=request.room_type)
 
     # Notify all participants
     for participant in [username] + targets:

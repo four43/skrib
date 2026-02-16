@@ -154,6 +154,16 @@ async function loadPlugins() {
             try {
                 console.log(`[Plugins] Loading plugin: ${plugin.name} (${plugin.id})`);
 
+                // Load plugin stylesheets
+                if (plugin.styles && plugin.styles.length > 0) {
+                    for (const styleUrl of plugin.styles) {
+                        const link = document.createElement('link');
+                        link.rel = 'stylesheet';
+                        link.href = styleUrl;
+                        document.head.appendChild(link);
+                    }
+                }
+
                 // Load the main entry file
                 const scriptUrl = `${API_URL}/plugins/${plugin.id}/file/${plugin.entry}`;
                 console.log(`[Plugins] Loading entry: ${scriptUrl}`);
@@ -1207,6 +1217,11 @@ function selectRoom(roomId) {
     const topicEl = document.getElementById('chat-header-topic');
     topicEl.textContent = (meta && meta.topic) ? meta.topic : '';
 
+    // Show members button and close any open panel (stale data)
+    const membersBtn = document.getElementById('members-toggle-btn');
+    if (membersBtn) membersBtn.classList.remove('hidden');
+    closeMembersPanel();
+
     document.querySelectorAll('.room-item').forEach(item => {
         item.classList.toggle('active', item.dataset.roomId === roomId);
     });
@@ -1244,7 +1259,90 @@ function hideSidebar() {
     overlay.classList.remove('show');
 }
 
+// ---------------------------------------------------------------------------
+// Members Panel
+// ---------------------------------------------------------------------------
 
+async function openMembersPanel() {
+    if (!currentRoom) return;
+
+    const panel = document.getElementById('members-panel');
+    const btn = document.getElementById('members-toggle-btn');
+
+    panel.classList.add('open');
+    if (btn) btn.classList.add('active');
+
+    const listEl = document.getElementById('members-panel-list');
+    const countEl = document.getElementById('members-panel-count');
+    listEl.innerHTML = '<p style="color: var(--text-muted); text-align: center; padding: 20px;">Loading...</p>';
+    countEl.textContent = '';
+
+    try {
+        const response = await fetch(`${API_URL}/rooms/${encodeURIComponent(currentRoom)}`, {
+            headers: { 'Authorization': `Bearer ${sessionToken}` }
+        });
+
+        if (!response.ok) {
+            listEl.innerHTML = '<p style="color: var(--text-muted); text-align: center; padding: 20px;">Failed to load members</p>';
+            return;
+        }
+
+        const roomData = await response.json();
+        const members = roomData.members || [];
+        countEl.textContent = `(${members.length})`;
+
+        listEl.innerHTML = '';
+        members.forEach(member => {
+            const memberDiv = document.createElement('div');
+            memberDiv.className = 'member-item';
+
+            const memberInfo = document.createElement('div');
+            memberInfo.className = 'member-info';
+
+            const memberName = document.createElement('span');
+            memberName.className = 'member-name';
+            memberName.style.color = member.color || 'var(--theme-color)';
+            memberName.textContent = member.nickname || member.username;
+            memberName.title = member.username;
+
+            memberInfo.appendChild(memberName);
+
+            if (member.room_role && member.room_role !== 'member') {
+                const memberRole = document.createElement('span');
+                memberRole.className = 'member-role';
+                memberRole.textContent = member.room_role;
+                memberInfo.appendChild(memberRole);
+            }
+
+            memberDiv.appendChild(memberInfo);
+            listEl.appendChild(memberDiv);
+        });
+
+        if (members.length === 0) {
+            listEl.innerHTML = '<p style="color: var(--text-muted); text-align: center; padding: 20px;">No members</p>';
+        }
+    } catch (error) {
+        console.error('[HTTP] Error loading members:', error);
+        listEl.innerHTML = '<p style="color: var(--text-muted); text-align: center; padding: 20px;">Failed to load members</p>';
+    }
+}
+
+function closeMembersPanel() {
+    const panel = document.getElementById('members-panel');
+    const btn = document.getElementById('members-toggle-btn');
+
+    panel.classList.remove('open');
+    if (btn) btn.classList.remove('active');
+}
+
+function toggleMembersPanel() {
+    const panel = document.getElementById('members-panel');
+    if (panel.classList.contains('open')) {
+        closeMembersPanel();
+    } else {
+        openMembersPanel();
+    }
+}
 
 function handleSendInput() {
     const inputEl = document.getElementById('message-input');
@@ -1382,7 +1480,7 @@ function closeDMModal() {
 function updateDMStartButton() {
     const btn = document.getElementById('dm-start-btn');
     const checked = document.querySelectorAll('#dm-user-list input[type="checkbox"]:checked');
-    btn.style.display = checked.length > 0 ? '' : 'none';
+    btn.classList.toggle('hidden', checked.length === 0);
 }
 
 async function loadDMUserList() {
@@ -1413,7 +1511,7 @@ async function loadDMUserList() {
             userList.appendChild(label);
         });
 
-        document.getElementById('dm-start-btn').style.display = 'none';
+        document.getElementById('dm-start-btn').classList.add('hidden');
     } catch (error) {
         console.error('Error loading user list:', error);
         document.getElementById('dm-user-list').innerHTML = '<p style="color: #999;">Failed to load users</p>';
@@ -1424,10 +1522,11 @@ async function startDMFromModal() {
     const checked = document.querySelectorAll('#dm-user-list input[type="checkbox"]:checked');
     const targets = Array.from(checked).map(cb => cb.value);
     if (targets.length === 0) return;
-    await startDM(targets);
+    const roomType = document.querySelector('input[name="dm-room-type"]:checked')?.value || 'chat';
+    await startDM(targets, roomType);
 }
 
-async function startDM(targetUsernames) {
+async function startDM(targetUsernames, roomType = 'chat') {
     // Accept a single string for backwards compat (e.g. from slash command)
     if (typeof targetUsernames === 'string') targetUsernames = [targetUsernames];
 
@@ -1438,7 +1537,7 @@ async function startDM(targetUsernames) {
                 'Content-Type': 'application/json',
                 'Authorization': `Bearer ${sessionToken}`
             },
-            body: JSON.stringify({ usernames: targetUsernames })
+            body: JSON.stringify({ usernames: targetUsernames, room_type: roomType })
         });
 
         const data = await response.json();
@@ -1477,6 +1576,8 @@ window.toggleSidebar = toggleSidebar;
 window.closeRoomSettings = closeRoomSettings;
 window.deleteRoomAction = deleteRoomAction;
 window.updateNotifyLevel = updateNotifyLevel;
+window.toggleMembersPanel = toggleMembersPanel;
+window.closeMembersPanel = closeMembersPanel;
 
 // Event listeners
 document.addEventListener('DOMContentLoaded', () => {
@@ -1577,5 +1678,16 @@ document.addEventListener('DOMContentLoaded', () => {
     const dmStartBtn = document.getElementById('dm-start-btn');
     if (dmStartBtn) {
         dmStartBtn.addEventListener('click', startDMFromModal);
+    }
+
+    // Members panel
+    const membersToggleBtn = document.getElementById('members-toggle-btn');
+    if (membersToggleBtn) {
+        membersToggleBtn.addEventListener('click', toggleMembersPanel);
+    }
+
+    const membersPanelCloseBtn = document.getElementById('members-panel-close-btn');
+    if (membersPanelCloseBtn) {
+        membersPanelCloseBtn.addEventListener('click', closeMembersPanel);
     }
 });

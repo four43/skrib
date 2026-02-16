@@ -109,17 +109,17 @@ def dm_display_name(members: List[str], viewer: str) -> str:
     return ", ".join(others)
 
 
-def create_or_get_dm(creator: str, other_users: List[str]) -> Dict:
+def create_or_get_dm(creator: str, other_users: List[str], room_type: str = 'chat') -> Dict:
     """Create or return existing DM room among a set of users (including the creator)."""
     all_users = sorted(set([creator] + other_users))
-    room_id = "dm|" + "|".join(all_users)
+    room_id = "dm|" + room_type + "|" + "|".join(all_users)
 
     with ROOMS_LOCK:
         if room_id in ROOMS:
             members = get_room_members(room_id)
             return {
                 'room_id': room_id,
-                'room_type': 'chat',
+                'room_type': room_type,
                 'display_name': dm_display_name(members, creator),
                 'members': members,
                 'is_dm': True,
@@ -130,7 +130,7 @@ def create_or_get_dm(creator: str, other_users: List[str]) -> Dict:
     with get_db() as conn:
         conn.execute(
             'INSERT OR IGNORE INTO rooms (room_id, room_type, created_at) VALUES (?, ?, ?)',
-            (room_id, 'chat', now)
+            (room_id, room_type, now)
         )
         for user in all_users:
             conn.execute(
@@ -140,11 +140,11 @@ def create_or_get_dm(creator: str, other_users: List[str]) -> Dict:
         conn.commit()
 
     with ROOMS_LOCK:
-        ROOMS[room_id] = 'chat'
+        ROOMS[room_id] = room_type
 
     return {
         'room_id': room_id,
-        'room_type': 'chat',
+        'room_type': room_type,
         'display_name': dm_display_name(all_users, creator),
         'members': all_users,
         'is_dm': True,

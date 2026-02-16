@@ -22,7 +22,8 @@
       "Bash(npx vite build:*)",
       "Bash(find:*)",
       "Bash(npx playwright test:*)",
-      "mcp__playwright__browser_evaluate"
+      "mcp__playwright__browser_evaluate",
+      "mcp__playwright__browser_hover"
     ]
   }
 }

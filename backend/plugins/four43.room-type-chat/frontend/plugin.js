@@ -39,7 +39,9 @@ const RoomTypeChatPlugin = (function() {
 
     async function onRoomSelected(roomId) {
         lastMessageId = 0;
-        document.getElementById('messages').innerHTML = '';
+        const messagesDiv = document.getElementById('messages');
+        messagesDiv.className = 'messages';
+        messagesDiv.innerHTML = '';
 
         createInputArea();
 

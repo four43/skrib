@@ -30,6 +30,7 @@ class CreateRoomResponse(BaseModel):
 
 class CreateDMRequest(BaseModel):
     usernames: List[str]
+    room_type: str = 'chat'
 
 
 class CreateDMResponse(BaseModel):

@@ -51,12 +51,24 @@
                 <div class="chat-header" id="chat-header">
                     <span id="chat-header-name">[No room selected]</span>
                     <span id="chat-header-topic" class="chat-header-topic"></span>
+                    <button id="members-toggle-btn" class="members-toggle-btn hidden" title="Members">&#128101;</button>
                 </div>
                 <div class="messages" id="messages">
                     <div class="empty-state">
                         <p>Select a chat room to start</p>
                         <p class="mobile-hint">Tap ☰ to see rooms</p>
                     </div>
+                </div>
+            </div>
+
+            <!-- Members Panel (inline, like sidebar) -->
+            <div id="members-panel" class="members-panel">
+                <div class="members-panel-header">
+                    <h3>Members <span id="members-panel-count" class="members-panel-count"></span></h3>
+                    <button id="members-panel-close-btn" class="close-btn">&times;</button>
+                </div>
+                <div class="members-panel-body">
+                    <div id="members-panel-list" class="members-list"></div>
                 </div>
             </div>
         </div>

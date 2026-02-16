@@ -30,7 +30,8 @@ const ReactionsPlugin = (function() {
     /**
      * Handle incoming WebSocket messages
      */
-    function handleReactionMessage(action, data, ctx) {
+    function handleReactionMessage(action, msg, ctx) {
+        const data = msg.data || msg;
         if (action === 'added') {
             addReactionToUI(data.message_id, data.emoji, data.username);
         } else if (action === 'removed') {
@@ -76,22 +77,28 @@ const ReactionsPlugin = (function() {
             return;
         }
 
-        // Create reactions container
+        // Create hover toolbar (appears on message hover, top-right overlay)
+        const hoverBar = document.createElement('div');
+        hoverBar.className = 'four43-reaction-hover-bar';
+
+        COMMON_EMOJIS.forEach(emoji => {
+            const btn = document.createElement('button');
+            btn.className = 'four43-hover-emoji-btn';
+            btn.textContent = emoji;
+            btn.title = emoji;
+            btn.onclick = (e) => {
+                e.stopPropagation();
+                addReaction(messageId, emoji);
+            };
+            hoverBar.appendChild(btn);
+        });
+
+        messageElement.appendChild(hoverBar);
+
+        // Create reactions container (shows existing reaction pills below message)
         const container = document.createElement('div');
         container.className = 'four43-reactions-container';
         container.dataset.messageId = messageId;
-
-        // Create add reaction button
-        const addBtn = document.createElement('button');
-        addBtn.className = 'four43-reaction-add-btn';
-        addBtn.textContent = '＋';
-        addBtn.title = 'Add reaction';
-        addBtn.onclick = (e) => {
-            e.stopPropagation();
-            showEmojiPicker(messageId, addBtn);
-        };
-
-        container.appendChild(addBtn);
         messageElement.appendChild(container);
 
         // Load existing reactions for this message
@@ -113,50 +120,6 @@ const ReactionsPlugin = (function() {
         } catch (error) {
             console.error('[Reactions] Failed to load:', error);
         }
-    }
-
-    /**
-     * Show emoji picker popup
-     */
-    function showEmojiPicker(messageId, button) {
-        // Remove any existing picker
-        const existingPicker = document.querySelector('.four43-emoji-picker');
-        if (existingPicker) existingPicker.remove();
-
-        // Create emoji picker
-        const picker = document.createElement('div');
-        picker.className = 'four43-emoji-picker';
-
-        COMMON_EMOJIS.forEach(emoji => {
-            const btn = document.createElement('button');
-            btn.textContent = emoji;
-            btn.className = 'four43-emoji-btn';
-            btn.onclick = (e) => {
-                e.stopPropagation();
-                addReaction(messageId, emoji);
-                picker.remove();
-            };
-            picker.appendChild(btn);
-        });
-
-        // Position near the add button
-        const rect = button.getBoundingClientRect();
-        picker.style.position = 'fixed';
-        picker.style.top = `${rect.top - 40}px`;
-        picker.style.left = `${rect.left}px`;
-
-        document.body.appendChild(picker);
-
-        // Close picker on click outside
-        setTimeout(() => {
-            const closeHandler = (e) => {
-                if (!picker.contains(e.target)) {
-                    picker.remove();
-                    document.removeEventListener('click', closeHandler);
-                }
-            };
-            document.addEventListener('click', closeHandler);
-        }, 100);
     }
 
     /**
@@ -271,9 +234,7 @@ const ReactionsPlugin = (function() {
             reactionBtn.title = usernames.join(', ');
             reactionBtn.onclick = () => toggleReaction(messageId, emoji);
 
-            // Insert before add button
-            const addBtn = container.querySelector('.four43-reaction-add-btn');
-            container.insertBefore(reactionBtn, addBtn);
+            container.appendChild(reactionBtn);
         } else {
             // Update existing button
             reactionBtn.dataset.usernames = JSON.stringify(usernames);
@@ -319,9 +280,7 @@ const ReactionsPlugin = (function() {
      * Called when room changes
      */
     function onRoomChange() {
-        // Close any open emoji pickers
-        const picker = document.querySelector('.four43-emoji-picker');
-        if (picker) picker.remove();
+        // No cleanup needed - hover bar is CSS-only visibility
     }
 
     // Public API
