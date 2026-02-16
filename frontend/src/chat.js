@@ -1239,7 +1239,10 @@ function hideSidebar() {
 
 
 function handleSendInput() {
-    const message = document.getElementById('message-input').value.trim();
+    const inputEl = document.getElementById('message-input');
+    if (!inputEl) return;
+
+    const message = inputEl.value.trim();
 
     if (!currentRoom) {
         alert('Please select a room first');
@@ -1250,7 +1253,7 @@ function handleSendInput() {
 
     // Slash command interception (core responsibility)
     if (message.startsWith('/')) {
-        document.getElementById('message-input').value = '';
+        inputEl.value = '';
         parseAndExecuteCommand(message);
         return;
     }
@@ -1265,7 +1268,7 @@ function handleSendInput() {
     // Delegate to room type handler
     const handler = getRoomTypeHandler(currentRoom);
     if (handler && handler.onSendMessage) {
-        document.getElementById('message-input').value = '';
+        inputEl.value = '';
         handler.onSendMessage(message);
     } else {
         console.warn('[Chat] No room type handler for current room');
@@ -1469,19 +1472,9 @@ window.updateNotifyLevel = updateNotifyLevel;
 
 // Event listeners
 document.addEventListener('DOMContentLoaded', () => {
-    // Message input - Enter key
-    const messageInput = document.getElementById('message-input');
-    if (messageInput) {
-        messageInput.addEventListener('keypress', (e) => {
-            if (e.key === 'Enter') handleSendInput();
-        });
-    }
-
-    // Send button
-    const sendButton = document.getElementById('send-button');
-    if (sendButton) {
-        sendButton.addEventListener('click', handleSendInput);
-    }
+    // Note: #message-input and #send-button are now created dynamically
+    // by room type plugins (e.g. chat plugin). Their event listeners are
+    // bound by the plugin when the input area is created.
 
     // Menu toggle (mobile)
     const menuToggle = document.getElementById('menu-toggle');

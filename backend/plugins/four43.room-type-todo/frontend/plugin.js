@@ -30,7 +30,6 @@ const RoomTypeTodoPlugin = (function() {
             onRoomSelected,
             onRoomLeft,
             onRoomAction,
-            onSendMessage,
         });
 
         console.log('[RoomTypeTodo] Initialized successfully');
@@ -92,19 +91,6 @@ const RoomTypeTodoPlugin = (function() {
             default:
                 console.warn('[RoomTypeTodo] Unknown room action:', action);
         }
-    }
-
-    function onSendMessage(text) {
-        // Use the message input as a quick-add for todo items
-        const currentRoom = ctx.currentRoom();
-        if (!currentRoom) return;
-
-        ctx.sendWs({
-            type: 'room:todo_add',
-            room_id: currentRoom,
-            title: text,
-            description: '',
-        });
     }
 
     // -----------------------------------------------------------------------

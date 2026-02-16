@@ -14,6 +14,7 @@ const TypingPlugin = (function() {
 
     let context = null;
     let messageInput = null;
+    let observer = null;
 
     /**
      * Plugin initialization
@@ -27,28 +28,84 @@ const TypingPlugin = (function() {
         // Register the namespace handler
         ctx.registerHandler('four43.chat-typing', handleTypingMessage);
 
-        // Set up message input listeners (DOM might not be ready yet, retry if needed)
-        let retryCount = 0;
-        const MAX_RETRIES = 50; // Max 5 seconds (50 * 100ms)
+        // The message input is now created dynamically by room type plugins.
+        // Use a MutationObserver to attach/detach when #message-input appears/disappears.
+        observeInputElement();
 
-        const setupWithRetry = () => {
-            const success = setupInputListeners();
-            if (!success) {
-                retryCount++;
-                if (retryCount >= MAX_RETRIES) {
-                    console.error('[Typing Plugin] Failed to initialize after max retries. Element #message-input not found.');
-                    return;
+        console.log('[Typing Plugin] Initialized successfully');
+    }
+
+    /**
+     * Watch for #message-input to be added/removed from the DOM.
+     * When it appears, attach typing listeners and create the indicator.
+     * When it disappears, clean up.
+     */
+    function observeInputElement() {
+        // Check if already present (in case plugin loads after chat plugin created it)
+        const existing = document.getElementById('message-input');
+        if (existing) {
+            attachToInput(existing);
+        }
+
+        observer = new MutationObserver((mutations) => {
+            for (const mutation of mutations) {
+                // Check added nodes
+                for (const node of mutation.addedNodes) {
+                    if (node.nodeType !== Node.ELEMENT_NODE) continue;
+                    const input = node.id === 'message-input' ? node : node.querySelector?.('#message-input');
+                    if (input) {
+                        attachToInput(input);
+                        return;
+                    }
                 }
-                console.log(`[Typing Plugin] DOM not ready, retrying in 100ms... (${retryCount}/${MAX_RETRIES})`);
-                setTimeout(setupWithRetry, 100);
-            } else {
-                // Create typing indicator UI element after inputs are set up
-                createTypingIndicatorUI();
-                console.log('[Typing Plugin] Initialized successfully');
+                // Check removed nodes
+                for (const node of mutation.removedNodes) {
+                    if (node.nodeType !== Node.ELEMENT_NODE) continue;
+                    const wasInput = node.id === 'message-input' || node.querySelector?.('#message-input');
+                    if (wasInput) {
+                        detachFromInput();
+                        return;
+                    }
+                }
             }
-        };
+        });
 
-        setupWithRetry();
+        observer.observe(document.body, { childList: true, subtree: true });
+    }
+
+    /**
+     * Attach typing listeners to the message input and create the indicator.
+     */
+    function attachToInput(input) {
+        // Detach from previous input if any
+        detachFromInput();
+
+        messageInput = input;
+        messageInput.addEventListener('input', handleInputEvent);
+        messageInput.addEventListener('blur', stopTyping);
+
+        createTypingIndicatorUI();
+        console.log('[Typing Plugin] Attached to message input');
+    }
+
+    /**
+     * Detach typing listeners and remove the indicator.
+     */
+    function detachFromInput() {
+        if (messageInput) {
+            messageInput.removeEventListener('input', handleInputEvent);
+            messageInput.removeEventListener('blur', stopTyping);
+            messageInput = null;
+        }
+
+        // Remove typing indicator
+        const indicator = document.getElementById('four43-chat-typing-indicator');
+        if (indicator) indicator.remove();
+
+        // Clear state
+        typingUsers.clear();
+        clearTimeout(typingTimer);
+        typingTimer = null;
     }
 
     /**
@@ -76,28 +133,6 @@ const TypingPlugin = (function() {
 
             updateTypingIndicator();
         }
-    }
-
-    /**
-     * Set up event listeners on the message input field
-     * @returns {boolean} True if setup succeeded, false if DOM not ready
-     */
-    function setupInputListeners() {
-        // Find the message input element
-        messageInput = document.getElementById('message-input');
-
-        if (!messageInput) {
-            return false;
-        }
-
-        // Listen for input events (user typing)
-        messageInput.addEventListener('input', handleInputEvent);
-
-        // Stop typing indicator when input loses focus
-        messageInput.addEventListener('blur', stopTyping);
-
-        console.log('[Typing Plugin] Input listeners attached');
-        return true;
     }
 
     /**
@@ -146,10 +181,7 @@ const TypingPlugin = (function() {
     function updateTypingIndicator() {
         const indicator = document.getElementById('four43-chat-typing-indicator');
 
-        if (!indicator) {
-            console.error('[Typing Plugin] Typing indicator element not found in DOM');
-            return;
-        }
+        if (!indicator) return;
 
         console.log(`[Typing Plugin] Updating indicator, ${typingUsers.size} users typing:`, Array.from(typingUsers));
 
@@ -202,8 +234,6 @@ const TypingPlugin = (function() {
         const inputArea = document.querySelector('.input-area');
 
         if (!chatArea || !inputArea) {
-            console.error('[Typing Plugin] Could not find chat elements to insert typing indicator');
-            console.error('[Typing Plugin] chatArea:', chatArea, 'inputArea:', inputArea);
             return;
         }
 

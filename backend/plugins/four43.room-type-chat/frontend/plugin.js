@@ -41,6 +41,8 @@ const RoomTypeChatPlugin = (function() {
         lastMessageId = 0;
         document.getElementById('messages').innerHTML = '';
 
+        createInputArea();
+
         await ctx.loadRoomKeys(roomId);
         await loadMessages(roomId);
         await markRoomAsRead(roomId, lastMessageId);
@@ -49,6 +51,52 @@ const RoomTypeChatPlugin = (function() {
 
     function onRoomLeft(roomId) {
         lastMessageId = 0;
+        removeInputArea();
+    }
+
+    // -----------------------------------------------------------------------
+    // Input area (owned by this plugin)
+    // -----------------------------------------------------------------------
+
+    function createInputArea() {
+        // Remove any existing input area first
+        removeInputArea();
+
+        const chatArea = document.querySelector('.chat-area');
+        if (!chatArea) return;
+
+        const inputArea = document.createElement('div');
+        inputArea.className = 'input-area';
+        inputArea.id = 'chat-input-area';
+
+        const input = document.createElement('input');
+        input.type = 'text';
+        input.id = 'message-input';
+        input.className = 'message-input';
+        input.placeholder = 'Type a message...';
+
+        const button = document.createElement('button');
+        button.id = 'send-button';
+        button.className = 'send-button';
+        button.textContent = 'Send';
+
+        inputArea.appendChild(input);
+        inputArea.appendChild(button);
+        chatArea.appendChild(inputArea);
+
+        // Bind event listeners — delegates through core's handleSendInput
+        // which handles slash commands and then calls onSendMessage
+        input.addEventListener('keypress', (e) => {
+            if (e.key === 'Enter') window.sendMessage();
+        });
+        button.addEventListener('click', () => window.sendMessage());
+
+        input.focus();
+    }
+
+    function removeInputArea() {
+        const existing = document.getElementById('chat-input-area');
+        if (existing) existing.remove();
     }
 
     function onRoomAction(action, data) {

@@ -97,6 +97,7 @@ html[data-theme-dark] {
     --bg-overlay-dark: rgba(0, 0, 0, 0.5);
     --border-white: rgba(255, 255, 255, 0.08);
     --color-disabled: #334155;
+    --color-info: #726acb;
     --gray-500: #94a3b8;
     --gray-600: #64748b;
     --gray-700: #64748b;
@@ -644,6 +645,11 @@ input:focus-visible {
     border-radius: 6px;
     box-shadow: none;
     transition: all 0.15s ease;
+    opacity: 0;
+}
+
+.room-item:hover .room-settings-btn {
+    opacity: 1;
 }
 
 .room-settings-btn:hover {
@@ -1962,6 +1968,20 @@ input:focus-visible {
 
     .sidebar-overlay.show {
         display: block;
+    }
+
+    .room-item {
+        flex-wrap: wrap;
+    }
+
+    .room-settings-btn {
+        opacity: 1;
+        width: 100%;
+        padding: 6px 0;
+        text-align: center;
+        background: rgba(var(--theme-rgb), 0.05);
+        border-radius: 4px;
+        font-size: 13px;
     }
 
     .chat-area {
