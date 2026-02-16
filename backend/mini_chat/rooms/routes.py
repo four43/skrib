@@ -81,7 +81,7 @@ async def create_new_room(
     add_room_member(request.room_id, username, room_role='owner')
 
     # Notify creator — new channel appears in their room list
-    await bus.notify_user(username, {"type": "room.update"})
+    await bus.notify_user(username, {"type": "room:update"})
 
     return CreateRoomResponse(status="ok", room_id=request.room_id)
 
@@ -119,7 +119,7 @@ async def create_dm(
 
     # Notify all participants
     for participant in [username] + targets:
-        await bus.notify_user(participant, {"type": "room.update"})
+        await bus.notify_user(participant, {"type": "room:update"})
 
     return CreateDMResponse(status="ok", room=RoomInfo(**room))
 
@@ -157,7 +157,7 @@ async def send_room_message(
     )
 
     await bus.broadcast_to_room(room_id, {
-        "type": "room.message",
+        "type": "room:message",
         "room_id": room_id,
         "data": message,
     })
@@ -168,7 +168,7 @@ async def send_room_message(
     for member in members:
         if member != username:
             level = get_notify_level(room_id, member)
-            event_type = "room.new_message" if level == "all" else "room.update"
+            event_type = "room:new_message" if level == "all" else "room.update"
             unread_count = get_unread_count_for_room(room_id, member)
             await bus.notify_user(member, {
                 "type": event_type,
@@ -207,7 +207,7 @@ async def delete_room_endpoint(
         raise HTTPException(status_code=404, detail="Room not found")
 
     # Notify all subscribers — room removed from list
-    await bus.notify_all_users({"type": "room.update"})
+    await bus.notify_all_users({"type": "room:update"})
 
     return DeleteRoomResponse(status="ok", room_id=room_id)
 
@@ -230,7 +230,7 @@ async def add_member(
     if result['status'] == 'already_member':
         raise HTTPException(status_code=400, detail="User is already a member")
 
-    await bus.notify_user(request.username, {"type": "room.update"})
+    await bus.notify_user(request.username, {"type": "room:update"})
 
     return {"status": "ok", "room_id": room_id, "username": request.username}
 
@@ -259,7 +259,7 @@ async def remove_member(
     if result['status'] == 'room_not_found':
         raise HTTPException(status_code=404, detail="Room not found")
 
-    await bus.notify_user(target_username, {"type": "room.update"})
+    await bus.notify_user(target_username, {"type": "room:update"})
 
     return {"status": "ok", "room_id": room_id, "username": target_username}
 
@@ -353,7 +353,7 @@ async def update_room(
             raise HTTPException(status_code=404, detail="Room not found")
 
         await bus.broadcast_to_room(room_id, {
-            "type": "room.topic",
+            "type": "room:topic",
             "room_id": room_id,
             "topic": updates.topic,
             "set_by": username,

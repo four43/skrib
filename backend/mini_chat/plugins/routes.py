@@ -10,7 +10,7 @@ from ..dependencies import require_auth
 
 router = APIRouter(prefix="/plugins", tags=["plugins"])
 
-# Directory for distributed plugins (zip-based bundles)
+# Directory for plugins (zip-based bundles)
 DISTRIBUTED_PLUGINS_DIR = Path(__file__).parent.parent.parent / "plugins"
 
 
@@ -35,14 +35,13 @@ async def get_plugins_manifest():
 # ============================================================================
 
 class DistributedPluginInfo(BaseModel):
-    """Plugin manifest information for distributed plugins."""
+    """Plugin manifest information for plugins."""
     id: str
     name: str
     version: str
     description: str
     author: str
     entry: str
-    namespace: str
     permissions: List[str]
     hooks: Dict[str, bool]
 
@@ -79,7 +78,7 @@ def load_distributed_plugin_manifest(plugin_id: str) -> DistributedPluginInfo:
 
 @router.get("/distributed", response_model=List[DistributedPluginInfo])
 async def list_distributed_plugins():
-    """List all available distributed plugins.
+    """List all available plugins.
 
     Returns:
         List[DistributedPluginInfo]: List of plugin manifests

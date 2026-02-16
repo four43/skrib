@@ -148,19 +148,19 @@ class UnifiedConnectionManager:
         try:
             msg = json.loads(raw)
         except json.JSONDecodeError:
-            await ws.send_json({"type": "system.error", "message": "Invalid JSON"})
+            await ws.send_json({"type": "system:error", "message": "Invalid JSON"})
             return
 
         msg_type = msg.get("type", "")
-        parts = msg_type.split(".", 1)
+        parts = msg_type.split(":", 1)
         if len(parts) != 2:
-            await ws.send_json({"type": "system.error", "message": f"Invalid message type: {msg_type}"})
+            await ws.send_json({"type": "system:error", "message": f"Invalid message type: {msg_type}"})
             return
 
         namespace = parts[0]
         handler = self.namespace_handlers.get(namespace)
         if not handler:
-            await ws.send_json({"type": "system.error", "message": f"Unknown namespace: {namespace}"})
+            await ws.send_json({"type": "system:error", "message": f"Unknown namespace: {namespace}"})
             return
 
         await handler(self, ws, username, msg)

@@ -3,9 +3,9 @@ import time
 import sys
 from pathlib import Path
 
-# Add mini_chat to path so we can import Plugin base class
-sys.path.insert(0, str(Path(__file__).parent.parent.parent.parent / "mini_chat"))
-from plugins.base import Plugin
+# Add parent directory to path to make mini_chat importable as a package
+sys.path.insert(0, str(Path(__file__).parent.parent.parent.parent))
+from mini_chat.plugins.base import Plugin
 
 
 class ChatTypingPlugin(Plugin):
@@ -34,13 +34,13 @@ class ChatTypingPlugin(Plugin):
         """Register the typing namespace handler."""
 
         async def handle_typing(bus, ws, username, msg):
-            """Handle com.four43.chat-typing.* messages from clients."""
-            action = msg["type"].split(".", 3)[-1]  # Get last part after namespace
+            """Handle com.four43.chat-typing:* messages from clients."""
+            action = msg["type"].split(":", 1)[1]  # Get action after namespace
             room_id = msg.get("room_id")
 
             if not room_id:
                 await ws.send_json({
-                    "type": "com.four43.chat-typing.error",
+                    "type": "com.four43.chat-typing:error",
                     "message": "room_id required"
                 })
                 return
@@ -56,7 +56,7 @@ class ChatTypingPlugin(Plugin):
                 await bus.broadcast_to_room(
                     room_id,
                     {
-                        "type": "com.four43.chat-typing.user_typing",
+                        "type": "com.four43.chat-typing:user_typing",
                         "room_id": room_id,
                         "username": username,
                         "typing": True
@@ -75,7 +75,7 @@ class ChatTypingPlugin(Plugin):
                 await bus.broadcast_to_room(
                     room_id,
                     {
-                        "type": "com.four43.chat-typing.user_typing",
+                        "type": "com.four43.chat-typing:user_typing",
                         "room_id": room_id,
                         "username": username,
                         "typing": False

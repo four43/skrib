@@ -1,0 +1,158 @@
+/**
+ * Message Reactions Plugin Styles
+ */
+
+.com-four43-reactions-container {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 4px;
+    margin-top: 6px;
+    align-items: center;
+}
+
+.com-four43-reaction-btn {
+    display: inline-flex;
+    align-items: center;
+    gap: 4px;
+    padding: 3px 8px;
+    border: 1px solid #e0e0e0;
+    border-radius: 12px;
+    background: #ffffff;
+    cursor: pointer;
+    font-size: 13px;
+    transition: all 0.15s ease;
+    user-select: none;
+}
+
+.com-four43-reaction-btn:hover {
+    background: #f5f5f5;
+    border-color: #d0d0d0;
+    transform: scale(1.05);
+}
+
+.com-four43-reaction-btn.reacted {
+    background: #e3f2fd;
+    border-color: #2196f3;
+}
+
+.com-four43-reaction-btn.reacted:hover {
+    background: #bbdefb;
+}
+
+.com-four43-reaction-btn .emoji {
+    font-size: 15px;
+    line-height: 1;
+}
+
+.com-four43-reaction-btn .count {
+    font-size: 11px;
+    font-weight: 500;
+    color: #666;
+    min-width: 12px;
+    text-align: center;
+}
+
+.com-four43-reaction-btn.reacted .count {
+    color: #1976d2;
+}
+
+.com-four43-reaction-add-btn {
+    width: 22px;
+    height: 22px;
+    border: 1px dashed #d0d0d0;
+    border-radius: 50%;
+    background: transparent;
+    cursor: pointer;
+    font-size: 14px;
+    line-height: 1;
+    color: #999;
+    transition: all 0.15s ease;
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    padding: 0;
+}
+
+.com-four43-reaction-add-btn:hover {
+    background: #f5f5f5;
+    border-color: #999;
+    border-style: solid;
+    color: #666;
+    transform: scale(1.1);
+}
+
+.com-four43-emoji-picker {
+    display: flex;
+    gap: 6px;
+    padding: 8px;
+    background: #ffffff;
+    border: 1px solid #d0d0d0;
+    border-radius: 8px;
+    box-shadow: 0 4px 12px rgba(0, 0, 0, 0.15);
+    z-index: 1000;
+}
+
+.com-four43-emoji-btn {
+    padding: 6px;
+    border: none;
+    background: transparent;
+    font-size: 22px;
+    cursor: pointer;
+    border-radius: 6px;
+    transition: all 0.15s ease;
+    line-height: 1;
+    width: 36px;
+    height: 36px;
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+}
+
+.com-four43-emoji-btn:hover {
+    background: #f0f0f0;
+    transform: scale(1.15);
+}
+
+/* Dark mode support (if your theme uses these variables) */
+@media (prefers-color-scheme: dark) {
+    .com-four43-reaction-btn {
+        background: #2a2a2a;
+        border-color: #444;
+        color: #e0e0e0;
+    }
+
+    .com-four43-reaction-btn:hover {
+        background: #333;
+        border-color: #555;
+    }
+
+    .com-four43-reaction-btn.reacted {
+        background: #1e3a5f;
+        border-color: #42a5f5;
+    }
+
+    .com-four43-reaction-btn.reacted:hover {
+        background: #2a4a73;
+    }
+
+    .com-four43-reaction-add-btn {
+        border-color: #555;
+        color: #aaa;
+    }
+
+    .com-four43-reaction-add-btn:hover {
+        background: #333;
+        border-color: #777;
+        color: #ccc;
+    }
+
+    .com-four43-emoji-picker {
+        background: #2a2a2a;
+        border-color: #444;
+        box-shadow: 0 4px 12px rgba(0, 0, 0, 0.4);
+    }
+
+    .com-four43-emoji-btn:hover {
+        background: #333;
+    }
+}

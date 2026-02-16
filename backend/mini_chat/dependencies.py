@@ -1,17 +1,21 @@
 """Shared dependencies for FastAPI endpoints."""
 import base64
 from typing import Optional
-from fastapi import Header, HTTPException
+from fastapi import HTTPException, Depends
+from fastapi.security import HTTPBearer, HTTPAuthorizationCredentials
 
 from .database import get_db
 
+# Define the security scheme - this will show up in the docs
+security = HTTPBearer(auto_error=False)
 
-def get_username_from_token(authorization: Optional[str] = Header(None)) -> Optional[str]:
-    """Extract username from Bearer token."""
-    if not authorization or not authorization.startswith('Bearer '):
+
+def get_username_from_credentials(credentials: Optional[HTTPAuthorizationCredentials]) -> Optional[str]:
+    """Extract username from Bearer token credentials."""
+    if not credentials:
         return None
 
-    token = authorization[7:]
+    token = credentials.credentials
     try:
         decoded = base64.urlsafe_b64decode(token).decode('utf-8')
         username = decoded.split(':')[0]
@@ -26,17 +30,24 @@ def get_username_from_token(authorization: Optional[str] = Header(None)) -> Opti
     return None
 
 
-def require_auth(authorization: Optional[str] = Header(None)) -> str:
+def get_username_from_token(credentials: Optional[HTTPAuthorizationCredentials] = Depends(security)) -> Optional[str]:
+    """Optional authentication - returns username if valid token provided, None otherwise."""
+    return get_username_from_credentials(credentials)
+
+
+def require_auth(credentials: HTTPAuthorizationCredentials = Depends(security)) -> str:
     """Require authentication."""
-    username = get_username_from_token(authorization)
+    username = get_username_from_credentials(credentials)
     if not username:
         raise HTTPException(status_code=401, detail="Unauthorized")
     return username
 
 
-def require_admin(authorization: Optional[str] = Header(None)) -> str:
+def require_admin(credentials: HTTPAuthorizationCredentials = Depends(security)) -> str:
     """Require admin authentication."""
-    username = require_auth(authorization)
+    username = get_username_from_credentials(credentials)
+    if not username:
+        raise HTTPException(status_code=401, detail="Unauthorized")
 
     with get_db() as conn:
         cursor = conn.execute('SELECT role FROM users WHERE username = ?', (username,))
@@ -47,9 +58,11 @@ def require_admin(authorization: Optional[str] = Header(None)) -> str:
     return username
 
 
-def require_moderator(authorization: Optional[str] = Header(None)) -> str:
+def require_moderator(credentials: HTTPAuthorizationCredentials = Depends(security)) -> str:
     """Require moderator or admin authentication."""
-    username = require_auth(authorization)
+    username = get_username_from_credentials(credentials)
+    if not username:
+        raise HTTPException(status_code=401, detail="Unauthorized")
 
     with get_db() as conn:
         cursor = conn.execute('SELECT role FROM users WHERE username = ?', (username,))

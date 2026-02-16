@@ -23,7 +23,7 @@ async def unified_ws(websocket: WebSocket, token: str | None = None):
     bus.connect(websocket, username)
 
     try:
-        await websocket.send_json({"type": "system.connected", "username": username})
+        await websocket.send_json({"type": "system:connected", "username": username})
 
         while True:
             raw = await websocket.receive_text()

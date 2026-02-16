@@ -153,8 +153,9 @@ function loadPluginScript(scriptUrl, plugin) {
             console.log(`[Plugins] Script loaded: ${plugin.name}`);
 
             // Try to find and initialize the plugin
-            // The plugin should expose itself via window[PluginName]
-            const pluginNamespace = plugin.namespace || plugin.id.split('.').pop();
+            // Plugin exposes itself using its full ID with capitalized first char + "Plugin"
+            // E.g., "com.four43.message-reactions" → window["Com.four43.message-reactionsPlugin"]
+            const pluginNamespace = plugin.id;
             const PluginClass = window[`${pluginNamespace.charAt(0).toUpperCase() + pluginNamespace.slice(1)}Plugin`];
 
             if (PluginClass && PluginClass.init) {
@@ -368,7 +369,7 @@ registerCommand('leave', async () => {
         if (response.ok) {
             // Leave the room subscription on the unified WS
             if (ws && ws.readyState === WebSocket.OPEN) {
-                ws.send(JSON.stringify({ type: 'room.leave', room_id: currentRoom }));
+                ws.send(JSON.stringify({ type: 'room:leave', room_id: currentRoom }));
             }
             currentRoom = null;
             lastMessageId = 0;
@@ -967,7 +968,7 @@ function connectWebSocket() {
         reconnectAttempts = 0;
         // Re-join current room if we're reconnecting
         if (currentRoom) {
-            ws.send(JSON.stringify({ type: 'room.join', room_id: currentRoom }));
+            ws.send(JSON.stringify({ type: 'room:join', room_id: currentRoom }));
         }
     };
 
@@ -998,14 +999,14 @@ function connectWebSocket() {
 
 function dispatchMessage(data) {
     const type = data.type || '';
-    const dotIdx = type.indexOf('.');
-    if (dotIdx === -1) {
+    const colonIdx = type.indexOf(':');
+    if (colonIdx === -1) {
         console.warn('[WS] No namespace in type:', type);
         return;
     }
 
-    const namespace = type.substring(0, dotIdx);
-    const action = type.substring(dotIdx + 1);
+    const namespace = type.substring(0, colonIdx);
+    const action = type.substring(colonIdx + 1);
 
     // Core namespaces
     if (namespace === 'system') {
@@ -1224,7 +1225,7 @@ function selectRoom(roomId) {
 
     // Leave previous room subscription on unified WS
     if (currentRoom && ws && ws.readyState === WebSocket.OPEN) {
-        ws.send(JSON.stringify({ type: 'room.leave', room_id: currentRoom }));
+        ws.send(JSON.stringify({ type: 'room:leave', room_id: currentRoom }));
     }
 
     // Switching to a different room
@@ -1254,7 +1255,7 @@ function selectRoom(roomId) {
 
     // Join new room on unified WS, load keys and message history
     if (ws && ws.readyState === WebSocket.OPEN) {
-        ws.send(JSON.stringify({ type: 'room.join', room_id: roomId }));
+        ws.send(JSON.stringify({ type: 'room:join', room_id: roomId }));
     }
     loadRoomKeys(roomId).then(() => {
         loadMessages().then(async () => {
@@ -1303,6 +1304,7 @@ async function displayMessage(msg) {
 
     const messageDiv = document.createElement('div');
     messageDiv.className = 'message';
+    messageDiv.dataset.messageId = msg.id;
 
     const date = new Date(msg.timestamp);
     const timeStr = date.toLocaleTimeString();
@@ -1439,7 +1441,7 @@ async function sendMessage() {
         }
 
         const payload = {
-            type: 'room.message',
+            type: 'room:message',
             room_id: currentRoom,
             content: content,
             content_type: contentType,
@@ -1533,7 +1535,7 @@ async function deleteRoomAction() {
             // If we were in the deleted room, clear the chat area
             if (currentRoom === roomId) {
                 if (ws && ws.readyState === WebSocket.OPEN) {
-                    ws.send(JSON.stringify({ type: 'room.leave', room_id: roomId }));
+                    ws.send(JSON.stringify({ type: 'room:leave', room_id: roomId }));
                 }
                 currentRoom = null;
                 lastMessageId = 0;

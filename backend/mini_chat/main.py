@@ -1,37 +1,36 @@
 """Main FastAPI application."""
 import signal
 import sys
-from pathlib import Path
-from fastapi import FastAPI, HTTPException
-from fastapi.responses import FileResponse
-from fastapi.middleware.cors import CORSMiddleware
-from fastapi.staticfiles import StaticFiles
 
-from .config import (
-    APP_TITLE,
-    APP_VERSION,
-    CORS_ORIGINS,
-    CORS_ALLOW_CREDENTIALS,
-    CORS_ALLOW_METHODS,
-    CORS_ALLOW_HEADERS,
-    STATIC_DIR,
-    FALLBACK_STATIC,
-)
-from .database import init_db
-from .rooms.services import load_rooms_from_db
+from fastapi import FastAPI, HTTPException
+from fastapi.middleware.cors import CORSMiddleware
+from fastapi.responses import FileResponse
+from fastapi.staticfiles import StaticFiles
 
 # Import routers
 from .auth.routes import router as auth_router
-from .rooms.routes import router as rooms_router
+from .config import (
+    APP_TITLE,
+    APP_VERSION,
+    CORS_ALLOW_CREDENTIALS,
+    CORS_ALLOW_HEADERS,
+    CORS_ALLOW_METHODS,
+    CORS_ORIGINS,
+    FALLBACK_STATIC,
+    STATIC_DIR,
+)
+from .database import init_db
 from .messages.routes import router as messages_router
-from .server.routes import router as server_router
-from .users.routes import router as preferences_router
-from .ws.routes import router as ws_router
-from .themes.routes import router as themes_router
 
 # Import plugin system
 from .plugins import registry
 from .plugins.routes import router as plugins_router
+from .rooms.routes import router as rooms_router
+from .rooms.services import load_rooms_from_db
+from .server.routes import router as server_router
+from .themes.routes import router as themes_router
+from .users.routes import router as preferences_router
+from .ws.routes import router as ws_router
 
 # Create FastAPI app
 app = FastAPI(title=APP_TITLE, version=APP_VERSION)
@@ -75,8 +74,19 @@ async def startup_event():
     # Initialize plugin system
     print("\n[Plugins] Initializing plugin system...")
 
-    # Discover and load distributed plugins
+    # Discover and load plugins
     registry.discover_plugins()
+
+    # Register plugin routes
+    for plugin in registry.get_all_plugins():
+        try:
+            router = plugin.register_routes(app)
+            if router:
+                # Namespace plugin routes under /api/plugins/{plugin.id}
+                app.include_router(router, prefix=f"/api/plugins/{plugin.id}")
+                print(f"[Plugins] Registered routes for: {plugin.name} at /api/plugins/{plugin.id}")
+        except Exception as e:
+            print(f"[Plugins] Failed to register routes for {plugin.name}: {e}")
 
     # Register plugin WebSocket namespaces
     from . import ws

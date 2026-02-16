@@ -130,7 +130,7 @@ class PluginRegistry:
 
         Scans for:
         1. Python modules in mini_chat/plugins/*.py
-        2. Distributed plugins in backend/plugins/*/backend/plugin.py
+        2. Plugins in backend/plugins/*/backend/plugin.py
 
         Args:
             plugins_dir: Directory to scan (defaults to this module's directory)
@@ -167,20 +167,20 @@ class PluginRegistry:
             except Exception as e:
                 print(f"[Plugins] Failed to load module {module_name}: {e}")
 
-        # Also scan for distributed plugins with backend components
+        # Also scan for plugins with backend components
         self._discover_distributed_plugins()
 
     def _discover_distributed_plugins(self):
-        """Discover distributed plugins with backend/plugin.py files."""
+        """Discover plugins with backend/plugin.py files."""
         from pathlib import Path
 
-        # Distributed plugins are in backend/plugins/
+        # Plugins are in backend/plugins/
         distributed_dir = Path(__file__).parent.parent.parent / "plugins"
 
         if not distributed_dir.exists():
             return
 
-        print(f"[Plugins] Discovering distributed plugins in: {distributed_dir}")
+        print(f"[Plugins] Discovering plugins in: {distributed_dir}")
 
         for plugin_dir in distributed_dir.iterdir():
             if not plugin_dir.is_dir():

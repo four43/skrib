@@ -16,6 +16,15 @@ class Plugin(ABC):
     """
 
     @property
+    def id(self) -> str:
+        """Full plugin ID (e.g., 'com.example.plugin-name').
+
+        Defaults to name for backward compatibility.
+        Override to provide full reverse-domain plugin ID.
+        """
+        return self.name
+
+    @property
     @abstractmethod
     def name(self) -> str:
         """Unique plugin identifier (e.g., 'whiteboard', 'typing')."""

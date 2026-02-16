@@ -112,7 +112,7 @@ const TypingPlugin = (function() {
         // Debounce: only send if enough time has passed
         if (now - lastTypingSent >= TYPING_DEBOUNCE_MS) {
             context.sendMessage({
-                type: 'com.four43.chat-typing.start',
+                type: 'com.four43.chat-typing:start',
                 room_id: room
             });
             lastTypingSent = now;
@@ -135,7 +135,7 @@ const TypingPlugin = (function() {
         typingTimer = null;
 
         context.sendMessage({
-            type: 'com.four43.chat-typing.stop',
+            type: 'com.four43.chat-typing:stop',
             room_id: room
         });
     }
@@ -247,5 +247,8 @@ if (typeof module !== 'undefined' && module.exports) {
     module.exports = TypingPlugin;
 }
 
-// Global export for direct script loading
-window.TypingPlugin = TypingPlugin;
+// Export for plugin loader using full namespaced ID to prevent collisions
+// The loader capitalizes the first character of the ID and adds "Plugin"
+// For ID "com.four43.chat-typing" → "Com.four43.chat-typingPlugin"
+// @ts-ignore - Dynamic property access is intentional for namespacing
+window["Com.four43.chat-typingPlugin"] = TypingPlugin;

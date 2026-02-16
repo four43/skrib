@@ -30,49 +30,49 @@ def check_room_access(room_id: str, username: str) -> str | None:
 
 
 async def handle_system(bus, ws: WebSocket, username: str, msg: dict):
-    """Handle system.* messages (ping/pong)."""
-    action = msg["type"].split(".", 1)[1]
+    """Handle system:* messages (ping/pong)."""
+    action = msg["type"].split(":", 1)[1]
 
     if action == "ping":
-        await ws.send_json({"type": "system.pong"})
+        await ws.send_json({"type": "system:pong"})
     else:
-        await ws.send_json({"type": "system.error", "message": f"Unknown system action: {action}"})
+        await ws.send_json({"type": "system:error", "message": f"Unknown system action: {action}"})
 
 
 async def handle_room(bus, ws: WebSocket, username: str, msg: dict):
-    """Handle room.* messages (join, leave, message)."""
-    action = msg["type"].split(".", 1)[1]
+    """Handle room:* messages (join, leave, message)."""
+    action = msg["type"].split(":", 1)[1]
     room_id = msg.get("room_id")
 
     if action == "join":
         if not room_id:
-            await ws.send_json({"type": "room.error", "room_id": "", "message": "room_id required"})
+            await ws.send_json({"type": "room:error", "room_id": "", "message": "room_id required"})
             return
 
         error = check_room_access(room_id, username)
         if error:
-            await ws.send_json({"type": "room.error", "room_id": room_id, "message": error})
+            await ws.send_json({"type": "room:error", "room_id": room_id, "message": error})
             return
 
         bus.join_room(ws, room_id)
-        await ws.send_json({"type": "room.joined", "room_id": room_id})
+        await ws.send_json({"type": "room:joined", "room_id": room_id})
 
     elif action == "leave":
         if not room_id:
-            await ws.send_json({"type": "room.error", "room_id": "", "message": "room_id required"})
+            await ws.send_json({"type": "room:error", "room_id": "", "message": "room_id required"})
             return
 
         bus.leave_room(ws, room_id)
-        await ws.send_json({"type": "room.left", "room_id": room_id})
+        await ws.send_json({"type": "room:left", "room_id": room_id})
 
     elif action == "message":
         if not room_id:
-            await ws.send_json({"type": "room.error", "room_id": "", "message": "room_id required"})
+            await ws.send_json({"type": "room:error", "room_id": "", "message": "room_id required"})
             return
 
         error = check_room_access(room_id, username)
         if error:
-            await ws.send_json({"type": "room.error", "room_id": room_id, "message": error})
+            await ws.send_json({"type": "room:error", "room_id": room_id, "message": error})
             return
 
         content = msg.get("content", "")
@@ -84,7 +84,7 @@ async def handle_room(bus, ws: WebSocket, username: str, msg: dict):
 
         # Broadcast to all sockets subscribed to this room
         await bus.broadcast_to_room(room_id, {
-            "type": "room.message",
+            "type": "room:message",
             "room_id": room_id,
             "data": message_data,
         })
@@ -95,7 +95,7 @@ async def handle_room(bus, ws: WebSocket, username: str, msg: dict):
         for member in members:
             if member != username:
                 level = get_notify_level(room_id, member)
-                event_type = "room.new_message" if level == "all" else "room.update"
+                event_type = "room:new_message" if level == "all" else "room:update"
                 unread_count = get_unread_count_for_room(room_id, member)
                 await bus.notify_user(member, {
                     "type": event_type,
@@ -106,7 +106,7 @@ async def handle_room(bus, ws: WebSocket, username: str, msg: dict):
                 })
 
     else:
-        await ws.send_json({"type": "room.error", "room_id": room_id or "", "message": f"Unknown room action: {action}"})
+        await ws.send_json({"type": "room:error", "room_id": room_id or "", "message": f"Unknown room action: {action}"})
 
 
 def register_core_handlers(bus):
