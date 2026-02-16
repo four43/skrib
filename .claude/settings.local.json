@@ -18,7 +18,8 @@
       "Bash(npm test:*)",
       "Bash(curl:*)",
       "Grep",
-      "mcp__playwright__browser_network_requests"
+      "mcp__playwright__browser_network_requests",
+      "Bash(npx vite build:*)"
     ]
   }
 }

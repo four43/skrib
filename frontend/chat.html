@@ -106,6 +106,10 @@
             </div>
             <div class="room-settings-body">
                 <div class="form-group">
+                    <label>Room type</label>
+                    <div id="room-type-list" class="room-type-list"></div>
+                </div>
+                <div class="form-group">
                     <label for="new-room-input">Channel name</label>
                     <input type="text" id="new-room-input" placeholder="e.g. general, my-channel"
                            pattern="[a-z0-9]+(-[a-z0-9]+)*">
@@ -125,6 +129,10 @@
                 <button id="dm-modal-close-btn" class="close-btn">&times;</button>
             </div>
             <div class="room-settings-body">
+                <div class="form-group">
+                    <label>Room type</label>
+                    <div id="dm-room-type-list" class="room-type-list"></div>
+                </div>
                 <div id="dm-user-list" class="dm-user-list"></div>
                 <button id="dm-start-btn" class="hidden">Start Conversation</button>
             </div>

@@ -15,10 +15,7 @@ let sessionToken = null;
 let currentUsername = null;
 let currentRole = null;
 let currentRoom = null;
-let lastMessageId = 0;
 let ws = null;  // Single unified WebSocket connection
-
-let isLoadingMessages = false;
 let reconnectAttempts = 0;
 let maxReconnectAttempts = 10;
 let reconnectTimeout = null;
@@ -27,13 +24,16 @@ let userNicknames = {};  // Cache of username -> nickname (null if not set)
 let serverColor = '#6366f1';  // Cached server color for theme reset
 
 let roomMeta = {};  // Cache of room_id -> { room_type, display_name, members }
-const USE_NOTIFICATION_TAG = false;  // Group notifications per room (browser may throttle)
 let privateKey = null;  // User's RSA-OAEP private key (loaded from IndexedDB)
 let roomKeys = {};  // room_id -> { epoch: CryptoKey }
 
 // Plugin system
 const pluginHandlers = {};  // namespace -> handler function
 let pluginsLoaded = false;
+let availableRoomTypes = [];  // [{room_type, name, description}] from plugins
+
+// Room type handler registry — room-type plugins register here
+const roomTypeHandlers = {};  // roomType -> handler object
 
 // ---------------------------------------------------------------------------
 // Slash command framework
@@ -97,6 +97,25 @@ window.registerPluginHandler = function(namespace, handler) {
 };
 
 /**
+ * Register a room type handler.
+ * Called by room-type plugins to handle rendering and messaging for specific room types.
+ *
+ * @param {object} config - { roomTypes: string[], onRoomSelected, onRoomLeft, onRoomAction, onSendMessage }
+ */
+window.registerRoomTypeHandler = function(config) {
+    for (const roomType of config.roomTypes) {
+        roomTypeHandlers[roomType] = config;
+        console.log(`[Plugins] Registered room type handler for: ${roomType}`);
+    }
+};
+
+function getRoomTypeHandler(roomId) {
+    const meta = roomMeta[roomId];
+    if (!meta) return null;
+    return roomTypeHandlers[meta.room_type] || null;
+}
+
+/**
  * Load plugins from the backend manifest.
  * Fetches plugin list and dynamically loads frontend scripts.
  */
@@ -115,6 +134,20 @@ async function loadPlugins() {
         const allPlugins = await response.json();
         const plugins = allPlugins.filter(p => p.enabled);
         console.log(`[Plugins] Found ${allPlugins.length} plugins (${plugins.length} enabled):`, plugins.map(p => p.name).join(', '));
+
+        // Extract available room types from plugins
+        availableRoomTypes = [];
+        for (const plugin of plugins) {
+            if (plugin.room_types && plugin.room_types.length > 0) {
+                for (const rt of plugin.room_types) {
+                    availableRoomTypes.push({
+                        room_type: rt,
+                        name: plugin.name,
+                        description: plugin.description,
+                    });
+                }
+            }
+        }
 
         // Load each enabled plugin
         for (const plugin of plugins) {
@@ -160,11 +193,32 @@ function loadPluginScript(scriptUrl, plugin) {
 
             if (PluginClass && PluginClass.init) {
                 PluginClass.init({
+                    // Existing (used by typing/reactions plugins too)
                     registerHandler: window.registerPluginHandler,
                     sendMessage: (msg) => ws?.send(JSON.stringify(msg)),
+                    sendWs: (msg) => ws?.send(JSON.stringify(msg)),
                     currentRoom: () => currentRoom,
                     currentUsername: () => currentUsername,
                     displaySystemMessage,
+                    // Room type handler registration
+                    registerRoomTypeHandler: window.registerRoomTypeHandler,
+                    // Shared state getters
+                    sessionToken: () => sessionToken,
+                    roomKeys: () => roomKeys,
+                    privateKey: () => privateKey,
+                    userColors: () => userColors,
+                    userNicknames: () => userNicknames,
+                    roomMeta: () => roomMeta,
+                    API_URL,
+                    loadRooms,
+                    loadRoomKeys,
+                    escapeHtml,
+                    getDisplayName,
+                    // Crypto functions (ES module imports, inaccessible to plain scripts)
+                    encryptMessage,
+                    decryptMessage,
+                    isEncryptedMessage,
+                    getMessageEpoch,
                 }).then(() => {
                     console.log(`[Plugins] Initialized: ${plugin.name}`);
                     resolve();
@@ -326,9 +380,10 @@ registerCommand('nick', async (args) => {
             }
             // Reload messages to reflect change
             if (currentRoom) {
-                document.getElementById('messages').innerHTML = '';
-                lastMessageId = 0;
-                await loadMessages();
+                const handler = getRoomTypeHandler(currentRoom);
+                if (handler && handler.onRoomSelected) {
+                    handler.onRoomSelected(currentRoom);
+                }
             }
         } else {
             const data = await response.json();
@@ -347,7 +402,7 @@ registerCommand('leave', async () => {
     }
 
     const meta = roomMeta[currentRoom];
-    if (meta && meta.room_type === 'dm') {
+    if (meta && meta.is_dm) {
         displaySystemMessage('You cannot leave a DM.');
         return;
     }
@@ -371,8 +426,11 @@ registerCommand('leave', async () => {
             if (ws && ws.readyState === WebSocket.OPEN) {
                 ws.send(JSON.stringify({ type: 'room:leave', room_id: currentRoom }));
             }
+            const handler = getRoomTypeHandler(currentRoom);
+            if (handler && handler.onRoomLeft) {
+                handler.onRoomLeft(currentRoom);
+            }
             currentRoom = null;
-            lastMessageId = 0;
             history.replaceState(null, '', window.location.pathname);
             document.getElementById('chat-header-name').textContent = '[No room selected]';
             document.getElementById('chat-header-topic').textContent = '';
@@ -407,7 +465,7 @@ registerCommand('kick', async (args) => {
     }
 
     const meta = roomMeta[currentRoom];
-    if (meta && meta.room_type === 'dm') {
+    if (meta && meta.is_dm) {
         displaySystemMessage('You cannot kick users from a DM.');
         return;
     }
@@ -442,7 +500,7 @@ registerCommand('topic', async (args) => {
     }
 
     const meta = roomMeta[currentRoom];
-    if (meta && meta.room_type === 'dm') {
+    if (meta && meta.is_dm) {
         displaySystemMessage('Cannot set topic on a DM.');
         return;
     }
@@ -804,8 +862,8 @@ async function loadRooms() {
             roomMeta[room.room_id] = room;
         });
 
-        const channels = data.rooms.filter(r => r.room_type === 'channel');
-        const dms = data.rooms.filter(r => r.room_type === 'dm');
+        const channels = data.rooms.filter(r => !r.is_dm);
+        const dms = data.rooms.filter(r => r.is_dm);
 
         channels.forEach(room => {
             channelList.appendChild(createRoomItem(room));
@@ -829,7 +887,7 @@ function createRoomItem(room) {
 
     const nameSpan = document.createElement('span');
     nameSpan.className = 'room-name';
-    if (room.room_type === 'dm') {
+    if (room.is_dm) {
         const parts = room.display_name.split(', ');
         nameSpan.textContent = parts.map(u => getDisplayName(u)).join(', ');
     } else {
@@ -977,23 +1035,6 @@ function handleRoomMessage(action, data) {
             loadRooms();
             break;
 
-        case 'new_message':
-            console.log('[WS] New message notification:', data);
-            loadRooms();
-            if (data.room_id !== currentRoom) {
-                showNotification(data);
-            }
-            break;
-
-        case 'message':
-            if (data.room_id === currentRoom) {
-                displayMessage(data.data);
-                if (data.data.id) {
-                    markRoomAsRead(currentRoom, data.data.id);
-                }
-            }
-            break;
-
         case 'topic':
             if (data.room_id === currentRoom) {
                 if (roomMeta[currentRoom]) {
@@ -1008,15 +1049,64 @@ function handleRoomMessage(action, data) {
             console.error(`[WS] Room error (${data.room_id}):`, data.message);
             break;
 
-        default:
-            console.warn('[WS] Unknown room action:', action);
+        default: {
+            // Delegate to room type handler (message, new_message, etc.)
+            const roomId = data.room_id;
+            const handler = roomId ? getRoomTypeHandler(roomId) : null;
+            if (handler && handler.onRoomAction) {
+                handler.onRoomAction(action, data);
+            } else {
+                console.warn('[WS] Unknown room action:', action);
+            }
+            break;
+        }
     }
+}
+
+function renderRoomTypeList(containerId, radioName) {
+    const container = document.getElementById(containerId);
+    if (!container) return;
+    container.innerHTML = '';
+
+    if (availableRoomTypes.length === 0) {
+        container.innerHTML = '<p class="form-hint">No room types available</p>';
+        return;
+    }
+
+    availableRoomTypes.forEach((rt, i) => {
+        const label = document.createElement('label');
+        label.className = 'room-type-option';
+
+        const radio = document.createElement('input');
+        radio.type = 'radio';
+        radio.name = radioName;
+        radio.value = rt.room_type;
+        if (i === 0) radio.checked = true;
+
+        const info = document.createElement('div');
+        info.className = 'room-type-info';
+
+        const name = document.createElement('span');
+        name.className = 'room-type-name';
+        name.textContent = rt.name;
+
+        const desc = document.createElement('span');
+        desc.className = 'room-type-desc';
+        desc.textContent = rt.description;
+
+        info.appendChild(name);
+        info.appendChild(desc);
+        label.appendChild(radio);
+        label.appendChild(info);
+        container.appendChild(label);
+    });
 }
 
 function openCreateRoomModal() {
     const modal = document.getElementById('create-room-modal');
     const input = document.getElementById('new-room-input');
     input.value = '';
+    renderRoomTypeList('room-type-list', 'create-room-type');
     modal.classList.add('open');
     setTimeout(() => input.focus(), 100);
 }
@@ -1047,7 +1137,10 @@ async function createRoom() {
                 'Content-Type': 'application/json',
                 'Authorization': `Bearer ${sessionToken}`
             },
-            body: JSON.stringify({ room_id: roomId })
+            body: JSON.stringify({
+                room_id: roomId,
+                room_type: document.querySelector('input[name="create-room-type"]:checked')?.value || 'chat',
+            })
         });
 
         const data = await response.json();
@@ -1074,55 +1167,6 @@ function getRoomFromHash() {
     return match ? decodeURIComponent(match[1]) : null;
 }
 
-function showNotification(data) {
-    console.log('[Notification] permission:', Notification.permission, 'hasFocus:', document.hasFocus(), 'room:', data.room_id);
-    if (Notification.permission !== 'granted') return;
-    if (document.hasFocus()) return;
-
-    const meta = roomMeta[data.room_id];
-    let roomLabel = data.room_id;
-    if (meta) {
-        roomLabel = meta.display_name;
-        if (meta.room_type === 'dm') {
-            const parts = roomLabel.split(', ');
-            roomLabel = parts.map(u => getDisplayName(u)).join(', ');
-        }
-    }
-
-    const senderName = getDisplayName(data.sender);
-    const title = data.room_type === 'dm' ? senderName : `${senderName} in ${roomLabel}`;
-    console.log('[Notification] Showing:', title);
-
-    const opts = { body: 'New message' };
-    if (USE_NOTIFICATION_TAG) {
-        opts.tag = data.room_id;
-        opts.renotify = true;
-    }
-    const notification = new Notification(title, opts);
-
-    notification.onclick = () => {
-        window.focus();
-        selectRoom(data.room_id);
-        notification.close();
-    };
-}
-
-async function markRoomAsRead(roomId, messageId) {
-    if (!messageId || messageId <= 0) return;
-    try {
-        await fetch(`${API_URL}/rooms/${encodeURIComponent(roomId)}/read`, {
-            method: 'POST',
-            headers: {
-                'Content-Type': 'application/json',
-                'Authorization': `Bearer ${sessionToken}`,
-            },
-            body: JSON.stringify({ last_read_message_id: messageId }),
-        });
-    } catch (error) {
-        console.error('[HTTP] Error marking room as read:', error);
-    }
-}
-
 function selectRoom(roomId) {
     // Don't do anything if already in this room
     if (currentRoom === roomId) {
@@ -1140,7 +1184,6 @@ function selectRoom(roomId) {
 
     // Switching to a different room
     currentRoom = roomId;
-    lastMessageId = 0;
 
     // Update URL hash
     window.location.hash = `#/r/${encodeURIComponent(roomId)}`;
@@ -1148,7 +1191,7 @@ function selectRoom(roomId) {
     // Use display_name from metadata for header
     const meta = roomMeta[roomId];
     let displayName = meta ? meta.display_name : roomId;
-    if (meta && meta.room_type === 'dm') {
+    if (meta && meta.is_dm) {
         const parts = displayName.split(', ');
         displayName = parts.map(u => getDisplayName(u)).join(', ');
     }
@@ -1160,19 +1203,16 @@ function selectRoom(roomId) {
         item.classList.toggle('active', item.dataset.roomId === roomId);
     });
 
-    // Clear messages div when switching rooms
-    document.getElementById('messages').innerHTML = '';
-
-    // Join new room on unified WS, load keys and message history
+    // Join new room on unified WS
     if (ws && ws.readyState === WebSocket.OPEN) {
         ws.send(JSON.stringify({ type: 'room:join', room_id: roomId }));
     }
-    loadRoomKeys(roomId).then(() => {
-        loadMessages().then(async () => {
-            await markRoomAsRead(roomId, lastMessageId);
-            loadRooms();
-        });
-    });
+
+    // Delegate to room type handler for content rendering
+    const handler = getRoomTypeHandler(roomId);
+    if (handler && handler.onRoomSelected) {
+        handler.onRoomSelected(roomId);
+    }
 
     // Auto-hide sidebar on mobile after selecting a room
     if (window.innerWidth <= 768) {
@@ -1198,120 +1238,7 @@ function hideSidebar() {
 
 
 
-function linkifyRoomRefs(text) {
-    return text.replace(/#\/r\/(\S+)/g, (match, room) => {
-        return `<a href="#/r/${room}" class="room-link">#/r/${room}</a>`;
-    });
-}
-
-async function displayMessage(msg) {
-    const messagesDiv = document.getElementById('messages');
-
-    // Clear empty state if present
-    if (messagesDiv.querySelector('.empty-state')) {
-        messagesDiv.innerHTML = '';
-    }
-
-    const messageDiv = document.createElement('div');
-    messageDiv.className = 'message';
-    messageDiv.dataset.messageId = msg.id;
-
-    const date = new Date(msg.timestamp);
-    const timeStr = date.toLocaleTimeString();
-
-    // Get user's color preference, default to blue
-    const userColor = userColors[msg.username] || '#1976d2';
-
-    // Decrypt if encrypted
-    let plaintext = msg.content;
-    const contentType = msg.content_type || 'text';
-
-    if (contentType === 'encrypted') {
-        // Use key_epoch from the message if available, otherwise fall back to prefix parsing
-        const epoch = msg.key_epoch !== undefined && msg.key_epoch !== null
-            ? msg.key_epoch
-            : getMessageEpoch(msg.content);
-        const epochs = roomKeys[currentRoom];
-        const key = epochs && epochs[epoch];
-        if (key) {
-            try {
-                plaintext = await decryptMessage(key, msg.content);
-            } catch (e) {
-                console.warn('[E2E] Failed to decrypt message:', e);
-                plaintext = '[encrypted message — cannot decrypt]';
-            }
-        } else {
-            plaintext = '[encrypted message — no key for this room]';
-        }
-    } else if (contentType === 'text' && isEncryptedMessage(msg.content)) {
-        // Backward compatibility: old messages with ENC: prefix but content_type='text'
-        const epoch = getMessageEpoch(msg.content);
-        const epochs = roomKeys[currentRoom];
-        const key = epochs && epochs[epoch];
-        if (key) {
-            try {
-                plaintext = await decryptMessage(key, msg.content);
-            } catch (e) {
-                console.warn('[E2E] Failed to decrypt legacy message:', e);
-                plaintext = '[encrypted message — cannot decrypt]';
-            }
-        } else {
-            plaintext = '[encrypted message — no key for this room]';
-        }
-    }
-
-    const messageBody = linkifyRoomRefs(escapeHtml(plaintext));
-    const displayName = getDisplayName(msg.username);
-
-    messageDiv.innerHTML = `
-        <div class="message-header">
-            <span class="username" style="color: ${userColor};" title="${escapeHtml(msg.username)}">${escapeHtml(displayName)}</span>
-            <span class="timestamp">${timeStr}</span>
-        </div>
-        <div class="message-text">${messageBody}</div>
-    `;
-
-    messagesDiv.appendChild(messageDiv);
-
-    // Update lastMessageId
-    if (msg.id > lastMessageId) {
-        lastMessageId = msg.id;
-    }
-
-    // Scroll to bottom
-    messagesDiv.scrollTop = messagesDiv.scrollHeight;
-}
-
-async function loadMessages() {
-    if (!currentRoom || isLoadingMessages) return;
-
-    isLoadingMessages = true;
-
-    try {
-        console.log(`[HTTP] Loading message history since=${lastMessageId}`);
-        const response = await fetch(`${API_URL}/rooms/${encodeURIComponent(currentRoom)}/messages?since=${lastMessageId}`, {
-            headers: { 'Authorization': `Bearer ${sessionToken}` }
-        });
-        const data = await response.json();
-
-        if (data.messages && data.messages.length > 0) {
-            console.log(`[HTTP] Loaded ${data.messages.length} messages from history`);
-
-            // Use displayMessage for each message (async for decryption)
-            for (const msg of data.messages) {
-                await displayMessage(msg);
-            }
-        } else {
-            console.log(`[HTTP] No message history`);
-        }
-    } catch (error) {
-        console.error('Error loading messages:', error);
-    } finally {
-        isLoadingMessages = false;
-    }
-}
-
-async function sendMessage() {
+function handleSendInput() {
     const message = document.getElementById('message-input').value.trim();
 
     if (!currentRoom) {
@@ -1321,7 +1248,7 @@ async function sendMessage() {
 
     if (!message) return;
 
-    // Slash command interception
+    // Slash command interception (core responsibility)
     if (message.startsWith('/')) {
         document.getElementById('message-input').value = '';
         parseAndExecuteCommand(message);
@@ -1335,39 +1262,13 @@ async function sendMessage() {
         return;
     }
 
-    try {
-        let content = message;
-        let contentType = 'text';
-        let keyEpoch = undefined;
-
-        // Encrypt if we have a room key
-        const epochs = roomKeys[currentRoom];
-        if (epochs) {
-            const epochNums = Object.keys(epochs).map(Number);
-            const latestEpoch = Math.max(...epochNums);
-            content = await encryptMessage(epochs[latestEpoch], message, latestEpoch);
-            contentType = 'encrypted';
-            keyEpoch = latestEpoch;
-        }
-
-        const payload = {
-            type: 'room:message',
-            room_id: currentRoom,
-            content: content,
-            content_type: contentType,
-        };
-
-        if (keyEpoch !== undefined) {
-            payload.key_epoch = keyEpoch;
-        }
-
-        ws.send(JSON.stringify(payload));
-
-        // Clear input
+    // Delegate to room type handler
+    const handler = getRoomTypeHandler(currentRoom);
+    if (handler && handler.onSendMessage) {
         document.getElementById('message-input').value = '';
-    } catch (error) {
-        console.error('Error sending message:', error);
-        alert('Failed to send message');
+        handler.onSendMessage(message);
+    } else {
+        console.warn('[Chat] No room type handler for current room');
     }
 }
 
@@ -1427,11 +1328,14 @@ async function deleteRoomAction() {
             closeRoomSettings();
             // If we were in the deleted room, clear the chat area
             if (currentRoom === roomId) {
+                const handler = getRoomTypeHandler(roomId);
+                if (handler && handler.onRoomLeft) {
+                    handler.onRoomLeft(roomId);
+                }
                 if (ws && ws.readyState === WebSocket.OPEN) {
                     ws.send(JSON.stringify({ type: 'room:leave', room_id: roomId }));
                 }
                 currentRoom = null;
-                lastMessageId = 0;
                 history.replaceState(null, '', window.location.pathname);
                 document.getElementById('chat-header-name').textContent = '[No room selected]';
             document.getElementById('chat-header-topic').textContent = '';
@@ -1454,6 +1358,7 @@ function openDMModal() {
     const modal = document.getElementById('dm-modal');
     const userList = document.getElementById('dm-user-list');
     userList.innerHTML = '<p style="color: #999;">Loading users...</p>';
+    renderRoomTypeList('dm-room-type-list', 'dm-room-type');
     modal.classList.add('open');
     loadDMUserList();
 }
@@ -1555,7 +1460,8 @@ window.createRoom = createRoom;
 window.openDMModal = openDMModal;
 window.closeDMModal = closeDMModal;
 window.startDMFromModal = startDMFromModal;
-window.sendMessage = sendMessage;
+window.sendMessage = handleSendInput;
+window.selectRoom = selectRoom;
 window.toggleSidebar = toggleSidebar;
 window.closeRoomSettings = closeRoomSettings;
 window.deleteRoomAction = deleteRoomAction;
@@ -1567,14 +1473,14 @@ document.addEventListener('DOMContentLoaded', () => {
     const messageInput = document.getElementById('message-input');
     if (messageInput) {
         messageInput.addEventListener('keypress', (e) => {
-            if (e.key === 'Enter') sendMessage();
+            if (e.key === 'Enter') handleSendInput();
         });
     }
 
     // Send button
     const sendButton = document.getElementById('send-button');
     if (sendButton) {
-        sendButton.addEventListener('click', sendMessage);
+        sendButton.addEventListener('click', handleSendInput);
     }
 
     // Menu toggle (mobile)

@@ -22,6 +22,7 @@ class PluginInfo(BaseModel):
     permissions: List[str]
     hooks: Dict[str, bool]
     enabled: bool = True
+    room_types: List[str] = []
 
 
 class PluginUpdate(BaseModel):
@@ -76,6 +77,10 @@ async def list_plugins():
             try:
                 plugin_info = load_plugin_manifest(plugin_id)
                 plugin_info.enabled = registry.is_plugin_enabled(plugin_id)
+                # Enrich with runtime data from the loaded plugin instance
+                plugin_instance = registry.get_plugin(plugin_id)
+                if plugin_instance:
+                    plugin_info.room_types = plugin_instance.room_types
                 plugins.append(plugin_info)
             except Exception as e:
                 print(f"[Plugins] Failed to load plugin {plugin_id}: {e}")

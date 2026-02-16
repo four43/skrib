@@ -105,7 +105,7 @@ def init_db():
         conn.execute('''
             CREATE TABLE IF NOT EXISTS rooms (
                 room_id TEXT PRIMARY KEY,
-                room_type TEXT NOT NULL DEFAULT 'channel',
+                room_type TEXT NOT NULL DEFAULT 'chat',
                 topic TEXT NOT NULL DEFAULT '',
                 created_at TEXT NOT NULL,
                 created_by TEXT,

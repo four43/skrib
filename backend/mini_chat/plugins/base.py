@@ -217,6 +217,28 @@ class Plugin(ABC):
         """
         pass
 
+    # Room-type action handling
+
+    async def handle_room_action(self, bus, ws, username: str, msg: dict, action: str):
+        """Handle a room-scoped WebSocket action for rooms of this type.
+
+        Called by the core room handler for any action other than join/leave.
+        Only called for rooms whose room_type is in this plugin's room_types.
+
+        Args:
+            bus: UnifiedConnectionManager instance
+            ws: The WebSocket connection
+            username: Authenticated username
+            msg: Full message dict (includes type, room_id, etc.)
+            action: The action part after "room:" (e.g., "message")
+        """
+        from fastapi import WebSocket as _WS
+        await ws.send_json({
+            "type": "room:error",
+            "room_id": msg.get("room_id", ""),
+            "message": f"Unsupported action: {action}",
+        })
+
     # Message interception
 
     def intercept_message(self, message_data: dict) -> dict | None:

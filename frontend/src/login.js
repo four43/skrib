@@ -116,6 +116,7 @@ async function login() {
 async function checkRegistrationMode() {
     try {
         const resp = await fetch(`${API_URL}/server`);
+        if (!resp.ok) throw new Error(`HTTP ${resp.status}`);
         const data = await resp.json();
         // Show register button for approval_required and open modes
         if (data.registration_mode === 'approval_required' || data.registration_mode === 'open') {
@@ -123,7 +124,9 @@ async function checkRegistrationMode() {
         }
         // For closed and invite_only, register section stays hidden
     } catch (error) {
-        console.error('Failed to check registration status:', error);
+        console.error('Server unavailable:', error);
+        showStatus('auth-status', 'Unable to connect to the server. Please try again later.', 'error');
+        document.getElementById('login-button').disabled = true;
     }
 }
 

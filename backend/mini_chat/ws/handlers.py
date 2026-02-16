@@ -1,14 +1,12 @@
 """Namespace handlers for the unified WebSocket bus."""
 from fastapi import WebSocket
 
+from ..plugins import registry
 from ..rooms.services import (
     room_exists,
+    is_dm,
     get_room_type,
     get_room_members,
-    get_room_role,
-    get_notify_level,
-    get_unread_count_for_room,
-    ChatRoom,
 )
 
 
@@ -20,8 +18,7 @@ def check_room_access(room_id: str, username: str) -> str | None:
     if not room_exists(room_id):
         return "Room not found"
 
-    room_type = get_room_type(room_id)
-    if room_type == "dm":
+    if is_dm(room_id):
         members = get_room_members(room_id)
         if username not in members:
             return "Not a member of this DM"
@@ -40,7 +37,11 @@ async def handle_system(bus, ws: WebSocket, username: str, msg: dict):
 
 
 async def handle_room(bus, ws: WebSocket, username: str, msg: dict):
-    """Handle room:* messages (join, leave, message)."""
+    """Handle room:* messages.
+
+    Core handles join/leave. All other actions are delegated to the
+    room-type plugin (looked up via the plugin registry).
+    """
     action = msg["type"].split(":", 1)[1]
     room_id = msg.get("room_id")
 
@@ -65,7 +66,8 @@ async def handle_room(bus, ws: WebSocket, username: str, msg: dict):
         bus.leave_room(ws, room_id)
         await ws.send_json({"type": "room:left", "room_id": room_id})
 
-    elif action == "message":
+    else:
+        # Delegate to room-type plugin
         if not room_id:
             await ws.send_json({"type": "room:error", "room_id": "", "message": "room_id required"})
             return
@@ -75,38 +77,16 @@ async def handle_room(bus, ws: WebSocket, username: str, msg: dict):
             await ws.send_json({"type": "room:error", "room_id": room_id, "message": error})
             return
 
-        content = msg.get("content", "")
-        content_type = msg.get("content_type", "text")
-        key_epoch = msg.get("key_epoch")
-
-        room = ChatRoom(room_id)
-        message_data = room.add_message(username, content, content_type, key_epoch)
-
-        # Broadcast to all sockets subscribed to this room
-        await bus.broadcast_to_room(room_id, {
-            "type": "room:message",
-            "room_id": room_id,
-            "data": message_data,
-        })
-
-        # Notify other members (user-scoped) for sidebar badges / notifications
         room_type = get_room_type(room_id)
-        members = get_room_members(room_id)
-        for member in members:
-            if member != username:
-                level = get_notify_level(room_id, member)
-                event_type = "room:new_message" if level == "all" else "room:update"
-                unread_count = get_unread_count_for_room(room_id, member)
-                await bus.notify_user(member, {
-                    "type": event_type,
-                    "room_id": room_id,
-                    "room_type": room_type,
-                    "sender": username,
-                    "unread_count": unread_count,
-                })
-
-    else:
-        await ws.send_json({"type": "room:error", "room_id": room_id or "", "message": f"Unknown room action: {action}"})
+        plugin = registry.get_plugin_for_room_type(room_type)
+        if plugin:
+            await plugin.handle_room_action(bus, ws, username, msg, action)
+        else:
+            await ws.send_json({
+                "type": "room:error",
+                "room_id": room_id,
+                "message": f"No plugin handles room type '{room_type}'",
+            })
 
 
 def register_core_handlers(bus):

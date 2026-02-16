@@ -8,17 +8,10 @@ from .schemas import (
     CreateRoomResponse,
     CreateDMRequest,
     CreateDMResponse,
-    SendMessageRequest,
-    SendMessageResponse,
-    MessagesResponse,
     DeleteRoomResponse,
     InviteRequest,
-    AddMemberRequest,
-    AddMemberResponse,
-    RemoveMemberResponse,
     StoreRoomKeyRequest,
     RoomKeysResponse,
-    MarkReadRequest,
     RoomDetailResponse,
     MemberInfo,
     RoomUpdateRequest,
@@ -30,6 +23,7 @@ from .services import (
     delete_room,
     ensure_room_exists,
     room_exists,
+    is_dm,
     get_room_type,
     get_room_members,
     get_room_role,
@@ -39,17 +33,14 @@ from .services import (
     remove_room_member,
     store_room_key,
     get_room_keys,
-    mark_room_read,
     set_notify_level,
-    get_notify_level,
-    get_unread_count_for_room,
     set_topic,
     get_room_info,
     set_room_role,
-    ChatRoom,
 )
 from ..ws import bus
 from ..dependencies import require_auth
+from ..plugins import registry
 
 router = APIRouter(prefix="/rooms", tags=["rooms"])
 
@@ -74,7 +65,14 @@ async def create_new_room(
             detail="Room name must be lowercase letters, numbers, and hyphens only (e.g. 'my-room')"
         )
 
-    if not create_room(request.room_id, room_type='channel', created_by=username):
+    # Validate the room type is provided by an enabled plugin
+    if request.room_type not in registry.room_type_map:
+        raise HTTPException(
+            status_code=400,
+            detail=f"Unsupported room type: '{request.room_type}'"
+        )
+
+    if not create_room(request.room_id, room_type=request.room_type, created_by=username):
         raise HTTPException(status_code=400, detail="Room already exists")
 
     # Add creator as owner
@@ -122,75 +120,6 @@ async def create_dm(
         await bus.notify_user(participant, {"type": "room:update"})
 
     return CreateDMResponse(status="ok", room=RoomInfo(**room))
-
-
-@router.get("/{room_id}/messages", response_model=MessagesResponse)
-async def get_room_messages(
-    room_id: str,
-    since: int = 0,
-    username: str = Depends(require_auth),
-):
-    """Get messages from a specific room."""
-    _check_room_access(room_id, username)
-
-    room = ChatRoom(room_id)
-    messages = room.get_messages(since)
-
-    return MessagesResponse(status="ok", messages=messages)
-
-
-@router.post("/{room_id}/messages", response_model=SendMessageResponse)
-async def send_room_message(
-    room_id: str,
-    request: SendMessageRequest,
-    username: str = Depends(require_auth)
-):
-    """Send a message to a specific room."""
-    _check_room_access(room_id, username)
-
-    room = ChatRoom(room_id)
-    message = room.add_message(
-        username,
-        request.content,
-        request.content_type,
-        request.key_epoch
-    )
-
-    await bus.broadcast_to_room(room_id, {
-        "type": "room:message",
-        "room_id": room_id,
-        "data": message,
-    })
-
-    # Notify other room members so their sidebar unread counts refresh
-    room_type = get_room_type(room_id)
-    members = get_room_members(room_id)
-    for member in members:
-        if member != username:
-            level = get_notify_level(room_id, member)
-            event_type = "room:new_message" if level == "all" else "room.update"
-            unread_count = get_unread_count_for_room(room_id, member)
-            await bus.notify_user(member, {
-                "type": event_type,
-                "room_id": room_id,
-                "room_type": room_type,
-                "sender": username,
-                "unread_count": unread_count,
-            })
-
-    return SendMessageResponse(status="ok", message=message)
-
-
-@router.post("/{room_id}/read")
-async def mark_read_endpoint(
-    room_id: str,
-    request: MarkReadRequest,
-    username: str = Depends(require_auth),
-):
-    """Mark messages in a room as read up to a given message ID."""
-    _check_room_access(room_id, username)
-    mark_room_read(room_id, username, request.last_read_message_id)
-    return {"status": "ok"}
 
 
 @router.delete("/{room_id}", response_model=DeleteRoomResponse)
@@ -242,10 +171,9 @@ async def remove_member(
     username: str = Depends(require_auth),
 ):
     """Remove a member from a room. Regular users can only remove themselves, ops can remove others."""
-    room_type = get_room_type(room_id)
-    if room_type == 'dm':
+    if is_dm(room_id):
         raise HTTPException(status_code=400, detail="Cannot leave or kick from a DM")
-    if not room_type:
+    if not room_exists(room_id):
         raise HTTPException(status_code=404, detail="Room not found")
 
     # Check permission: can always remove yourself, otherwise need op/mod/admin
@@ -335,6 +263,7 @@ async def get_room_detail(
         topic=info['topic'],
         created_by=info['created_by'],
         members=[MemberInfo(**m) for m in info['members']],
+        is_dm=info.get('is_dm', False),
     )
 
 
@@ -367,8 +296,7 @@ def _check_room_access(room_id: str, username: str):
     if not room_exists(room_id):
         ensure_room_exists(room_id)
 
-    room_type = get_room_type(room_id)
-    if room_type == 'dm':
+    if is_dm(room_id):
         members = get_room_members(room_id)
         if username not in members:
             raise HTTPException(status_code=403, detail="Not a member of this DM")

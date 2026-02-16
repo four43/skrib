@@ -4,6 +4,13 @@ A secure chat application built with FastAPI backend and Vite frontend, featurin
 
 ## Features
 
+### Security
+
+- **End-to-end Encryption (E2EE)** - for all messages, 0 knowledge server design
+- **Passwordless Authentication** - uses Passkeys(WebAuthn) for easy sign-up and usage
+  - The only info required for sign-up is a username and a compatible authenticator (e.g. phone biometrics, security key)
+- Role-based access controls
+-
 - 🔐 **WebAuthn Authentication** - No passwords, uses hardware keys/biometrics
 - 👑 **Role-Based Access** - Admin and user roles
 - ✅ **Manual Approval** - Admins approve new registrations
@@ -50,7 +57,7 @@ Build and run the entire application:
 docker-compose up --build
 ```
 
-The application will be available at http://localhost:8000
+The application will be available at <http://localhost:8000>
 
 ### Development Mode with Hot Reload
 
@@ -64,8 +71,8 @@ docker-compose up app
 docker-compose --profile dev up frontend-dev
 ```
 
-- Backend: http://localhost:8000 (auto-reloads on Python file changes)
-- Frontend dev server: http://localhost:5173 (with Hot Module Replacement)
+- Backend: <http://localhost:8000> (auto-reloads on Python file changes)
+- Frontend dev server: <http://localhost:5173> (with Hot Module Replacement)
 
 During development, the Vite dev server proxies API requests to the backend.
 
@@ -87,23 +94,24 @@ npm install
 npm run dev
 ```
 
-The Vite dev server will proxy `/api` requests to the backend at http://localhost:8000
+The Vite dev server will proxy `/api` requests to the backend at <http://localhost:8000>
 
 ## Building for Production
 
-### Build the Docker image:
+### Build the Docker image
 
 ```bash
 docker build -t mini-chat:latest .
 ```
 
 This creates a multi-stage build that:
+
 1. Builds the frontend with Vite (optimized, minified bundles)
 2. Sets up the Python backend
 3. Copies the built frontend assets into the final image
 4. FastAPI serves the static files
 
-### Build frontend locally:
+### Build frontend locally
 
 ```bash
 cd frontend
@@ -119,12 +127,14 @@ The built files will be in `frontend/dist/` and will be served by FastAPI.
 Since there are no users initially, you need to:
 
 **Option A: Register normally then promote via CLI**
+
 1. Enable registration: `docker-compose exec app python mini_chat/admin_cli.py toggle-reg`
 2. Register through web interface (get approval code)
 3. Approve yourself: `docker-compose exec app python mini_chat/admin_cli.py approve <CODE>`
 4. Make yourself admin: `docker-compose exec app python mini_chat/admin_cli.py set-admin <USERNAME>`
 
 **Option B: Use CLI interactive mode**
+
 ```bash
 docker-compose exec app python mini_chat/admin_cli.py
 
@@ -158,12 +168,14 @@ PYTHONUNBUFFERED=1
 ## API Documentation
 
 Once running, visit:
-- Swagger UI: http://localhost:8000/docs
-- ReDoc: http://localhost:8000/redoc
+
+- Swagger UI: <http://localhost:8000/docs>
+- ReDoc: <http://localhost:8000/redoc>
 
 ## Technology Stack
 
 ### Backend
+
 - **FastAPI** - Modern Python web framework
 - **SQLite** - Embedded database with WAL mode
 - **WebAuthn** - Passwordless authentication
@@ -171,6 +183,7 @@ Once running, visit:
 - **Pydantic** - Data validation
 
 ### Frontend
+
 - **Vite** - Build tool and dev server with HMR
 - **Vanilla JavaScript** - Modern ES modules, no framework overhead
 - **CSS3** - Modern styling
@@ -193,23 +206,29 @@ The SQLite database (`chat.db`) contains:
 ### Tables
 
 **users** - Approved users
+
 - username, credential_id, public_key, role, approved, approved_at, approved_by
 
 **pending_users** - Awaiting approval
+
 - username, credential_id, public_key, approval_code, registered_at
 
 **challenges** - WebAuthn challenges
+
 - challenge, type, username, timestamp
 
 **settings** - Server configuration
+
 - key, value (stores registration_enabled flag)
 
 **messages** - Chat messages
+
 - id, room_id, username, message, timestamp
 
 ### SQLite Configuration
 
 The database uses:
+
 - **WAL Mode** (Write-Ahead Logging) - Allows concurrent reads with writes
 - **30 second timeout** - Handles busy database gracefully
 - **Proper locking** - Thread-safe operations
@@ -236,6 +255,7 @@ python mini_chat/admin_cli.py status                  # Show system status
 ## Workflow
 
 ### Registration Flow
+
 1. Admin enables registration (toggle in admin panel or CLI)
 2. Friend visits the site and registers with WebAuthn
 3. They receive an approval code (e.g., `A1B2C3D4E5F6`)
@@ -245,6 +265,7 @@ python mini_chat/admin_cli.py status                  # Show system status
 7. Friend can now login!
 
 ### Daily Use
+
 - Registration stays **disabled** by default
 - Enable it briefly when friends are nearby
 - Disable immediately after they register
@@ -264,6 +285,7 @@ python mini_chat/admin_cli.py status                  # Show system status
 ## Browser Compatibility
 
 WebAuthn requires:
+
 - Chrome/Edge 67+
 - Firefox 60+
 - Safari 13+

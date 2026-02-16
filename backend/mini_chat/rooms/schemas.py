@@ -5,12 +5,13 @@ from typing import List, Literal, Optional
 
 class RoomInfo(BaseModel):
     room_id: str
-    room_type: str  # "channel" or "dm"
+    room_type: str  # "chat"
     display_name: str  # "#general" or "alice"
     topic: str = ''
     members: List[str] = []
     unread_count: int = 0
     notify_level: str = 'all'  # "all", "mentions", "muted"
+    is_dm: bool = False
 
 
 class RoomListResponse(BaseModel):
@@ -19,6 +20,7 @@ class RoomListResponse(BaseModel):
 
 class CreateRoomRequest(BaseModel):
     room_id: str
+    room_type: str = 'chat'
 
 
 class CreateRoomResponse(BaseModel):
@@ -127,6 +129,7 @@ class RoomDetailResponse(BaseModel):
     topic: str
     created_by: str | None
     members: List[MemberInfo]
+    is_dm: bool = False
 
 
 class RoomUpdateRequest(BaseModel):

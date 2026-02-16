@@ -28,11 +28,11 @@ class PluginRegistry:
             plugin: Plugin instance to register
 
         Raises:
-            ValueError: If plugin name conflicts or dependencies aren't met
+            ValueError: If plugin id conflicts or dependencies aren't met
         """
-        # Check for name conflicts
-        if plugin.name in self.plugins:
-            raise ValueError(f"Plugin '{plugin.name}' is already registered")
+        # Check for id conflicts
+        if plugin.id in self.plugins:
+            raise ValueError(f"Plugin '{plugin.id}' is already registered")
 
         # Check dependencies
         missing_deps = []
@@ -42,7 +42,7 @@ class PluginRegistry:
 
         if missing_deps:
             raise ValueError(
-                f"Plugin '{plugin.name}' has unmet dependencies: {missing_deps}"
+                f"Plugin '{plugin.id}' has unmet dependencies: {missing_deps}"
             )
 
         # Check required environment variables
@@ -53,12 +53,12 @@ class PluginRegistry:
 
         if missing_env_vars:
             raise ValueError(
-                f"Plugin '{plugin.name}' requires missing environment variables: {missing_env_vars}"
+                f"Plugin '{plugin.id}' requires missing environment variables: {missing_env_vars}"
             )
 
         # Register the plugin
-        self.plugins[plugin.name] = plugin
-        print(f"[Plugins] Registered plugin: {plugin.name} v{plugin.version}")
+        self.plugins[plugin.id] = plugin
+        print(f"[Plugins] Registered plugin: {plugin.id} v{plugin.version}")
 
         # Create plugin's database table if schema provided
         schema = plugin.get_table_schema()
@@ -68,14 +68,14 @@ class PluginRegistry:
                 with get_db() as conn:
                     conn.execute(schema)
                     conn.commit()
-                print(f"[Plugins]   - Created table: plugin_{plugin.name}")
+                print(f"[Plugins]   - Created table: plugin_{plugin.name}")  # table name uses short name
             except Exception as e:
-                print(f"[Plugins]   - Warning: Failed to create table for {plugin.name}: {e}")
+                print(f"[Plugins]   - Warning: Failed to create table for {plugin.id}: {e}")
 
         # Register room types
         for room_type in plugin.room_types:
             if room_type in self.room_type_map:
-                existing_plugin = self.room_type_map[room_type].name
+                existing_plugin = self.room_type_map[room_type].id
                 raise ValueError(
                     f"Room type '{room_type}' already registered by plugin '{existing_plugin}'"
                 )
@@ -89,9 +89,9 @@ class PluginRegistry:
             self.capability_map[capability].append(plugin)
             print(f"[Plugins]   - Provides capability: {capability}")
 
-    def get_plugin(self, name: str) -> Optional[Plugin]:
-        """Get a plugin by name."""
-        return self.plugins.get(name)
+    def get_plugin(self, plugin_id: str) -> Optional[Plugin]:
+        """Get a plugin by its full ID."""
+        return self.plugins.get(plugin_id)
 
     def get_plugin_for_room_type(self, room_type: str) -> Optional[Plugin]:
         """Get the plugin that handles a specific room type."""

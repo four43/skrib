@@ -7,8 +7,8 @@ Real-time chat app with WebAuthn/Passkey auth. FastAPI backend, vanilla JS front
 Read these files on demand when working on specific areas:
 
 - **Backend API & structure**: `backend/README.md`
-- **Frontend architecture**: `frontend/README.md`
-- **WebAuthn testing**: `docs/playwright-webauthn-testing.md`
+- **Frontend Web App architecture**: `frontend/README.md`
+  - **WebAuthn testing via Playwright**: `docs/playwright-webauthn-testing.md`
 - **Feature planning**: `docs/planning-feature-list.md`
 - **E2E encryption design**: `docs/end-to-end-encryption.md`
 
@@ -24,6 +24,8 @@ backend/mini_chat/       # FastAPI app
   database.py            # SQLite + WAL mode
   dependencies.py        # Auth middleware
   main.py                # App entry & router registration
+
+data/                    # SQLite database files, clear these as needed for testing
 
 frontend/src/            # Vanilla JS (Vite build)
   chat.js                # Main chat (WebSocket, rooms, DMs, messages)
@@ -44,9 +46,10 @@ frontend/src/            # Vanilla JS (Vite build)
 
 ## Room Types
 
-- **Channels**: `room_type='channel'`, names must be lowercase + hyphens (regex `^[a-z0-9]+(-[a-z0-9]+)*$`), displayed with `#` prefix
-- **DMs**: `room_type='dm'`, auto-generated `room_id` as `dm|user_a|user_b` (pipe-delimited, sorted), membership tracked in `room_users` table
-- `GET /rooms` returns channels (where user is a member) and DMs (where user is a member), with `display_name` field
+- `GET /rooms` returns rooms (where user is a member), with `display_name` field
+- There is no differentiation between DMs and Rooms
+- Plugins handle the functionality of each different room type. They can register a room type, and users can
+  collaborate in there.
 
 ## Unified WebSocket Bus
 

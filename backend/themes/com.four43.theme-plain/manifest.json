@@ -1,0 +1,49 @@
+{
+  "id": "com.four43.theme-plain",
+  "name": "PLain Base Theme",
+  "version": "1.0.0",
+  "description": "Default dark theme for Mini Chat",
+  "author": "Four43",
+  "type": "theme",
+  "variants": [
+    {
+      "id": "dark",
+      "name": "Dark",
+      "default": true
+    },
+    {
+      "id": "light",
+      "name": "Light"
+    }
+  ],
+  "assets": {
+  },
+  "customization": {
+    "colors": {
+      "primary": {
+        "type": "color",
+        "default": "#6366f1",
+        "description": "Primary accent color"
+      },
+      "background": {
+        "type": "color",
+        "default": "#1e1e2e",
+        "description": "Main background color"
+      }
+    },
+    "fonts": {
+      "family": {
+        "type": "select",
+        "options": ["system-ui", "Inter", "Roboto", "Arial"],
+        "default": "system-ui",
+        "description": "Font family"
+      },
+      "size": {
+        "type": "select",
+        "options": ["small", "medium", "large"],
+        "default": "medium",
+        "description": "Base font size"
+      }
+    }
+  }
+}

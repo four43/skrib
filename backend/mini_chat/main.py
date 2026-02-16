@@ -84,25 +84,25 @@ async def startup_event():
             if router:
                 # Namespace plugin routes under /api/plugins/{plugin.id}
                 app.include_router(router, prefix=f"/api/plugins/{plugin.id}")
-                print(f"[Plugins] Registered routes for: {plugin.name} at /api/plugins/{plugin.id}")
+                print(f"[Plugins] Registered routes for: {plugin.id} at /api/plugins/{plugin.id}")
         except Exception as e:
-            print(f"[Plugins] Failed to register routes for {plugin.name}: {e}")
+            print(f"[Plugins] Failed to register routes for {plugin.id}: {e}")
 
     # Register plugin WebSocket namespaces
     from . import ws
     for plugin in registry.get_all_plugins():
         try:
             plugin.register_ws_namespace(ws.bus)
-            print(f"[Plugins] Registered WebSocket namespace for: {plugin.name}")
+            print(f"[Plugins] Registered WebSocket namespace for: {plugin.id}")
         except Exception as e:
-            print(f"[Plugins] Failed to register WS namespace for {plugin.name}: {e}")
+            print(f"[Plugins] Failed to register WS namespace for {plugin.id}: {e}")
 
     # Call on_startup for all plugins
     for plugin in registry.get_all_plugins():
         try:
             await plugin.on_startup()
         except Exception as e:
-            print(f"[Plugins] Error in on_startup for {plugin.name}: {e}")
+            print(f"[Plugins] Error in on_startup for {plugin.id}: {e}")
 
     all_info = registry.get_all_plugin_info()
     enabled = sum(1 for p in all_info if p['enabled'])
@@ -119,7 +119,7 @@ async def shutdown_event():
         try:
             await plugin.on_shutdown()
         except Exception as e:
-            print(f"[Plugins] Error in on_shutdown for {plugin.name}: {e}")
+            print(f"[Plugins] Error in on_shutdown for {plugin.id}: {e}")
 
 
 # Register API routers

@@ -87,14 +87,14 @@ async function initializeRoomSettings() {
         // Update page title
         const pageTitle = document.getElementById('room-settings-title');
         if (pageTitle) {
-            const displayName = currentRoom.room_type === 'channel' ? `#${currentRoom.room_id}` : currentRoom.room_id;
+            const displayName = !currentRoom.is_dm ? `#${currentRoom.room_id}` : currentRoom.room_id;
             pageTitle.textContent = `${displayName} Settings`;
         }
 
         // Display room name
         const roomNameDisplay = document.getElementById('room-name-display');
         if (roomNameDisplay) {
-            const displayName = currentRoom.room_type === 'channel' ? `#${currentRoom.room_id}` : currentRoom.room_id;
+            const displayName = !currentRoom.is_dm ? `#${currentRoom.room_id}` : currentRoom.room_id;
             roomNameDisplay.textContent = displayName;
         }
 
@@ -181,7 +181,7 @@ function displayMembers(members) {
             actionsDiv.className = 'member-actions';
 
             // Only show role buttons for channels
-            if (currentRoom.room_type === 'channel') {
+            if (!currentRoom.is_dm) {
                 if (member.room_role !== 'owner') {
                     const opBtn = document.createElement('button');
                     opBtn.className = 'btn-ghost';
@@ -211,7 +211,7 @@ function canManageMember(member) {
     if (currentRole === 'admin') return true;
 
     // For channels, owner and ops can manage regular members
-    if (currentRoom.room_type === 'channel') {
+    if (!currentRoom.is_dm) {
         if (userRole === 'owner') {
             return member.room_role !== 'owner'; // Owner can manage everyone except themselves
         }
@@ -332,7 +332,7 @@ function updateDangerZone() {
 
     // Show danger zone for admins, or room owners/ops for channels
     const canDelete = currentRole === 'admin' ||
-                     (currentRoom.room_type === 'channel' && (userRole === 'owner' || userRole === 'op'));
+                     (!currentRoom.is_dm && (userRole === 'owner' || userRole === 'op'));
 
     if (canDelete) {
         dangerZone.classList.remove('hidden');

@@ -13,66 +13,14 @@ ROOMS_LOCK = threading.Lock()
 CHANNEL_NAME_RE = re.compile(r'^[a-z0-9]+(-[a-z0-9]+)*$')
 
 
+def is_dm(room_id: str) -> bool:
+    """Check if a room is a DM by its room_id prefix."""
+    return room_id.startswith('dm|')
+
+
 def validate_channel_name(name: str) -> bool:
     """Validate a channel name: lowercase alphanumeric and hyphens only."""
     return bool(CHANNEL_NAME_RE.match(name))
-
-
-class ChatRoom:
-    """Chat room that uses SQLite for message storage."""
-
-    def __init__(self, room_id: str):
-        self.room_id = room_id
-
-    def add_message(
-        self,
-        username: str,
-        content: str,
-        content_type: str = 'text',
-        key_epoch: Optional[int] = None
-    ) -> Dict:
-        """Add a message to the room."""
-        timestamp = datetime.now().isoformat()
-
-        with get_db() as conn:
-            cursor = conn.execute('''
-                INSERT INTO messages (room_id, username, content, content_type, key_epoch, timestamp)
-                VALUES (?, ?, ?, ?, ?, ?)
-            ''', (self.room_id, username, content, content_type, key_epoch, timestamp))
-            message_id = cursor.lastrowid
-            conn.commit()
-
-        return {
-            'id': message_id,
-            'username': username,
-            'content': content,
-            'content_type': content_type,
-            'key_epoch': key_epoch,
-            'timestamp': timestamp
-        }
-
-    def get_messages(self, since: int = 0) -> List[Dict]:
-        """Get messages since a certain ID."""
-        with get_db() as conn:
-            cursor = conn.execute('''
-                SELECT id, username, content, content_type, key_epoch, timestamp
-                FROM messages
-                WHERE room_id = ? AND id > ?
-                ORDER BY id
-            ''', (self.room_id, since))
-
-            messages = []
-            for row in cursor:
-                messages.append({
-                    'id': row['id'],
-                    'username': row['username'],
-                    'content': row['content'],
-                    'content_type': row['content_type'],
-                    'key_epoch': row['key_epoch'],
-                    'timestamp': row['timestamp']
-                })
-
-            return messages
 
 
 def load_rooms_from_db():
@@ -94,56 +42,42 @@ def load_rooms_from_db():
             room_id = row['room_id']
             conn.execute(
                 'INSERT INTO rooms (room_id, room_type, created_at) VALUES (?, ?, ?)',
-                (room_id, 'channel', now)
+                (room_id, 'chat', now)
             )
             with ROOMS_LOCK:
-                ROOMS[room_id] = 'channel'
+                ROOMS[room_id] = 'chat'
         conn.commit()
 
 
 def get_user_rooms(username: str) -> List[Dict]:
-    """Get rooms visible to a user: channels and DMs they're a member of."""
+    """Get rooms visible to a user: all rooms they're a member of."""
     unread_counts = get_unread_counts(username)
 
     with get_db() as conn:
-        # Get channels where user is a member
         cursor = conn.execute('''
             SELECT r.room_id, r.room_type, r.topic, rm.notify_level
             FROM rooms r
             JOIN room_users rm ON r.room_id = rm.room_id
-            WHERE r.deleted = 0 AND r.room_type = 'channel' AND rm.username = ?
+            WHERE r.deleted = 0 AND rm.username = ?
         ''', (username,))
         rooms = []
         for row in cursor:
-            rooms.append({
-                'room_id': row['room_id'],
-                'room_type': 'channel',
-                'display_name': f"#{row['room_id']}",
-                'topic': row['topic'],
-                'members': [],
-                'unread_count': unread_counts.get(row['room_id'], 0),
-                'notify_level': row['notify_level'],
-            })
-
-        # Get DMs where user is a member
-        cursor = conn.execute('''
-            SELECT r.room_id, r.room_type, rm.notify_level
-            FROM rooms r
-            JOIN room_users rm ON r.room_id = rm.room_id
-            WHERE r.deleted = 0 AND r.room_type = 'dm' AND rm.username = ?
-        ''', (username,))
-
-        for row in cursor:
             room_id = row['room_id']
-            members = get_room_members(room_id)
+            if is_dm(room_id):
+                members = get_room_members(room_id)
+                display_name = dm_display_name(members, username)
+            else:
+                members = []
+                display_name = f"#{room_id}"
             rooms.append({
                 'room_id': room_id,
-                'room_type': 'dm',
-                'display_name': dm_display_name(members, username),
-                'topic': '',
+                'room_type': row['room_type'],
+                'display_name': display_name,
+                'topic': row['topic'] or '',
                 'members': members,
                 'unread_count': unread_counts.get(room_id, 0),
                 'notify_level': row['notify_level'],
+                'is_dm': is_dm(room_id),
             })
 
         return rooms
@@ -165,7 +99,7 @@ def get_all_rooms() -> List[str]:
         return list(ROOMS.keys())
 
 
-def create_room(room_id: str, room_type: str = 'channel', created_by: str = None) -> bool:
+def create_room(room_id: str, room_type: str = 'chat', created_by: str = None) -> bool:
     """Create a new room."""
     with ROOMS_LOCK:
         if room_id in ROOMS:
@@ -200,9 +134,10 @@ def create_or_get_dm(creator: str, other_users: List[str]) -> Dict:
             members = get_room_members(room_id)
             return {
                 'room_id': room_id,
-                'room_type': 'dm',
+                'room_type': 'chat',
                 'display_name': dm_display_name(members, creator),
                 'members': members,
+                'is_dm': True,
             }
 
     # Create new DM room
@@ -210,7 +145,7 @@ def create_or_get_dm(creator: str, other_users: List[str]) -> Dict:
     with get_db() as conn:
         conn.execute(
             'INSERT OR IGNORE INTO rooms (room_id, room_type, created_at) VALUES (?, ?, ?)',
-            (room_id, 'dm', now)
+            (room_id, 'chat', now)
         )
         for user in all_users:
             conn.execute(
@@ -220,13 +155,14 @@ def create_or_get_dm(creator: str, other_users: List[str]) -> Dict:
         conn.commit()
 
     with ROOMS_LOCK:
-        ROOMS[room_id] = 'dm'
+        ROOMS[room_id] = 'chat'
 
     return {
         'room_id': room_id,
-        'room_type': 'dm',
+        'room_type': 'chat',
         'display_name': dm_display_name(all_users, creator),
         'members': all_users,
+        'is_dm': True,
     }
 
 
@@ -263,7 +199,7 @@ def ensure_room_exists(room_id: str):
     """Ensure a room exists, create if it doesn't."""
     with ROOMS_LOCK:
         if room_id not in ROOMS:
-            ROOMS[room_id] = 'channel'
+            ROOMS[room_id] = 'chat'
 
 
 def add_room_member(room_id: str, username: str, room_role: str = 'member') -> Dict:
@@ -444,6 +380,7 @@ def get_room_info(room_id: str) -> Optional[Dict]:
         'topic': room['topic'],
         'created_by': room['created_by'],
         'members': members,
+        'is_dm': is_dm(room['room_id']),
     }
 
 
