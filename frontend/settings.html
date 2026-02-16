@@ -7,41 +7,159 @@
     <link rel="stylesheet" href="/src/style.css">
 </head>
 <body>
-    <div class="admin-page">
+    <div class="settings-page">
         <div class="admin-page-header">
             <div class="admin-page-header-content">
-                <h1>⚙ Settings</h1>
+                <h1>Settings</h1>
             </div>
             <a href="/chat.html" class="admin-back-btn">Back to Chat</a>
         </div>
 
-        <div class="admin-page-content">
-            <div class="admin-section">
-                <div class="settings-user-identity">
-                    <span id="current-user" class="settings-username"></span>
-                    <span id="admin-badge" class="admin-badge hidden">ADMIN</span>
-                </div>
-                <button id="settings-logout-btn" class="settings-logout-btn">Logout</button>
-            </div>
+        <div class="settings-layout">
+            <nav class="settings-nav">
+                <button class="settings-nav-item active" data-section="account">
+                    <span class="settings-nav-icon">&#x1F464;</span>
+                    Account
+                </button>
+                <button class="settings-nav-item" data-section="appearance">
+                    <span class="settings-nav-icon">&#x1F3A8;</span>
+                    Appearance
+                </button>
+            </nav>
 
-            <div class="admin-section">
-                <h3>Display Preferences</h3>
-                <div class="preference-item">
-                    <label for="user-nickname">Nickname:</label>
-                    <div class="preference-input-group">
-                        <input type="text" id="user-nickname" class="preference-input" maxlength="32" placeholder="Enter nickname...">
-                        <button id="clear-nickname-btn" class="theme-reset-btn">Clear</button>
+            <div class="settings-content">
+                <!-- Account Section -->
+                <div class="settings-panel-section active" id="section-account">
+                    <div class="admin-section">
+                        <h3>Profile</h3>
+                        <div class="settings-user-identity">
+                            <span id="current-user" class="settings-username"></span>
+                            <span id="admin-badge" class="admin-badge hidden">ADMIN</span>
+                        </div>
+                        <div class="preference-item">
+                            <label for="user-nickname">Nickname:</label>
+                            <div class="preference-input-group">
+                                <input type="text" id="user-nickname" class="preference-input" maxlength="32" placeholder="Enter nickname...">
+                                <button id="clear-nickname-btn" class="theme-reset-btn">Clear</button>
+                            </div>
+                        </div>
+                    </div>
+
+                    <div class="admin-section">
+                        <h3>Session</h3>
+                        <button id="settings-logout-btn" class="settings-logout-btn">Logout</button>
                     </div>
                 </div>
-                <div class="preference-item">
-                    <label for="user-color">Your username color:</label>
-                    <input type="color" id="user-color" value="#1976d2">
-                </div>
-                <div class="preference-item">
-                    <label for="user-theme-color">Theme color:</label>
-                    <div class="preference-input-group">
-                        <input type="color" id="user-theme-color" value="#6366f1">
-                        <button id="reset-theme-color-btn" class="theme-reset-btn">Reset</button>
+
+                <!-- Appearance Section -->
+                <div class="settings-panel-section" id="section-appearance">
+                    <div class="admin-section">
+                        <h3>Your Color</h3>
+                        <div class="preference-item">
+                            <label for="user-color">Username color:</label>
+                            <input type="color" id="user-color" value="#1976d2">
+                        </div>
+                    </div>
+
+                    <div class="admin-section">
+                        <h3>Theme</h3>
+                        <div id="theme-list" class="theme-list">
+                            <!-- Theme cards populated by JS -->
+                        </div>
+                    </div>
+
+                    <div class="admin-section">
+                        <h3>Theme Customization</h3>
+                        <div class="preference-item">
+                            <label for="user-theme-color">Accent color override:</label>
+                            <div class="preference-input-group">
+                                <input type="color" id="user-theme-color" value="#6366f1">
+                                <button id="reset-theme-color-btn" class="theme-reset-btn">Reset</button>
+                            </div>
+                        </div>
+                    </div>
+
+                    <div class="admin-section">
+                        <h3>Preview</h3>
+                        <div id="theme-preview" class="theme-preview">
+                            <div class="preview-section">
+                                <div class="preview-label">Colors</div>
+                                <div class="preview-swatches">
+                                    <div class="preview-swatch preview-swatch-primary"><span>Primary</span></div>
+                                    <div class="preview-swatch preview-swatch-primary-dark"><span>Dark</span></div>
+                                    <div class="preview-swatch preview-swatch-success"><span>Success</span></div>
+                                    <div class="preview-swatch preview-swatch-error"><span>Error</span></div>
+                                    <div class="preview-swatch preview-swatch-warning"><span>Warning</span></div>
+                                </div>
+                            </div>
+
+                            <div class="preview-section">
+                                <div class="preview-label">Typography</div>
+                                <div class="preview-typography">
+                                    <h3 style="margin:0 0 4px">Heading Text</h3>
+                                    <p style="margin:0 0 4px; color: var(--text-secondary)">Secondary body text for descriptions and labels.</p>
+                                    <p style="margin:0; color: var(--text-muted); font-size: 12px">Muted text for timestamps and metadata.</p>
+                                </div>
+                            </div>
+
+                            <div class="preview-section">
+                                <div class="preview-label">Buttons</div>
+                                <div class="preview-buttons">
+                                    <button class="preview-btn" type="button">Primary</button>
+                                    <button class="preview-btn approve-btn" type="button">Success</button>
+                                    <button class="preview-btn reject-btn" type="button">Danger</button>
+                                    <button class="preview-btn" type="button" disabled>Disabled</button>
+                                </div>
+                            </div>
+
+                            <div class="preview-section">
+                                <div class="preview-label">Form Input</div>
+                                <input type="text" class="preview-input" placeholder="Type something..." readonly>
+                            </div>
+
+                            <div class="preview-section">
+                                <div class="preview-label">Chat Messages</div>
+                                <div class="preview-messages">
+                                    <div class="message">
+                                        <div class="message-header">
+                                            <span class="username">alice</span>
+                                            <span class="timestamp">12:34 PM</span>
+                                        </div>
+                                        <div class="message-text">Hey, have you seen the new theme?</div>
+                                    </div>
+                                    <div class="message">
+                                        <div class="message-header">
+                                            <span class="username" style="color: var(--color-success)">bob</span>
+                                            <span class="timestamp">12:35 PM</span>
+                                        </div>
+                                        <div class="message-text">Looks great! Love the colors.</div>
+                                    </div>
+                                    <div class="system-message">
+                                        <span class="system-message-text">alice set the topic to "Theme testing"</span>
+                                    </div>
+                                </div>
+                            </div>
+
+                            <div class="preview-section">
+                                <div class="preview-label">Status Messages</div>
+                                <div class="preview-statuses">
+                                    <div class="status success">Registration successful!</div>
+                                    <div class="status error">Connection lost. Retrying...</div>
+                                    <div class="status info">New update available.</div>
+                                </div>
+                            </div>
+
+                            <div class="preview-section">
+                                <div class="preview-label">Badges & Tags</div>
+                                <div class="preview-badges">
+                                    <span class="admin-badge" style="background: rgba(var(--theme-rgb), 0.85); display:inline-block">ADMIN</span>
+                                    <span class="user-role admin" style="display:inline-block">ADMIN</span>
+                                    <span class="user-role moderator" style="display:inline-block">MOD</span>
+                                    <span class="user-role user" style="display:inline-block">USER</span>
+                                    <span class="unread-badge" style="display:inline-block">3</span>
+                                </div>
+                            </div>
+                        </div>
                     </div>
                 </div>
             </div>

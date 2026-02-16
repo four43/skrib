@@ -1253,6 +1253,93 @@ input:focus-visible {
     box-shadow: none;
 }
 
+/* ═══════════════════════════════════════════
+   Settings Page Layout
+   ═══════════════════════════════════════════ */
+
+.settings-page {
+    max-width: 960px;
+    margin: 0 auto;
+    min-height: 100vh;
+    background: rgba(255, 255, 255, 0.45);
+    backdrop-filter: blur(var(--blur-xl));
+    -webkit-backdrop-filter: blur(var(--blur-xl));
+    border-left: 1px solid rgba(255, 255, 255, 0.5);
+    border-right: 1px solid rgba(255, 255, 255, 0.5);
+    box-shadow: 0 0 60px -12px rgba(var(--theme-rgb), 0.1);
+    display: flex;
+    flex-direction: column;
+}
+
+.settings-layout {
+    display: flex;
+    flex: 1;
+    min-height: 0;
+}
+
+.settings-nav {
+    width: 200px;
+    flex-shrink: 0;
+    border-right: 1px solid rgba(var(--theme-rgb), 0.08);
+    background: rgba(255, 255, 255, 0.3);
+    padding: 12px 8px;
+    display: flex;
+    flex-direction: column;
+    gap: 4px;
+}
+
+.settings-nav-item {
+    width: 100%;
+    display: flex;
+    align-items: center;
+    gap: 10px;
+    padding: 10px 14px;
+    margin: 0;
+    border: none;
+    border-radius: 8px;
+    background: none;
+    color: var(--text-secondary);
+    font-size: 14px;
+    font-weight: 500;
+    cursor: pointer;
+    text-align: left;
+    box-shadow: none;
+    transition: background 0.15s ease, color 0.15s ease;
+}
+
+.settings-nav-item:hover {
+    background: rgba(var(--theme-rgb), 0.06);
+    color: var(--theme-color-dark);
+    transform: none;
+    box-shadow: none;
+}
+
+.settings-nav-item.active {
+    background: rgba(var(--theme-rgb), 0.12);
+    color: var(--theme-color-dark);
+    font-weight: 600;
+}
+
+.settings-nav-icon {
+    font-size: 16px;
+    line-height: 1;
+    flex-shrink: 0;
+}
+
+.settings-content {
+    flex: 1;
+    min-width: 0;
+    overflow-y: auto;
+}
+
+.settings-panel-section {
+    display: none;
+}
+
+.settings-panel-section.active {
+    display: block;
+}
+
 /* Settings Page - now uses admin-page classes */
 
 .settings-section {
@@ -1332,6 +1419,216 @@ input:focus-visible {
     color: var(--theme-color-dark);
     transform: none;
     box-shadow: none;
+}
+
+/* ═══════════════════════════════════════════
+   Theme Picker
+   ═══════════════════════════════════════════ */
+
+.theme-list {
+    display: flex;
+    flex-direction: column;
+    gap: 8px;
+}
+
+.theme-card {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    padding: 14px 16px;
+    border-radius: 10px;
+    border: 1px solid rgba(var(--theme-rgb), 0.08);
+    background: rgba(255, 255, 255, 0.5);
+    cursor: pointer;
+    transition: all 0.2s ease;
+}
+
+.theme-card:hover {
+    border-color: rgba(var(--theme-rgb), 0.2);
+    background: rgba(255, 255, 255, 0.7);
+}
+
+.theme-card.active {
+    border-color: var(--theme-color);
+    background: rgba(var(--theme-rgb), 0.06);
+    box-shadow: 0 0 0 2px rgba(var(--theme-rgb), 0.15);
+}
+
+.theme-card-info {
+    flex: 1;
+    min-width: 0;
+}
+
+.theme-card-name {
+    font-weight: 700;
+    font-size: 14px;
+    color: var(--text-primary);
+    margin-bottom: 2px;
+}
+
+.theme-card-meta {
+    font-size: 12px;
+    color: var(--text-muted);
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+}
+
+.theme-card-status {
+    flex-shrink: 0;
+    margin-left: 12px;
+}
+
+.theme-active-badge {
+    display: inline-block;
+    padding: 4px 10px;
+    border-radius: 6px;
+    font-size: 11px;
+    font-weight: 700;
+    letter-spacing: 0.3px;
+    background: rgba(var(--theme-rgb), 0.12);
+    color: var(--theme-color-dark);
+    border: 1px solid rgba(var(--theme-rgb), 0.2);
+}
+
+.theme-select-btn {
+    width: auto;
+    padding: 6px 14px;
+    margin: 0;
+    background: var(--theme-color);
+    color: var(--text-inverse);
+    border: none;
+    border-radius: 6px;
+    font-size: 12px;
+    font-weight: 600;
+    cursor: pointer;
+    box-shadow: 0 1px 4px rgba(var(--theme-rgb), 0.2);
+}
+
+.theme-select-btn:hover {
+    background: var(--theme-color-dark);
+    transform: none;
+}
+
+/* ═══════════════════════════════════════════
+   Theme Preview
+   ═══════════════════════════════════════════ */
+
+.theme-preview {
+    display: flex;
+    flex-direction: column;
+    gap: 16px;
+}
+
+.preview-section {
+    padding: 14px 16px;
+    border-radius: 10px;
+    background: rgba(255, 255, 255, 0.4);
+    border: 1px solid rgba(var(--theme-rgb), 0.06);
+}
+
+.preview-label {
+    font-size: 11px;
+    font-weight: 700;
+    text-transform: uppercase;
+    letter-spacing: 0.5px;
+    color: var(--text-tertiary);
+    margin-bottom: 10px;
+}
+
+.preview-swatches {
+    display: flex;
+    gap: 8px;
+    flex-wrap: wrap;
+}
+
+.preview-swatch {
+    width: 64px;
+    height: 40px;
+    border-radius: 8px;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+}
+
+.preview-swatch span {
+    font-size: 10px;
+    font-weight: 600;
+    color: white;
+    text-shadow: 0 1px 2px rgba(0, 0, 0, 0.3);
+}
+
+.preview-swatch-primary {
+    background: var(--theme-color);
+}
+
+.preview-swatch-primary-dark {
+    background: var(--theme-color-dark);
+}
+
+.preview-swatch-success {
+    background: var(--color-success);
+}
+
+.preview-swatch-error {
+    background: var(--color-error);
+}
+
+.preview-swatch-warning {
+    background: var(--color-warning);
+}
+
+.preview-buttons {
+    display: flex;
+    gap: 8px;
+    flex-wrap: wrap;
+}
+
+.preview-btn {
+    width: auto;
+    padding: 8px 16px;
+    margin: 0;
+    font-size: 13px;
+    border-radius: 8px;
+}
+
+.preview-input {
+    width: 100%;
+    padding: 10px 14px;
+    border: 1px solid rgba(var(--theme-rgb), 0.2);
+    border-radius: 10px;
+    font-size: 14px;
+    background: rgba(255, 255, 255, 0.6);
+    color: var(--text-primary);
+}
+
+.preview-messages {
+    display: flex;
+    flex-direction: column;
+    gap: 8px;
+}
+
+.preview-messages .message {
+    margin-bottom: 0;
+}
+
+.preview-statuses {
+    display: flex;
+    flex-direction: column;
+    gap: 8px;
+}
+
+.preview-statuses .status {
+    margin: 0;
+    font-size: 13px;
+    padding: 10px 14px;
+}
+
+.preview-badges {
+    display: flex;
+    gap: 8px;
+    flex-wrap: wrap;
+    align-items: center;
 }
 
 /* Members list */
@@ -1709,6 +2006,31 @@ input:focus-visible {
 
     .mobile-hint {
         display: block;
+    }
+
+    /* Settings page mobile */
+    .settings-page {
+        border-left: none;
+        border-right: none;
+    }
+
+    .settings-layout {
+        flex-direction: column;
+    }
+
+    .settings-nav {
+        width: 100%;
+        flex-direction: row;
+        border-right: none;
+        border-bottom: 1px solid rgba(var(--theme-rgb), 0.08);
+        padding: 8px;
+        overflow-x: auto;
+    }
+
+    .settings-nav-item {
+        white-space: nowrap;
+        padding: 8px 12px;
+        font-size: 13px;
     }
 }
 

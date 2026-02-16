@@ -105,23 +105,24 @@ async function loadPlugins() {
 
     try {
         console.log('[Plugins] Fetching plugins...');
-        const response = await fetch(`${API_URL}/plugins/distributed`);
+        const response = await fetch(`${API_URL}/plugins`);
 
         if (!response.ok) {
             console.log('[Plugins] No plugins available');
             return;
         }
 
-        const plugins = await response.json();
-        console.log(`[Plugins] Found ${plugins.length} plugins:`, plugins.map(p => p.name).join(', '));
+        const allPlugins = await response.json();
+        const plugins = allPlugins.filter(p => p.enabled);
+        console.log(`[Plugins] Found ${allPlugins.length} plugins (${plugins.length} enabled):`, plugins.map(p => p.name).join(', '));
 
-        // Load each plugin
+        // Load each enabled plugin
         for (const plugin of plugins) {
             try {
                 console.log(`[Plugins] Loading plugin: ${plugin.name} (${plugin.id})`);
 
                 // Load the main entry file
-                const scriptUrl = `${API_URL}/plugins/distributed/${plugin.id}/file/${plugin.entry}`;
+                const scriptUrl = `${API_URL}/plugins/${plugin.id}/file/${plugin.entry}`;
                 console.log(`[Plugins] Loading entry: ${scriptUrl}`);
 
                 // Load the plugin script

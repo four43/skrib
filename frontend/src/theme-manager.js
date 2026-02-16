@@ -17,10 +17,11 @@ export async function fetchAvailableThemes() {
     try {
         const resp = await fetch(`${API_URL}/themes`);
         const data = await resp.json();
-        return data.themes || [];
+        // Backend returns List[ThemeInfo] directly (array of theme manifests)
+        return Array.isArray(data) ? data : (data.themes || []);
     } catch (error) {
         console.error('[Theme] Failed to fetch themes:', error);
-        return ['com.four43.theme-default'];
+        return [];
     }
 }
 
