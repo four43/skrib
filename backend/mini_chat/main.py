@@ -104,7 +104,10 @@ async def startup_event():
         except Exception as e:
             print(f"[Plugins] Error in on_startup for {plugin.name}: {e}")
 
-    print(f"[Plugins] Loaded {len(registry.get_all_plugins())} plugins")
+    all_info = registry.get_all_plugin_info()
+    enabled = sum(1 for p in all_info if p['enabled'])
+    disabled = sum(1 for p in all_info if not p['enabled'])
+    print(f"[Plugins] Loaded {enabled} plugins ({disabled} disabled)")
     print()
 
 

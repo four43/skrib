@@ -14,7 +14,7 @@ class ChatTypingPlugin(Plugin):
     This plugin:
     - Tracks ephemeral typing state (no database)
     - Registers a WebSocket namespace for typing events
-    - Loads frontend assets from the distributed plugin
+    - Loads frontend assets from the plugin directory
     """
 
     def __init__(self):
@@ -87,9 +87,9 @@ class ChatTypingPlugin(Plugin):
         bus.register_namespace("com.four43.chat-typing", handle_typing)
 
     def get_frontend_assets(self) -> dict:
-        """Return frontend assets - reference the distributed plugin."""
+        """Return frontend assets."""
         return {
-            "scripts": ["/api/plugins/distributed/com.four43.chat-typing/file/frontend/plugin.js"],
+            "scripts": ["/api/plugins/com.four43.chat-typing/file/frontend/plugin.js"],
             "styles": [],
             "config": {
                 "plugin_id": "com.four43.chat-typing",

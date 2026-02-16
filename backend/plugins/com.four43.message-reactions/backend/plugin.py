@@ -90,10 +90,10 @@ class MessageReactionsPlugin(Plugin):
         """Return frontend JavaScript and CSS files."""
         return {
             "scripts": [
-                "/api/plugins/distributed/com.four43.message-reactions/file/frontend/plugin.js"
+                "/api/plugins/com.four43.message-reactions/file/frontend/plugin.js"
             ],
             "styles": [
-                "/api/plugins/distributed/com.four43.message-reactions/file/frontend/plugin.css"
+                "/api/plugins/com.four43.message-reactions/file/frontend/plugin.css"
             ],
             "config": {
                 "common_emojis": ['👍', '❤️', '😂', '😮', '😢', '🎉', '🚀', '👀']

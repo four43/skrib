@@ -1,11 +1,15 @@
 """Plugin registry for managing Mini Chat plugins."""
+import json
 import os
 import sys
-import importlib
 import importlib.util
 import inspect
+from pathlib import Path
 from typing import Dict, Optional
 from .base import Plugin
+
+# All plugins live in backend/plugins/
+PLUGINS_DIR = Path(__file__).parent.parent.parent / "plugins"
 
 
 class PluginRegistry:
@@ -13,6 +17,7 @@ class PluginRegistry:
 
     def __init__(self):
         self.plugins: Dict[str, Plugin] = {}
+        self.disabled_plugins: Dict[str, dict] = {}  # plugin_id -> manifest data
         self.room_type_map: Dict[str, Plugin] = {}  # room_type -> plugin
         self.capability_map: Dict[str, list[Plugin]] = {}  # capability -> [plugins]
 
@@ -85,119 +90,95 @@ class PluginRegistry:
             print(f"[Plugins]   - Provides capability: {capability}")
 
     def get_plugin(self, name: str) -> Optional[Plugin]:
-        """Get a plugin by name.
-
-        Args:
-            name: Plugin name
-
-        Returns:
-            Plugin instance or None if not found
-        """
+        """Get a plugin by name."""
         return self.plugins.get(name)
 
     def get_plugin_for_room_type(self, room_type: str) -> Optional[Plugin]:
-        """Get the plugin that handles a specific room type.
-
-        Args:
-            room_type: Room type identifier
-
-        Returns:
-            Plugin instance or None if room type not registered
-        """
+        """Get the plugin that handles a specific room type."""
         return self.room_type_map.get(room_type)
 
     def get_plugins_with_capability(self, capability: str) -> list[Plugin]:
-        """Get all plugins that provide a specific capability.
-
-        Args:
-            capability: Capability identifier
-
-        Returns:
-            List of plugins providing this capability
-        """
+        """Get all plugins that provide a specific capability."""
         return self.capability_map.get(capability, [])
 
     def get_all_plugins(self) -> list[Plugin]:
-        """Get all registered plugins.
-
-        Returns:
-            List of all plugin instances
-        """
+        """Get all registered (enabled) plugins."""
         return list(self.plugins.values())
 
-    def discover_plugins(self, plugins_dir: str = None):
-        """Auto-discover plugins in the plugins/ directory.
+    def is_plugin_enabled(self, plugin_id: str) -> bool:
+        """Check if a plugin is enabled. Defaults to True if no setting exists."""
+        from ..database import get_setting
+        return get_setting(f"plugin:{plugin_id}:enabled", "true") == "true"
 
-        Scans for:
-        1. Python modules in mini_chat/plugins/*.py
-        2. Plugins in backend/plugins/*/backend/plugin.py
+    def set_plugin_enabled(self, plugin_id: str, enabled: bool):
+        """Persist enabled/disabled state for a plugin."""
+        from ..database import set_setting
+        set_setting(f"plugin:{plugin_id}:enabled", "true" if enabled else "false")
 
-        Args:
-            plugins_dir: Directory to scan (defaults to this module's directory)
-        """
-        if plugins_dir is None:
-            plugins_dir = os.path.dirname(os.path.abspath(__file__))
+    def get_all_plugin_info(self) -> list[dict]:
+        """Return info for all discovered plugins (enabled and disabled) with state."""
+        result = []
 
-        print(f"[Plugins] Discovering built-in plugins in: {plugins_dir}")
+        # Enabled plugins (registered in self.plugins)
+        for plugin in self.plugins.values():
+            result.append({
+                "id": plugin.id,
+                "name": plugin.name,
+                "version": plugin.version,
+                "enabled": True,
+            })
 
-        # Scan for Python files in mini_chat/plugins/
-        for filename in os.listdir(plugins_dir):
-            if not filename.endswith('.py') or filename.startswith('_'):
-                continue
-            if filename in ['base.py', 'registry.py']:
-                continue
+        # Disabled plugins (discovered but not loaded)
+        for plugin_id, manifest in self.disabled_plugins.items():
+            result.append({
+                "id": plugin_id,
+                "name": manifest.get("name", plugin_id),
+                "version": manifest.get("version", "unknown"),
+                "enabled": False,
+            })
 
-            module_name = filename[:-3]
-            try:
-                # Import the module
-                module = importlib.import_module(f".{module_name}", package=__package__)
+        return result
 
-                # Look for Plugin subclasses
-                for name, obj in inspect.getmembers(module):
-                    if (inspect.isclass(obj) and
-                        issubclass(obj, Plugin) and
-                        obj != Plugin):
-                        # Found a plugin class, try to instantiate it
-                        try:
-                            plugin_instance = obj()
-                            self.register(plugin_instance)
-                        except Exception as e:
-                            print(f"[Plugins] Failed to instantiate {name}: {e}")
-
-            except Exception as e:
-                print(f"[Plugins] Failed to load module {module_name}: {e}")
-
-        # Also scan for plugins with backend components
-        self._discover_distributed_plugins()
-
-    def _discover_distributed_plugins(self):
-        """Discover plugins with backend/plugin.py files."""
-        from pathlib import Path
-
-        # Plugins are in backend/plugins/
-        distributed_dir = Path(__file__).parent.parent.parent / "plugins"
-
-        if not distributed_dir.exists():
+    def discover_plugins(self):
+        """Discover and load enabled plugins from backend/plugins/."""
+        if not PLUGINS_DIR.exists():
             return
 
-        print(f"[Plugins] Discovering plugins in: {distributed_dir}")
+        print(f"[Plugins] Discovering plugins in: {PLUGINS_DIR}")
 
-        for plugin_dir in distributed_dir.iterdir():
+        for plugin_dir in PLUGINS_DIR.iterdir():
             if not plugin_dir.is_dir():
                 continue
 
-            # Check if plugin has a backend component
+            plugin_id = plugin_dir.name
+
+            # Load manifest.json for metadata
+            manifest_data = None
+            manifest_path = plugin_dir / "manifest.json"
+            if manifest_path.exists():
+                try:
+                    with open(manifest_path) as f:
+                        manifest_data = json.load(f)
+                except Exception as e:
+                    print(f"[Plugins] Failed to read manifest for {plugin_id}: {e}")
+
+            # Check enabled state before loading any code
+            if not self.is_plugin_enabled(plugin_id):
+                print(f"[Plugins] Skipping disabled plugin: {plugin_id}")
+                if manifest_data:
+                    self.disabled_plugins[plugin_id] = manifest_data
+                continue
+
+            # Load backend/plugin.py if it exists
             backend_file = plugin_dir / "backend" / "plugin.py"
             if not backend_file.exists():
                 continue
 
-            plugin_id = plugin_dir.name
-            print(f"[Plugins] Found distributed plugin with backend: {plugin_id}")
+            print(f"[Plugins] Loading plugin: {plugin_id}")
 
             try:
-                # Load the backend plugin module
                 spec = importlib.util.spec_from_file_location(
-                    f"distributed_plugin_{plugin_id}",
+                    f"plugin_{plugin_id}",
                     backend_file
                 )
                 if spec and spec.loader:
@@ -217,30 +198,7 @@ class PluginRegistry:
                                 print(f"[Plugins] Failed to instantiate {name} from {plugin_id}: {e}")
 
             except Exception as e:
-                print(f"[Plugins] Failed to load distributed plugin {plugin_id}: {e}")
-
-    def get_manifest(self) -> dict:
-        """Get plugin manifest for frontend consumption.
-
-        Returns:
-            dict with plugin metadata and frontend assets
-        """
-        manifest = {
-            "plugins": []
-        }
-
-        for plugin in self.plugins.values():
-            assets = plugin.get_frontend_assets()
-            manifest["plugins"].append({
-                "name": plugin.name,
-                "version": plugin.version,
-                "room_types": plugin.room_types,
-                "scripts": assets.get("scripts", []),
-                "styles": assets.get("styles", []),
-                "config": assets.get("config", {})
-            })
-
-        return manifest
+                print(f"[Plugins] Failed to load plugin {plugin_id}: {e}")
 
 
 # Global registry instance
