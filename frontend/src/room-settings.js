@@ -184,7 +184,7 @@ function displayMembers(members) {
             if (currentRoom.room_type === 'channel') {
                 if (member.room_role !== 'owner') {
                     const opBtn = document.createElement('button');
-                    opBtn.className = 'member-action-btn';
+                    opBtn.className = 'btn-ghost';
                     opBtn.textContent = member.room_role === 'op' ? 'Remove Op' : 'Make Op';
                     opBtn.onclick = () => toggleOp(member.username, member.room_role !== 'op');
                     actionsDiv.appendChild(opBtn);
@@ -192,7 +192,7 @@ function displayMembers(members) {
 
                 if (member.username !== currentUsername) {
                     const removeBtn = document.createElement('button');
-                    removeBtn.className = 'member-action-btn member-remove-btn';
+                    removeBtn.className = 'btn-ghost member-remove-btn';
                     removeBtn.textContent = 'Remove';
                     removeBtn.onclick = () => removeMember(member.username);
                     actionsDiv.appendChild(removeBtn);

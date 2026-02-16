@@ -229,7 +229,7 @@ async function loadThemeList() {
                 <div class="theme-card-meta">by ${theme.author} &middot; v${theme.version}${variantText ? ' &middot; ' + variantText : ''}</div>
             </div>
             <div class="theme-card-status">
-                ${theme.id === currentThemeName ? '<span class="theme-active-badge">Active</span>' : '<button class="theme-select-btn" type="button">Use</button>'}
+                ${theme.id === currentThemeName ? '<span class="theme-active-badge">Active</span>' : '<button class="btn-sm theme-select-btn" type="button">Use</button>'}
             </div>
         `;
 

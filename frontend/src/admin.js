@@ -214,7 +214,7 @@ async function loadInviteTokens() {
                             <div class="invite-url" onclick="copyInviteLink('${inviteUrl}')" title="Click to copy">${inviteUrl}</div>
                             <div class="invite-meta">${status} &middot; by ${escapeHtml(inv.created_by)}</div>
                         </div>
-                        ${!inv.used_by ? `<button class="delete-btn invite-delete-btn" onclick="deleteInvite('${inv.token}')">✕</button>` : ''}
+                        ${!inv.used_by ? `<button class="reject-btn btn-sm invite-delete-btn" onclick="deleteInvite('${inv.token}')">✕</button>` : ''}
                     </div>
                 `;
             }).join('');
@@ -268,8 +268,8 @@ async function loadPendingUsers() {
                     <div class="code">Code: ${user.approval_code}</div>
                     <div style="font-size: 12px; color: #666;">${new Date(user.created_at).toLocaleString()}</div>
                     <div class="pending-user-actions">
-                        <button class="approve-btn" onclick="window.approveUser('${user.approval_code}')">✓ Approve</button>
-                        <button class="reject-btn" onclick="window.rejectUser('${user.approval_code}')">✕ Reject</button>
+                        <button class="approve-btn btn-sm" onclick="window.approveUser('${user.approval_code}')">✓ Approve</button>
+                        <button class="reject-btn btn-sm" onclick="window.rejectUser('${user.approval_code}')">✕ Reject</button>
                     </div>
                 </div>
             `).join('');
@@ -340,15 +340,15 @@ async function loadAllUsers() {
                 let actions = '';
                 if (isAdmin && user.username !== currentUsername) {
                     if (user.role === 'user') {
-                        actions += `<button class="promote-btn" onclick="window.setUserRole('${user.username}', 'moderator')">Make Mod</button>`;
-                        actions += `<button class="promote-btn" onclick="window.setUserRole('${user.username}', 'admin')">Make Admin</button>`;
+                        actions += `<button class="promote-btn btn-sm" onclick="window.setUserRole('${user.username}', 'moderator')">Make Mod</button>`;
+                        actions += `<button class="promote-btn btn-sm" onclick="window.setUserRole('${user.username}', 'admin')">Make Admin</button>`;
                     } else if (user.role === 'moderator') {
-                        actions += `<button class="demote-btn" onclick="window.setUserRole('${user.username}', 'user')">Remove Mod</button>`;
-                        actions += `<button class="promote-btn" onclick="window.setUserRole('${user.username}', 'admin')">Make Admin</button>`;
+                        actions += `<button class="demote-btn btn-sm" onclick="window.setUserRole('${user.username}', 'user')">Remove Mod</button>`;
+                        actions += `<button class="promote-btn btn-sm" onclick="window.setUserRole('${user.username}', 'admin')">Make Admin</button>`;
                     } else {
-                        actions += `<button class="demote-btn" onclick="window.setUserRole('${user.username}', 'user')">Remove Admin</button>`;
+                        actions += `<button class="demote-btn btn-sm" onclick="window.setUserRole('${user.username}', 'user')">Remove Admin</button>`;
                     }
-                    actions += `<button class="delete-btn" onclick="window.deleteUser('${user.username}')">Delete</button>`;
+                    actions += `<button class="reject-btn btn-sm" onclick="window.deleteUser('${user.username}')">Delete</button>`;
                 }
                 return `
                     <div class="user-item">

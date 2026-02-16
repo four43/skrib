@@ -390,11 +390,11 @@ async function loadAllUsers() {
                     </div>
                     <div class="user-actions">
                         ${user.role === 'user'
-                            ? `<button class="promote-btn" onclick="window.setUserRole('${user.username}', 'admin')">Make Admin</button>`
-                            : `<button class="demote-btn" onclick="window.setUserRole('${user.username}', 'user')">Remove Admin</button>`
+                            ? `<button class="promote-btn btn-sm" onclick="window.setUserRole('${user.username}', 'admin')">Make Admin</button>`
+                            : `<button class="demote-btn btn-sm" onclick="window.setUserRole('${user.username}', 'user')">Remove Admin</button>`
                         }
                         ${user.username !== currentUsername
-                            ? `<button class="delete-btn" onclick="window.deleteUser('${user.username}')">Delete</button>`
+                            ? `<button class="reject-btn btn-sm" onclick="window.deleteUser('${user.username}')">Delete</button>`
                             : ''
                         }
                     </div>
