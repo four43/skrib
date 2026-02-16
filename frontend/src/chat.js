@@ -1,4 +1,3 @@
-import './style.css';
 import { API_URL, escapeHtml } from './utils.js';
 import { loadTheme } from './theme-manager.js';
 import {
@@ -653,7 +652,29 @@ async function checkSession() {
 }
 
 async function initializeChatView() {
-    document.getElementById('current-user').textContent = `👤 ${currentUsername}`;
+    // Note: settings panel has been moved to settings.html page
+
+    // Update sidebar username
+    const sidebarUsername = document.getElementById('sidebar-username');
+    if (sidebarUsername) {
+        sidebarUsername.textContent = currentUsername;
+    }
+
+    // Fetch and display server title
+    try {
+        const response = await fetch(`${API_URL}/server`, {
+            headers: { 'Authorization': `Bearer ${sessionToken}` }
+        });
+        if (response.ok) {
+            const serverInfo = await response.json();
+            const serverTitleEl = document.getElementById('server-title');
+            if (serverTitleEl && serverInfo.server_title) {
+                serverTitleEl.textContent = serverInfo.server_title;
+            }
+        }
+    } catch (error) {
+        console.error('[HTTP] Failed to fetch server info:', error);
+    }
 
     // Request notification permission
     if ('Notification' in window && Notification.permission === 'default') {
@@ -661,9 +682,7 @@ async function initializeChatView() {
     }
 
     if (currentRole === 'admin' || currentRole === 'moderator') {
-        const badge = document.getElementById('admin-badge');
-        badge.textContent = currentRole === 'admin' ? 'ADMIN' : 'MOD';
-        badge.classList.remove('hidden');
+        // Show admin panel button
         document.getElementById('admin-panel-btn').classList.remove('hidden');
     }
 
@@ -742,11 +761,8 @@ function getDisplayName(username) {
 // Expose for plugins
 window.getDisplayName = getDisplayName;
 
-function toggleSettingsPanel() {
-    const panel = document.getElementById('settings-panel');
-    panel.classList.toggle('open');
-}
-
+// Note: Settings panel has been moved to settings.html page
+// This function is kept only for loading theme color preferences
 async function loadUserSettings() {
     try {
         const response = await fetch(`${API_URL}/users/${currentUsername}/preferences`, {
@@ -756,19 +772,7 @@ async function loadUserSettings() {
         });
         if (response.ok) {
             const data = await response.json();
-            const nicknameInput = document.getElementById('user-nickname');
-            if (nicknameInput) {
-                nicknameInput.value = data.nickname || '';
-            }
-            const colorInput = document.getElementById('user-color');
-            if (colorInput) {
-                colorInput.value = data.color;
-            }
             // Apply user's theme color override if set
-            const themeInput = document.getElementById('user-theme-color');
-            if (themeInput) {
-                themeInput.value = data.theme_color || serverColor;
-            }
             if (data.theme_color) {
                 applyThemeColor(data.theme_color);
             }
@@ -778,103 +782,8 @@ async function loadUserSettings() {
     }
 }
 
-async function updateUserColor() {
-    const color = document.getElementById('user-color').value;
-    try {
-        const response = await fetch(`${API_URL}/users/${encodeURIComponent(currentUsername)}`, {
-            method: 'PATCH',
-            headers: {
-                'Authorization': `Bearer ${sessionToken}`,
-                'Content-Type': 'application/json'
-            },
-            body: JSON.stringify({ color })
-        });
-        if (response.ok) {
-            // Update local cache
-            userColors[currentUsername] = color;
-            // Refresh messages to show new color
-            if (currentRoom) {
-                await loadMessages();
-            }
-        }
-    } catch (error) {
-        console.error('[HTTP] Error updating color:', error);
-        alert('Failed to update color preference');
-    }
-}
-
-async function updateUserThemeColor() {
-    const themeColor = document.getElementById('user-theme-color').value;
-    try {
-        const response = await fetch(`${API_URL}/users/${encodeURIComponent(currentUsername)}`, {
-            method: 'PATCH',
-            headers: {
-                'Authorization': `Bearer ${sessionToken}`,
-                'Content-Type': 'application/json'
-            },
-            body: JSON.stringify({ theme_color: themeColor })
-        });
-        if (response.ok) {
-            window.location.reload();
-        }
-    } catch (error) {
-        console.error('[HTTP] Error updating theme color:', error);
-        alert('Failed to update theme color');
-    }
-}
-
-async function resetUserThemeColor() {
-    try {
-        const response = await fetch(`${API_URL}/users/${encodeURIComponent(currentUsername)}`, {
-            method: 'PATCH',
-            headers: {
-                'Authorization': `Bearer ${sessionToken}`,
-                'Content-Type': 'application/json'
-            },
-            body: JSON.stringify({ theme_color: '' })
-        });
-        if (response.ok) {
-            window.location.reload();
-        }
-    } catch (error) {
-        console.error('[HTTP] Error resetting theme color:', error);
-    }
-}
-
-async function updateUserNickname() {
-    const nickname = document.getElementById('user-nickname').value.trim();
-    try {
-        const response = await fetch(`${API_URL}/users/${encodeURIComponent(currentUsername)}`, {
-            method: 'PATCH',
-            headers: {
-                'Authorization': `Bearer ${sessionToken}`,
-                'Content-Type': 'application/json'
-            },
-            body: JSON.stringify({ nickname: nickname || '' })
-        });
-        if (response.ok) {
-            if (nickname) {
-                userNicknames[currentUsername] = nickname;
-            } else {
-                delete userNicknames[currentUsername];
-            }
-            // Refresh messages to show new nickname
-            if (currentRoom) {
-                document.getElementById('messages').innerHTML = '';
-                lastMessageId = 0;
-                await loadMessages();
-            }
-        }
-    } catch (error) {
-        console.error('[HTTP] Error updating nickname:', error);
-        alert('Failed to update nickname');
-    }
-}
-
-async function clearUserNickname() {
-    document.getElementById('user-nickname').value = '';
-    await updateUserNickname();
-}
+// Note: User settings functions (updateUserColor, updateUserThemeColor, etc.)
+// have been moved to settings.js since settings panel is now a separate page
 
 async function loadRooms() {
     try {
@@ -1462,25 +1371,8 @@ async function sendMessage() {
 }
 
 function openRoomSettings(roomId) {
-    const modal = document.getElementById('room-settings-modal');
-    const roomName = document.getElementById('roomSettingsName');
-    modal.dataset.roomId = roomId;
-    roomName.textContent = roomId;
-
-    // Set current notification level
-    const meta = roomMeta[roomId];
-    const select = document.getElementById('notify-level-select');
-    select.value = (meta && meta.notify_level) || 'all';
-
-    // Only show danger zone for admin/moderator
-    const dangerSection = document.getElementById('roomSettingsDanger');
-    if (currentRole === 'admin' || currentRole === 'moderator') {
-        dangerSection.style.display = '';
-    } else {
-        dangerSection.style.display = 'none';
-    }
-
-    modal.classList.add('open');
+    // Navigate to dedicated room settings page
+    window.location.href = `/room-settings.html?room=${encodeURIComponent(roomId)}`;
 }
 
 function closeRoomSettings() {
@@ -1654,13 +1546,8 @@ async function startDM(targetUsernames) {
 }
 
 // Expose functions to window for inline event handlers
+// Note: Settings functions moved to settings.js
 window.logout = logout;
-window.toggleSettingsPanel = toggleSettingsPanel;
-window.updateUserColor = updateUserColor;
-window.updateUserThemeColor = updateUserThemeColor;
-window.resetUserThemeColor = resetUserThemeColor;
-window.updateUserNickname = updateUserNickname;
-window.clearUserNickname = clearUserNickname;
 window.openCreateRoomModal = openCreateRoomModal;
 window.closeCreateRoomModal = closeCreateRoomModal;
 window.createRoom = createRoom;
@@ -1713,53 +1600,8 @@ document.addEventListener('DOMContentLoaded', () => {
         addDmBtn.addEventListener('click', openDMModal);
     }
 
-    // Settings button
-    const sidebarSettingsBtn = document.getElementById('sidebar-settings-btn');
-    if (sidebarSettingsBtn) {
-        sidebarSettingsBtn.addEventListener('click', toggleSettingsPanel);
-    }
-
-    // Settings panel close button
-    const settingsCloseBtn = document.getElementById('settings-close-btn');
-    if (settingsCloseBtn) {
-        settingsCloseBtn.addEventListener('click', toggleSettingsPanel);
-    }
-
-    // Settings logout button
-    const settingsLogoutBtn = document.getElementById('settings-logout-btn');
-    if (settingsLogoutBtn) {
-        settingsLogoutBtn.addEventListener('click', logout);
-    }
-
-    // User color input
-    const userColorInput = document.getElementById('user-color');
-    if (userColorInput) {
-        userColorInput.addEventListener('change', updateUserColor);
-    }
-
-    // User theme color input
-    const userThemeColorInput = document.getElementById('user-theme-color');
-    if (userThemeColorInput) {
-        userThemeColorInput.addEventListener('change', updateUserThemeColor);
-    }
-
-    // Reset theme color button
-    const resetThemeColorBtn = document.getElementById('reset-theme-color-btn');
-    if (resetThemeColorBtn) {
-        resetThemeColorBtn.addEventListener('click', resetUserThemeColor);
-    }
-
-    // Clear nickname button
-    const clearNicknameBtn = document.getElementById('clear-nickname-btn');
-    if (clearNicknameBtn) {
-        clearNicknameBtn.addEventListener('click', clearUserNickname);
-    }
-
-    // Nickname input - change event
-    const nicknameInput = document.getElementById('user-nickname');
-    if (nicknameInput) {
-        nicknameInput.addEventListener('change', updateUserNickname);
-    }
+    // Note: Settings panel has been moved to settings.html page
+    // sidebar-settings-btn is now a link to /settings.html
 
     // Create room modal - input enter key
     const newRoomInput = document.getElementById('new-room-input');

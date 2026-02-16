@@ -1,0 +1,53 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Settings - Mini-Chat</title>
+    <link rel="stylesheet" href="/src/style.css">
+</head>
+<body>
+    <div class="admin-page">
+        <div class="admin-page-header">
+            <div class="admin-page-header-content">
+                <h1>⚙ Settings</h1>
+            </div>
+            <a href="/chat.html" class="admin-back-btn">Back to Chat</a>
+        </div>
+
+        <div class="admin-page-content">
+            <div class="admin-section">
+                <div class="settings-user-identity">
+                    <span id="current-user" class="settings-username"></span>
+                    <span id="admin-badge" class="admin-badge hidden">ADMIN</span>
+                </div>
+                <button id="settings-logout-btn" class="settings-logout-btn">Logout</button>
+            </div>
+
+            <div class="admin-section">
+                <h3>Display Preferences</h3>
+                <div class="preference-item">
+                    <label for="user-nickname">Nickname:</label>
+                    <div class="preference-input-group">
+                        <input type="text" id="user-nickname" class="preference-input" maxlength="32" placeholder="Enter nickname...">
+                        <button id="clear-nickname-btn" class="theme-reset-btn">Clear</button>
+                    </div>
+                </div>
+                <div class="preference-item">
+                    <label for="user-color">Your username color:</label>
+                    <input type="color" id="user-color" value="#1976d2">
+                </div>
+                <div class="preference-item">
+                    <label for="user-theme-color">Theme color:</label>
+                    <div class="preference-input-group">
+                        <input type="color" id="user-theme-color" value="#6366f1">
+                        <button id="reset-theme-color-btn" class="theme-reset-btn">Reset</button>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <script type="module" src="/src/settings.js"></script>
+</body>
+</html>

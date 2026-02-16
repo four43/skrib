@@ -183,7 +183,7 @@ input[type="text"] {
     font-size: 16px;
     background: rgba(255, 255, 255, 0.6);
     color: var(--text-primary);
-    transition: all 0.2s ease;
+    transition: border-color 0.2s ease, box-shadow 0.2s ease, background 0.2s ease;
 }
 
 input[type="text"]:focus {
@@ -217,7 +217,7 @@ button {
     font-size: 15px;
     font-weight: 600;
     margin-top: 10px;
-    transition: all 0.2s ease;
+    transition: background 0.2s ease, transform 0.2s ease, box-shadow 0.2s ease;
     box-shadow: 0 2px 8px rgba(var(--theme-rgb), 0.25);
 }
 
@@ -353,6 +353,13 @@ input:focus-visible {
     gap: 12px;
 }
 
+.header-app-name {
+    font-size: 13px;
+    font-weight: 500;
+    color: rgba(255, 255, 255, 0.7);
+    letter-spacing: 0.5px;
+}
+
 .admin-badge {
     background: rgba(255, 255, 255, 0.2);
     backdrop-filter: blur(var(--blur-sm));
@@ -386,6 +393,7 @@ input:focus-visible {
 
 .admin-btn {
     background: rgba(255, 255, 255, 0.25);
+    margin-left: 12px;
 }
 
 .admin-btn:hover {
@@ -574,8 +582,24 @@ input:focus-visible {
     cursor: pointer;
     text-align: left;
     font-weight: 500;
-    transition: all 0.2s ease;
+    transition: background 0.2s ease, border-color 0.2s ease, color 0.2s ease;
     box-shadow: none;
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    text-decoration: none;
+}
+
+.sidebar-username {
+    flex: 1;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+}
+
+.sidebar-settings-icon {
+    flex-shrink: 0;
+    margin-left: 8px;
 }
 
 .sidebar-settings-btn:hover {
@@ -730,7 +754,7 @@ input:focus-visible {
     background: rgba(255, 255, 255, 0.7);
     font-size: 14px;
     color: var(--text-primary);
-    transition: all 0.2s ease;
+    transition: border-color 0.2s ease, box-shadow 0.2s ease, background 0.2s ease;
 }
 
 .message-input:focus {
@@ -1194,17 +1218,11 @@ input:focus-visible {
     color: var(--theme-color-dark);
 }
 
-.settings-user-info {
-    display: flex;
-    flex-direction: column;
-    align-items: center;
-    gap: 16px;
-}
-
 .settings-user-identity {
     display: flex;
     align-items: center;
     gap: 10px;
+    margin-bottom: 16px;
 }
 
 .settings-username {
@@ -1213,11 +1231,6 @@ input:focus-visible {
     color: var(--text-primary);
 }
 
-.settings-user-info .admin-badge {
-    background: rgba(var(--theme-rgb), 0.12);
-    color: var(--theme-color-dark);
-    border: 1px solid rgba(var(--theme-rgb), 0.2);
-}
 
 .settings-logout-btn {
     width: auto;
@@ -1239,6 +1252,8 @@ input:focus-visible {
     transform: none;
     box-shadow: none;
 }
+
+/* Settings Page - now uses admin-page classes */
 
 .settings-section {
     padding: 24px;
@@ -1317,6 +1332,86 @@ input:focus-visible {
     color: var(--theme-color-dark);
     transform: none;
     box-shadow: none;
+}
+
+/* Members list */
+.members-list {
+    display: flex;
+    flex-direction: column;
+    gap: 8px;
+}
+
+.member-item {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    padding: 12px;
+    background: rgba(var(--theme-rgb), 0.02);
+    border: 1px solid rgba(var(--theme-rgb), 0.08);
+    border-radius: 8px;
+}
+
+.member-info {
+    display: flex;
+    align-items: center;
+    gap: 10px;
+}
+
+.member-name {
+    font-weight: 600;
+    font-size: 14px;
+}
+
+.member-role {
+    font-size: 11px;
+    font-weight: 600;
+    padding: 2px 8px;
+    background: rgba(var(--theme-rgb), 0.15);
+    color: var(--theme-color-dark);
+    border-radius: 4px;
+    text-transform: uppercase;
+    letter-spacing: 0.5px;
+}
+
+.member-actions {
+    display: flex;
+    gap: 6px;
+}
+
+.member-action-btn {
+    padding: 5px 10px;
+    font-size: 12px;
+    font-weight: 500;
+    background: rgba(var(--theme-rgb), 0.08);
+    color: var(--text-secondary);
+    border: 1px solid rgba(var(--theme-rgb), 0.15);
+    border-radius: 6px;
+    cursor: pointer;
+    transition: background 0.2s ease, color 0.2s ease;
+}
+
+.member-action-btn:hover {
+    background: rgba(var(--theme-rgb), 0.15);
+    color: var(--theme-color-dark);
+    transform: none;
+    box-shadow: none;
+}
+
+.member-remove-btn {
+    background: rgba(239, 68, 68, 0.1);
+    color: var(--color-error);
+    border-color: rgba(239, 68, 68, 0.2);
+}
+
+.member-remove-btn:hover {
+    background: rgba(239, 68, 68, 0.15);
+    color: var(--color-error);
+}
+
+.room-name-display {
+    font-weight: 700;
+    font-size: 15px;
+    color: var(--text-primary);
 }
 
 /* ═══════════════════════════════════════════

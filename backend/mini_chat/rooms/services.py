@@ -416,12 +416,25 @@ def get_room_info(room_id: str) -> Optional[Dict]:
         if not room:
             return None
 
-        cursor = conn.execute(
-            'SELECT username, room_role, joined_at FROM room_users WHERE room_id = ?',
-            (room_id,),
-        )
+        cursor = conn.execute('''
+            SELECT
+                ru.username,
+                ru.room_role,
+                ru.joined_at,
+                u.nickname,
+                u.color
+            FROM room_users ru
+            LEFT JOIN users u ON ru.username = u.username
+            WHERE ru.room_id = ?
+        ''', (room_id,))
         members = [
-            {'username': row['username'], 'room_role': row['room_role'], 'joined_at': row['joined_at']}
+            {
+                'username': row['username'],
+                'room_role': row['room_role'],
+                'joined_at': row['joined_at'],
+                'nickname': row['nickname'],
+                'color': row['color'],
+            }
             for row in cursor
         ]
 

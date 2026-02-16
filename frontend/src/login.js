@@ -1,4 +1,3 @@
-import './style.css';
 import { API_URL, showStatus, arrayBufferToBase64, base64ToArrayBuffer, friendlyError } from './utils.js';
 import { loadPrivateKey, generateEncryptionKeyPair, exportPublicKey, storePrivateKey, exportStoredPublicKey } from './crypto.js';
 import { loadTheme } from './theme-manager.js';

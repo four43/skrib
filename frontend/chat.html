@@ -4,6 +4,7 @@
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>Mini-Chat</title>
+    <link rel="stylesheet" href="/src/style.css">
 </head>
 <body>
     <!-- Chat View -->
@@ -11,10 +12,11 @@
         <div class="header">
             <div class="header-brand">
                 <button id="menu-toggle" class="menu-toggle">☰</button>
-                <h1>Mini-Chat</h1>
+                <h1 id="server-title">My Server</h1>
+                <a id="admin-panel-btn" class="admin-btn hidden" href="/admin.html" title="Admin Panel">⚙</a>
             </div>
             <div class="header-actions">
-                <a id="admin-panel-btn" class="admin-btn hidden" href="/admin.html">Admin Panel</a>
+                <span class="header-app-name">Mini-Chat</span>
             </div>
         </div>
 
@@ -35,7 +37,10 @@
                     <div class="room-list" id="dm-list"></div>
                 </div>
                 <div class="sidebar-footer">
-                    <button id="sidebar-settings-btn" class="sidebar-settings-btn">⚙️ Settings</button>
+                    <a href="/settings.html" id="sidebar-settings-btn" class="sidebar-settings-btn">
+                        <span id="sidebar-username" class="sidebar-username">Loading...</span>
+                        <span class="sidebar-settings-icon">⚙</span>
+                    </a>
                 </div>
             </div>
 
@@ -56,44 +61,6 @@
                 <div class="input-area">
                     <input type="text" id="message-input" class="message-input" placeholder="Type a message...">
                     <button id="send-button" class="send-button">Send</button>
-                </div>
-            </div>
-        </div>
-    </div>
-
-    <!-- Settings Panel -->
-    <div id="settings-panel" class="settings-panel">
-        <div class="settings-panel-header">
-            <h2>⚙️ Settings</h2>
-            <button id="settings-close-btn" class="close-btn">✕</button>
-        </div>
-
-        <div class="settings-section settings-user-info">
-            <div class="settings-user-identity">
-                <span id="current-user" class="settings-username"></span>
-                <span id="admin-badge" class="admin-badge hidden">ADMIN</span>
-            </div>
-            <button id="settings-logout-btn" class="settings-logout-btn">Logout</button>
-        </div>
-
-        <div class="settings-section">
-            <h3>Display Preferences</h3>
-            <div class="preference-item">
-                <label for="user-nickname">Nickname:</label>
-                <div class="preference-input-group">
-                    <input type="text" id="user-nickname" class="preference-input" maxlength="32" placeholder="Enter nickname...">
-                    <button id="clear-nickname-btn" class="theme-reset-btn">Clear</button>
-                </div>
-            </div>
-            <div class="preference-item">
-                <label for="user-color">Your username color:</label>
-                <input type="color" id="user-color" value="#1976d2">
-            </div>
-            <div class="preference-item">
-                <label for="user-theme-color">Theme color:</label>
-                <div class="preference-input-group">
-                    <input type="color" id="user-theme-color" value="#6366f1">
-                    <button id="reset-theme-color-btn" class="theme-reset-btn">Reset</button>
                 </div>
             </div>
         </div>

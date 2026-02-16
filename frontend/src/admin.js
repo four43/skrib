@@ -1,4 +1,3 @@
-import './style.css';
 import { API_URL, escapeHtml } from './utils.js';
 import { loadTheme } from './theme-manager.js';
 

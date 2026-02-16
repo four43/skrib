@@ -117,6 +117,8 @@ class MemberInfo(BaseModel):
     username: str
     room_role: str
     joined_at: str | None
+    nickname: str | None = None
+    color: str | None = None
 
 
 class RoomDetailResponse(BaseModel):

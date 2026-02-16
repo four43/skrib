@@ -71,4 +71,5 @@ def get_system_status() -> Dict:
         'registration_mode': get_registration_mode(),
         'server_color': get_setting('server_color', '#6366f1'),
         'default_theme': get_setting('default_theme', 'com.four43.theme-default'),
+        'server_title': get_setting('server_title', 'My Server'),
     }
