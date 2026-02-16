@@ -1177,6 +1177,14 @@ function selectRoom(roomId) {
         return;
     }
 
+    // Notify old room type handler before leaving
+    if (currentRoom) {
+        const oldHandler = getRoomTypeHandler(currentRoom);
+        if (oldHandler && oldHandler.onRoomLeft) {
+            oldHandler.onRoomLeft(currentRoom);
+        }
+    }
+
     // Leave previous room subscription on unified WS
     if (currentRoom && ws && ws.readyState === WebSocket.OPEN) {
         ws.send(JSON.stringify({ type: 'room:leave', room_id: currentRoom }));

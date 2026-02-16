@@ -685,7 +685,7 @@ input:focus-visible {
     width: 100%;
     padding: 10px 12px;
     margin: 0;
-    background: rgba(255, 255, 255, 0.5);
+    background: transparent;
     color: var(--text-secondary);
     border: 1px solid rgba(var(--theme-rgb), 0.12);
     border-radius: 8px;
