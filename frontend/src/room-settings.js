@@ -43,7 +43,7 @@ async function checkSession() {
 
             if (!currentRoomId) {
                 alert('No room specified');
-                window.location.href = '/chat.html';
+                window.location.href = '/app.html';
                 return;
             }
 
@@ -72,7 +72,7 @@ async function initializeRoomSettings() {
             } else {
                 alert('Failed to load room settings');
             }
-            window.location.href = '/chat.html';
+            window.location.href = '/app.html';
             return;
         }
 
@@ -81,7 +81,7 @@ async function initializeRoomSettings() {
         // Update back button to navigate to this room
         const backBtn = document.querySelector('.admin-back-btn');
         if (backBtn) {
-            backBtn.href = `/chat.html#/r/${encodeURIComponent(currentRoomId)}`;
+            backBtn.href = `/app.html#/r/${encodeURIComponent(currentRoomId)}`;
         }
 
         // Update page title
@@ -116,7 +116,7 @@ async function initializeRoomSettings() {
     } catch (error) {
         console.error('[HTTP] Error initializing room settings:', error);
         alert('Failed to load room settings');
-        window.location.href = '/chat.html';
+        window.location.href = '/app.html';
     }
 }
 
@@ -315,7 +315,7 @@ async function deleteRoom() {
 
         if (response.ok) {
             alert('Room deleted successfully');
-            window.location.href = '/chat.html';
+            window.location.href = '/app.html';
         } else {
             const error = await response.json();
             alert(`Failed to delete room: ${error.detail || 'Unknown error'}`);

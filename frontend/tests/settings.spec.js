@@ -53,7 +53,7 @@ test.describe('Settings Page', () => {
 
       const backLink = page.locator('a.admin-back-btn');
       await expect(backLink).toBeVisible();
-      await expect(backLink).toHaveAttribute('href', '/chat.html');
+      await expect(backLink).toHaveAttribute('href', '/app.html');
     });
 
     test('section nav should switch active section', async ({ page }) => {

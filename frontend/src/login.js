@@ -20,7 +20,7 @@ async function checkSession() {
 
         if (data.authenticated) {
             // Redirect to chat if already logged in
-            window.location.href = '/chat.html';
+            window.location.href = '/app.html';
         } else {
             // Clear invalid session
             localStorage.removeItem('session_token');
@@ -104,7 +104,7 @@ async function login() {
             }
 
             // Redirect to chat
-            window.location.href = '/chat.html';
+            window.location.href = '/app.html';
         }
 
     } catch (error) {

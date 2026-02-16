@@ -4,7 +4,7 @@ import { rename, readdir, rm } from 'fs/promises'
 
 // HTML pages live in pages/ but are served at flat URLs (e.g. /login.html, not /pages/login.html)
 function flatPages() {
-  const htmlFiles = ['index.html', 'chat.html', 'login.html', 'register.html', 'admin.html', 'settings.html', 'room-settings.html']
+  const htmlFiles = ['index.html', 'app.html', 'login.html', 'register.html', 'admin.html', 'settings.html', 'room-settings.html']
 
   return {
     name: 'flat-pages',
@@ -45,7 +45,7 @@ export default defineConfig({
     rollupOptions: {
       input: {
         main: resolve(__dirname, 'pages/index.html'),
-        chat: resolve(__dirname, 'pages/chat.html'),
+        app: resolve(__dirname, 'pages/app.html'),
         login: resolve(__dirname, 'pages/login.html'),
         register: resolve(__dirname, 'pages/register.html'),
         admin: resolve(__dirname, 'pages/admin.html'),

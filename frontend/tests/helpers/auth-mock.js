@@ -1,7 +1,7 @@
 /**
  * Shared auth mock helper for DOM tests.
  *
- * Prevents the auth redirect (chat.js / admin.js / settings.js all call
+ * Prevents the auth redirect (app.js / admin.js / settings.js all call
  * checkSession() which redirects to /login.html when there is no
  * session_token in localStorage).
  *

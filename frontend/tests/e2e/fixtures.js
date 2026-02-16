@@ -53,7 +53,7 @@ export const test = base.extend({
     await page.locator('#register-submit-button').click();
 
     // First user is auto-approved (open registration mode) -> redirects to chat
-    await page.waitForURL(/.*chat\.html/, { timeout: 20000 });
+    await page.waitForURL(/.*app\.html/, { timeout: 20000 });
 
     const sessionToken = await page.evaluate(() => localStorage.getItem('session_token'));
     expect(sessionToken).toBeTruthy();

@@ -1,14 +1,14 @@
 import { test, expect } from '@playwright/test';
 import { setupAuthMocks } from './helpers/auth-mock.js';
 
-test.describe('Chat Page', () => {
+test.describe('App Page', () => {
   test.beforeEach(async ({ page }) => {
     await setupAuthMocks(page);
   });
 
   test.describe('HTML Structure', () => {
     test('should have correct kebab-case IDs', async ({ page }) => {
-      await page.goto('/chat.html');
+      await page.goto('/app.html');
 
       // Main containers
       await expect(page.locator('#chat-view')).toBeVisible();
@@ -36,7 +36,7 @@ test.describe('Chat Page', () => {
     });
 
     test('modals should have correct IDs', async ({ page }) => {
-      await page.goto('/chat.html');
+      await page.goto('/app.html');
 
       // Room settings modal (hidden until opened)
       await expect(page.locator('#room-settings-modal')).toBeAttached();
@@ -66,7 +66,7 @@ test.describe('Chat Page', () => {
     test('menu toggle should be clickable', async ({ page }) => {
       // Use a mobile viewport so the menu toggle is visible
       await page.setViewportSize({ width: 375, height: 667 });
-      await page.goto('/chat.html');
+      await page.goto('/app.html');
 
       const menuToggle = page.locator('#menu-toggle');
       await expect(menuToggle).toBeVisible();
@@ -76,7 +76,7 @@ test.describe('Chat Page', () => {
     });
 
     test('send button should be clickable', async ({ page }) => {
-      await page.goto('/chat.html');
+      await page.goto('/app.html');
 
       const sendButton = page.locator('#send-button');
       await expect(sendButton).toBeEnabled();
@@ -90,7 +90,7 @@ test.describe('Chat Page', () => {
     });
 
     test('message input Enter key should work', async ({ page }) => {
-      await page.goto('/chat.html');
+      await page.goto('/app.html');
 
       const messageInput = page.locator('#message-input');
       await messageInput.fill('Test message');
@@ -98,7 +98,7 @@ test.describe('Chat Page', () => {
     });
 
     test('add channel button should open modal', async ({ page }) => {
-      await page.goto('/chat.html');
+      await page.goto('/app.html');
 
       const addChannelBtn = page.locator('#add-channel-btn');
       const modal = page.locator('#create-room-modal');
@@ -109,7 +109,7 @@ test.describe('Chat Page', () => {
     });
 
     test('create room modal should close on backdrop click', async ({ page }) => {
-      await page.goto('/chat.html');
+      await page.goto('/app.html');
 
       // Open modal
       await page.locator('#add-channel-btn').click();
@@ -124,14 +124,14 @@ test.describe('Chat Page', () => {
 
   test.describe('CSS Classes', () => {
     test('should have proper semantic classes', async ({ page }) => {
-      await page.goto('/chat.html');
+      await page.goto('/app.html');
 
       await expect(page.locator('.header-brand')).toBeVisible();
       await expect(page.locator('.mobile-hint')).toBeAttached(); // hidden on desktop viewport
     });
 
     test('should have no inline styles in HTML', async ({ page }) => {
-      await page.goto('/chat.html');
+      await page.goto('/app.html');
 
       const elementsWithInlineStyles = await page.evaluate(() => {
         const elements = Array.from(document.querySelectorAll('*'));

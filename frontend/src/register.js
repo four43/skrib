@@ -196,7 +196,7 @@ async function register() {
                 'success'
             );
             setTimeout(() => {
-                window.location.href = '/chat.html';
+                window.location.href = '/app.html';
             }, 2000);
         } else {
             showStatus('register-status',

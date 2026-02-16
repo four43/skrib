@@ -23,7 +23,7 @@ async function registerSecondUser(page) {
     await page.locator('#register-username').pressSequentially(user2name, { delay: 30 });
     await expect(page.locator('#register-username')).not.toHaveClass(/invalid/);
     await page.locator('#register-submit-button').click();
-    await page.waitForURL(/.*chat\.html/, { timeout: 20000 });
+    await page.waitForURL(/.*app\.html/, { timeout: 20000 });
 
     // Restore original user's session
     await page.evaluate((s) => {
@@ -31,7 +31,7 @@ async function registerSecondUser(page) {
         localStorage.setItem('username', s.username);
         if (s.role) localStorage.setItem('role', s.role);
     }, savedSession);
-    await page.goto('/chat.html');
+    await page.goto('/app.html');
     await page.waitForLoadState('networkidle');
 
     return user2name;

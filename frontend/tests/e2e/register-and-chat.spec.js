@@ -15,7 +15,7 @@ test.describe('User Registration', () => {
     await page.locator('#register-username').pressSequentially(username, { delay: 30 });
     await page.locator('#register-submit-button').click();
 
-    await page.waitForURL(/.*chat\.html/, { timeout: 20000 });
+    await page.waitForURL(/.*app\.html/, { timeout: 20000 });
 
     // Session is stored
     const token = await page.evaluate(() => localStorage.getItem('session_token'));
@@ -34,7 +34,7 @@ test.describe('User Registration', () => {
     await page.waitForLoadState('networkidle');
     await page.locator('#register-username').pressSequentially(username, { delay: 30 });
     await page.locator('#register-submit-button').click();
-    await page.waitForURL(/.*chat\.html/, { timeout: 20000 });
+    await page.waitForURL(/.*app\.html/, { timeout: 20000 });
 
     // Clear session
     await page.evaluate(() => {
@@ -46,7 +46,7 @@ test.describe('User Registration', () => {
     // Login
     await page.goto('/login.html');
     await page.locator('#login-button').click();
-    await page.waitForURL(/.*chat\.html/, { timeout: 15000 });
+    await page.waitForURL(/.*app\.html/, { timeout: 15000 });
 
     const storedUsername = await page.evaluate(() => localStorage.getItem('username'));
     expect(storedUsername).toBe(username);
@@ -62,7 +62,7 @@ test.describe('Auth Flows', () => {
     await page.waitForLoadState('networkidle');
     await page.locator('#register-username').pressSequentially(username, { delay: 30 });
     await page.locator('#register-submit-button').click();
-    await page.waitForURL(/.*chat\.html/, { timeout: 20000 });
+    await page.waitForURL(/.*app\.html/, { timeout: 20000 });
 
     // Clear session
     await page.evaluate(() => {
@@ -74,7 +74,7 @@ test.describe('Auth Flows', () => {
     // Login
     await page.goto('/login.html');
     await page.locator('#login-button').click();
-    await page.waitForURL(/.*chat\.html/, { timeout: 15000 });
+    await page.waitForURL(/.*app\.html/, { timeout: 15000 });
 
     // Verify chat UI loaded
     await expect(page.locator('#chat-view')).toBeVisible({ timeout: 5000 });
@@ -85,8 +85,8 @@ test.describe('Auth Flows', () => {
   test('login page redirects to chat when already authenticated', async ({ registeredUser: { page } }) => {
     // registeredUser fixture already registered and landed on chat
     await page.goto('/login.html');
-    await page.waitForURL(/.*chat\.html/, { timeout: 5000 });
-    await expect(page).toHaveURL(/.*chat\.html/);
+    await page.waitForURL(/.*app\.html/, { timeout: 5000 });
+    await expect(page).toHaveURL(/.*app\.html/);
   });
 });
 

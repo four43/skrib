@@ -35,7 +35,7 @@ async function checkSession() {
             localStorage.setItem('role', data.role);
 
             if (currentRole !== 'admin' && currentRole !== 'moderator') {
-                window.location.href = '/chat.html';
+                window.location.href = '/app.html';
                 return;
             }
 
