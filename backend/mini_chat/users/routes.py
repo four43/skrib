@@ -104,6 +104,7 @@ async def get_user_profile(
             color=prefs['color'],
             theme_color=prefs.get('theme_color'),
             theme_name=prefs.get('theme_name'),
+            color_scheme=prefs.get('color_scheme'),
             nickname=prefs.get('nickname'),
         )
 
@@ -134,8 +135,9 @@ async def update_user(
             if not is_admin:
                 raise HTTPException(status_code=403, detail="Not authorized")
 
-    # Update preferences (color, theme_color, theme_name, nickname) - users can update their own
-    if updates.color is not None or updates.theme_color is not None or updates.theme_name is not None or updates.nickname is not None:
+    # Update preferences (color, theme_color, theme_name, color_scheme, nickname) - users can update their own
+    pref_fields = [updates.color, updates.theme_color, updates.theme_name, updates.color_scheme, updates.nickname]
+    if any(f is not None for f in pref_fields):
         if not is_self and not is_admin:
             raise HTTPException(status_code=403, detail="You can only change your own preferences")
         update_user_preferences(
@@ -143,6 +145,7 @@ async def update_user(
             color=updates.color,
             theme_color=updates.theme_color,
             theme_name=updates.theme_name,
+            color_scheme=updates.color_scheme,
             nickname=updates.nickname
         )
 

@@ -669,8 +669,8 @@ async function initializeChatView() {
         if (response.ok) {
             const serverInfo = await response.json();
             const serverTitleEl = document.getElementById('server-title');
-            if (serverTitleEl && serverInfo.server_title) {
-                serverTitleEl.textContent = serverInfo.server_title;
+            if (serverTitleEl && serverInfo.name) {
+                serverTitleEl.textContent = serverInfo.name;
             }
         }
     } catch (error) {

@@ -57,19 +57,9 @@ def delete_invite_token(token: str) -> bool:
 
 def get_system_status() -> Dict:
     """Get system status."""
-    with get_db() as conn:
-        users_count = conn.execute("SELECT COUNT(*) as count FROM users WHERE status = 'active'").fetchone()['count']
-        pending_count = conn.execute("SELECT COUNT(*) as count FROM users WHERE status = 'pending'").fetchone()['count']
-        rooms_count = conn.execute('SELECT COUNT(DISTINCT room_id) as count FROM messages').fetchone()['count']
-        messages_count = conn.execute('SELECT COUNT(*) as count FROM messages').fetchone()['count']
-
     return {
-        'users_count': users_count,
-        'pending_count': pending_count,
-        'rooms_count': rooms_count,
-        'messages_count': messages_count,
         'registration_mode': get_registration_mode(),
         'server_color': get_setting('server_color', '#6366f1'),
         'default_theme': get_setting('default_theme', 'com.four43.theme-default'),
-        'server_title': get_setting('server_title', 'My Server'),
+        'name': get_setting('server_name', 'My Server'),
     }

@@ -13,6 +13,7 @@ class GetPreferencesResponse(BaseModel):
     color: str
     theme_color: Optional[str] = None
     theme_name: Optional[str] = None
+    color_scheme: Optional[str] = None
     nickname: Optional[str] = None
 
 
@@ -67,6 +68,7 @@ class UserProfile(BaseModel):
     color: str
     theme_color: Optional[str] = None
     theme_name: Optional[str] = None
+    color_scheme: Optional[str] = None
     nickname: Optional[str] = None
 
 
@@ -75,6 +77,7 @@ class UserUpdateRequest(BaseModel):
     color: Optional[str] = None
     theme_color: Optional[str] = None
     theme_name: Optional[str] = None
+    color_scheme: Optional[str] = None
     nickname: Optional[str] = None
     role: Optional[str] = None  # Admin only
 

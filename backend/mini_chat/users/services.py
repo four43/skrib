@@ -9,14 +9,14 @@ def get_user_preferences(username: str) -> Optional[Dict]:
     """Get preferences for a user. Returns None if not found."""
     with get_db() as conn:
         cursor = conn.execute(
-            'SELECT username, color, theme_color, theme_name, nickname FROM users WHERE username = ? AND status = ?',
+            'SELECT username, color, theme_color, theme_name, color_scheme, nickname FROM users WHERE username = ? AND status = ?',
             (username, 'active')
         )
         row = cursor.fetchone()
         return dict(row) if row else None
 
 
-def update_user_preferences(username: str, color: Optional[str] = None, theme_color: Optional[str] = None, theme_name: Optional[str] = None, nickname: Optional[str] = None) -> bool:
+def update_user_preferences(username: str, color: Optional[str] = None, theme_color: Optional[str] = None, theme_name: Optional[str] = None, color_scheme: Optional[str] = None, nickname: Optional[str] = None) -> bool:
     """Update user preferences on the users table."""
     with get_db() as conn:
         updates = []
@@ -32,6 +32,10 @@ def update_user_preferences(username: str, color: Optional[str] = None, theme_co
             # Empty string means "use server default"
             updates.append('theme_name = ?')
             params.append(theme_name if theme_name != '' else None)
+        if color_scheme is not None:
+            # Validate value
+            updates.append('color_scheme = ?')
+            params.append(color_scheme if color_scheme in ('auto', 'light', 'dark') else None)
         if nickname is not None:
             # Empty string means "clear nickname, use username"
             trimmed = nickname.strip()

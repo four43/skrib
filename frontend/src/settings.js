@@ -1,11 +1,12 @@
 import { API_URL, applyThemeColor } from './utils.js';
-import { loadTheme, fetchAvailableThemes, loadThemeCSS, applyUserOverrides } from './theme-manager.js';
+import { loadTheme, fetchAvailableThemes, loadThemeCSS, applyUserOverrides, applyColorScheme } from './theme-manager.js';
 
 let sessionToken = null;
 let currentUsername = null;
 let currentRole = null;
 let serverColor = '#6366f1';
 let currentThemeName = null;
+let currentColorScheme = 'auto';
 
 // Check session and redirect if not authenticated
 checkSession();
@@ -71,7 +72,7 @@ async function initializeSettingsPage() {
 
 async function loadUserSettings() {
     try {
-        const response = await fetch(`${API_URL}/users/${currentUsername}/preferences`, {
+        const response = await fetch(`${API_URL}/users/${encodeURIComponent(currentUsername)}`, {
             headers: {
                 'Authorization': `Bearer ${sessionToken}`
             }
@@ -86,8 +87,10 @@ async function loadUserSettings() {
             if (colorInput) {
                 colorInput.value = data.color;
             }
-            // Track current theme
+            // Track current theme and color scheme
             currentThemeName = data.theme_name || null;
+            currentColorScheme = data.color_scheme || 'auto';
+            updateColorSchemeUI(currentColorScheme);
             // If no user theme, fetch server default
             if (!currentThemeName) {
                 try {
@@ -261,6 +264,35 @@ async function selectTheme(themeId) {
     }
 }
 
+function updateColorSchemeUI(scheme) {
+    document.querySelectorAll('.color-scheme-option').forEach(btn => {
+        btn.classList.toggle('active', btn.dataset.scheme === scheme);
+    });
+}
+
+async function selectColorScheme(scheme) {
+    if (scheme === currentColorScheme) return;
+
+    // Apply immediately
+    applyColorScheme(scheme);
+    currentColorScheme = scheme;
+    updateColorSchemeUI(scheme);
+
+    // Persist to backend
+    try {
+        await fetch(`${API_URL}/users/${encodeURIComponent(currentUsername)}`, {
+            method: 'PATCH',
+            headers: {
+                'Authorization': `Bearer ${sessionToken}`,
+                'Content-Type': 'application/json'
+            },
+            body: JSON.stringify({ color_scheme: scheme })
+        });
+    } catch (error) {
+        console.error('[HTTP] Error updating color scheme:', error);
+    }
+}
+
 function logout() {
     sessionToken = null;
     currentUsername = null;
@@ -286,6 +318,11 @@ function setupEventListeners() {
     // Nav switching
     document.querySelectorAll('.settings-nav-item').forEach(item => {
         item.addEventListener('click', () => switchSection(item.dataset.section));
+    });
+
+    // Color scheme picker
+    document.querySelectorAll('.color-scheme-option').forEach(btn => {
+        btn.addEventListener('click', () => selectColorScheme(btn.dataset.scheme));
     });
 
     // Logout button

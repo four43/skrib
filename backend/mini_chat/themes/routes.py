@@ -156,7 +156,7 @@ async def get_theme_file(theme_id: str, file_path: str):
         content_type = "application/javascript"
     elif ext == ".json":
         content_type = "application/json"
-    elif ext in [".png", ".jpg", ".jpeg", ".gif", ".svg", ".webp"]:
+    elif ext in [".png", ".jpg", ".jpeg", ".gif", ".svg", ".webp", ".avif"]:
         content_type = f"image/{ext[1:]}"
         if ext == ".svg":
             content_type = "image/svg+xml"

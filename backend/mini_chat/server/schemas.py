@@ -15,11 +15,7 @@ class ServerInfoResponse(BaseModel):
     registration_mode: RegistrationMode
     server_color: str
     default_theme: str
-    server_title: str
-    users_count: Optional[int] = None  # Admin only
-    pending_count: Optional[int] = None  # Admin only
-    rooms_count: Optional[int] = None  # Admin only
-    messages_count: Optional[int] = None  # Admin only
+    name: str
 
 
 class ServerUpdateRequest(BaseModel):
@@ -27,7 +23,7 @@ class ServerUpdateRequest(BaseModel):
     registration_mode: Optional[RegistrationMode] = None
     server_color: Optional[str] = None
     default_theme: Optional[str] = None
-    server_title: Optional[str] = None
+    name: Optional[str] = None
 
 
 class UpdateRegistrationModeRequest(BaseModel):

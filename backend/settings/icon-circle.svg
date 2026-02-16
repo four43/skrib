@@ -1,0 +1,17 @@
+<svg
+        width="128"
+        height="128"
+        viewBox="0 0 120 120"
+        fill="none"
+        xmlns="http://www.w3.org/2000/svg"
+      >
+        <circle cx="60" cy="60" r="58" fill="white" stroke="#E5E7EB" strokeWidth="4" />
+        <path
+          d="M35 45C35 38.3726 40.3726 33 47 33H73C79.6274 33 85 38.3726 85 45V63C85 69.6274 79.6274 75 73 75H55L40 87V75C36.134 75 35 71.866 35 68V45Z"
+          fill="#8B5CF6"
+        />
+        <path
+          d="M65 45L52 58H60L55 68L68 55H60L65 45Z"
+          fill="white"
+        />
+      </svg>

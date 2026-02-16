@@ -101,13 +101,8 @@ export function loadThemeCSS(themeName) {
     link.rel = 'stylesheet';
     link.href = `${API_URL}/themes/${themeName}`;
 
-    // Insert before the first stylesheet (style.css) so it has lower precedence
-    const firstStyle = document.querySelector('link[rel="stylesheet"]');
-    if (firstStyle) {
-        firstStyle.parentNode.insertBefore(link, firstStyle);
-    } else {
-        document.head.appendChild(link);
-    }
+    // Insert after existing stylesheets so theme overrides style.css
+    document.head.appendChild(link);
 
     console.log(`[Theme] Loaded theme: ${themeName}`);
 }
@@ -168,6 +163,16 @@ export function applyUserOverrides(overrides) {
 }
 
 /**
+ * Apply color scheme (auto/light/dark) by setting data attribute on <html>.
+ * @param {string} scheme - 'auto', 'light', or 'dark'
+ */
+export function applyColorScheme(scheme) {
+    const value = scheme || 'auto';
+    document.documentElement.setAttribute('data-color-scheme', value);
+    console.log(`[Theme] Color scheme: ${value}`);
+}
+
+/**
  * Load theme and apply user preferences.
  * @param {string|null} username - Username (required for authenticated users)
  * @param {string|null} token - Session token (optional, for authenticated users)
@@ -178,8 +183,10 @@ export async function loadTheme(username = null, token = null) {
         const prefs = await fetchUserThemePreferences(username, token);
         loadThemeCSS(prefs.theme_name);
         applyUserOverrides(prefs);
+        applyColorScheme(prefs.color_scheme);
     } else {
         // Anonymous: fetch default theme from server
+        applyColorScheme('auto');
         try {
             const resp = await fetch(`${API_URL}/server`);
             const serverInfo = await resp.json();

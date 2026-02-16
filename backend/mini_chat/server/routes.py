@@ -15,43 +15,17 @@ from .services import (
     get_invite_tokens,
     delete_invite_token,
 )
-from ..database import get_setting, set_setting
-from ..dependencies import require_admin, get_username_from_token
+from ..database import set_setting
+from ..dependencies import require_admin
 
 router = APIRouter(prefix="/server", tags=["server"])
 
 
 @router.get("", response_model=ServerInfoResponse)
-async def get_server_info(username: str = Depends(get_username_from_token)):
-    """Get server info. Public info (registration_mode, server_color) for all users, full stats for admins."""
-    from ..auth.services import get_registration_mode
-    from ..database import get_db
-
-    # Get public info
-    registration_mode = get_registration_mode()
-    server_color = get_setting('server_color', '#6366f1') or '#6366f1'
-    default_theme = get_setting('default_theme', 'com.four43.theme-default') or 'com.four43.theme-default'
-    server_title = get_setting('server_title', 'My Server') or 'My Server'
-
-    # Check if user is admin
-    is_admin = False
-    if username:
-        with get_db() as conn:
-            cursor = conn.execute('SELECT role FROM users WHERE username = ?', (username,))
-            row = cursor.fetchone()
-            is_admin = row and row['role'] == 'admin'
-
-    # Return full status for admins, basic info for others
-    if is_admin:
-        status = get_system_status()
-        return ServerInfoResponse(**status)
-    else:
-        return ServerInfoResponse(
-            registration_mode=registration_mode,
-            server_color=server_color,
-            default_theme=default_theme,
-            server_title=server_title
-        )
+async def get_server_info():
+    """Get server info. Returns public server configuration."""
+    status = get_system_status()
+    return ServerInfoResponse(**status)
 
 
 @router.patch("", response_model=ServerInfoResponse)
@@ -69,8 +43,8 @@ async def update_server(
     if updates.default_theme is not None:
         set_setting('default_theme', updates.default_theme)
 
-    if updates.server_title is not None:
-        set_setting('server_title', updates.server_title)
+    if updates.name is not None:
+        set_setting('server_name', updates.name)
 
     # Return updated server info
     status = get_system_status()

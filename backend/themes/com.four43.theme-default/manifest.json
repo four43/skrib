@@ -24,7 +24,8 @@
     ],
     "images": {
       "logo": "assets/logo.png",
-      "favicon": "assets/favicon.ico"
+      "favicon": "assets/favicon.ico",
+      "background": "assets/background.webp"
     }
   },
   "customization": {

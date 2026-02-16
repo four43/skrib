@@ -1232,26 +1232,6 @@ input:focus-visible {
 }
 
 
-.settings-logout-btn {
-    width: auto;
-    padding: 8px 24px;
-    margin: 0;
-    background: rgba(var(--theme-rgb), 0.08);
-    color: var(--text-tertiary);
-    border: 1px solid rgba(var(--theme-rgb), 0.15);
-    border-radius: 8px;
-    font-size: 13px;
-    font-weight: 500;
-    box-shadow: none;
-}
-
-.settings-logout-btn:hover {
-    background: rgba(239, 68, 68, 0.1);
-    color: var(--color-error-dark);
-    border-color: rgba(239, 68, 68, 0.2);
-    transform: none;
-    box-shadow: none;
-}
 
 /* ═══════════════════════════════════════════
    Settings Page Layout
@@ -1419,6 +1399,54 @@ input:focus-visible {
     color: var(--theme-color-dark);
     transform: none;
     box-shadow: none;
+}
+
+/* ═══════════════════════════════════════════
+   Color Scheme Picker
+   ═══════════════════════════════════════════ */
+
+.color-scheme-picker {
+    display: flex;
+    gap: 8px;
+}
+
+.color-scheme-option {
+    flex: 1;
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    gap: 6px;
+    padding: 14px 12px;
+    margin: 0;
+    border: 1px solid rgba(var(--theme-rgb), 0.1);
+    border-radius: 10px;
+    background: rgba(255, 255, 255, 0.4);
+    color: var(--text-secondary);
+    font-size: 13px;
+    font-weight: 500;
+    cursor: pointer;
+    box-shadow: none;
+    transition: all 0.15s ease;
+}
+
+.color-scheme-option:hover {
+    border-color: rgba(var(--theme-rgb), 0.25);
+    background: rgba(255, 255, 255, 0.6);
+    transform: none;
+    box-shadow: none;
+}
+
+.color-scheme-option.active {
+    border-color: var(--theme-color);
+    background: rgba(var(--theme-rgb), 0.08);
+    color: var(--theme-color-dark);
+    font-weight: 600;
+    box-shadow: 0 0 0 2px rgba(var(--theme-rgb), 0.15);
+}
+
+.color-scheme-icon {
+    font-size: 20px;
+    line-height: 1;
 }
 
 /* ═══════════════════════════════════════════
@@ -2112,4 +2140,156 @@ input:focus-visible {
     display: flex;
     align-items: center;
     gap: 12px;
+}
+
+/* ═══════════════════════════════════════════
+   Dark Mode
+   ═══════════════════════════════════════════ */
+
+/* Shared dark mode variables */
+html[data-color-scheme="dark"],
+html[data-color-scheme="auto"] {
+    --dark-text-primary: #e2e8f0;
+    --dark-text-secondary: #94a3b8;
+    --dark-text-tertiary: #64748b;
+    --dark-text-muted: #475569;
+    --dark-bg-body-start: #0f172a;
+    --dark-bg-body-mid: #1e293b;
+    --dark-bg-body-end: #0f172a;
+    --dark-bg-surface: rgba(30, 41, 59, 0.7);
+    --dark-bg-surface-elevated: rgba(30, 41, 59, 0.85);
+    --dark-bg-surface-elevated-dark: rgba(15, 23, 42, 0.92);
+    --dark-border-white: rgba(255, 255, 255, 0.08);
+}
+
+/* Explicit dark mode */
+html[data-color-scheme="dark"] {
+    --text-primary: var(--dark-text-primary);
+    --text-secondary: var(--dark-text-secondary);
+    --text-tertiary: var(--dark-text-tertiary);
+    --text-muted: var(--dark-text-muted);
+    --bg-body-start: var(--dark-bg-body-start);
+    --bg-body-mid: var(--dark-bg-body-mid);
+    --bg-body-end: var(--dark-bg-body-end);
+    --bg-surface: var(--dark-bg-surface);
+    --bg-surface-elevated: var(--dark-bg-surface-elevated);
+    --bg-surface-elevated-dark: var(--dark-bg-surface-elevated-dark);
+    --bg-overlay: rgba(255, 255, 255, 0.05);
+    --bg-overlay-dark: rgba(0, 0, 0, 0.5);
+    --border-white: var(--dark-border-white);
+    --color-disabled: #334155;
+    --gray-500: #94a3b8;
+    --gray-600: #64748b;
+    --gray-700: #64748b;
+}
+
+/* Auto dark mode - only when system prefers dark */
+@media (prefers-color-scheme: dark) {
+    html[data-color-scheme="auto"] {
+        --text-primary: var(--dark-text-primary);
+        --text-secondary: var(--dark-text-secondary);
+        --text-tertiary: var(--dark-text-tertiary);
+        --text-muted: var(--dark-text-muted);
+        --bg-body-start: var(--dark-bg-body-start);
+        --bg-body-mid: var(--dark-bg-body-mid);
+        --bg-body-end: var(--dark-bg-body-end);
+        --bg-surface: var(--dark-bg-surface);
+        --bg-surface-elevated: var(--dark-bg-surface-elevated);
+        --bg-surface-elevated-dark: var(--dark-bg-surface-elevated-dark);
+        --bg-overlay: rgba(255, 255, 255, 0.05);
+        --bg-overlay-dark: rgba(0, 0, 0, 0.5);
+        --border-white: var(--dark-border-white);
+        --color-disabled: #334155;
+        --gray-500: #94a3b8;
+        --gray-600: #64748b;
+        --gray-700: #64748b;
+    }
+}
+
+/* Dark mode overrides for hardcoded rgba(255,255,255,...) backgrounds */
+html[data-color-scheme="dark"] .auth-box,
+html[data-color-scheme="dark"] .container,
+html[data-color-scheme="dark"] .admin-page,
+html[data-color-scheme="dark"] .settings-page,
+html[data-color-scheme="dark"] .message-text,
+html[data-color-scheme="dark"] .invite-item,
+html[data-color-scheme="dark"] .pending-user,
+html[data-color-scheme="dark"] .user-item,
+html[data-color-scheme="dark"] .room-settings-content,
+html[data-color-scheme="dark"] .settings-panel {
+    background: var(--dark-bg-surface-elevated);
+    border-color: var(--dark-border-white);
+}
+
+html[data-color-scheme="dark"] .sidebar,
+html[data-color-scheme="dark"] .settings-nav,
+html[data-color-scheme="dark"] .chat-header,
+html[data-color-scheme="dark"] .input-area,
+html[data-color-scheme="dark"] .settings-panel-header,
+html[data-color-scheme="dark"] .room-settings-header {
+    background: rgba(15, 23, 42, 0.6);
+}
+
+html[data-color-scheme="dark"] .chat-area {
+    background: rgba(15, 23, 42, 0.3);
+}
+
+html[data-color-scheme="dark"] .message-input,
+html[data-color-scheme="dark"] input[type="text"],
+html[data-color-scheme="dark"] .preview-input {
+    background: rgba(15, 23, 42, 0.5);
+    color: var(--dark-text-primary);
+    border-color: rgba(var(--theme-rgb), 0.2);
+}
+
+html[data-color-scheme="dark"] .color-scheme-option,
+html[data-color-scheme="dark"] .theme-card,
+html[data-color-scheme="dark"] .preview-section {
+    background: rgba(30, 41, 59, 0.5);
+    border-color: rgba(var(--theme-rgb), 0.1);
+}
+
+/* Auto dark - duplicate overrides for system preference */
+@media (prefers-color-scheme: dark) {
+    html[data-color-scheme="auto"] .auth-box,
+    html[data-color-scheme="auto"] .container,
+    html[data-color-scheme="auto"] .admin-page,
+    html[data-color-scheme="auto"] .settings-page,
+    html[data-color-scheme="auto"] .message-text,
+    html[data-color-scheme="auto"] .invite-item,
+    html[data-color-scheme="auto"] .pending-user,
+    html[data-color-scheme="auto"] .user-item,
+    html[data-color-scheme="auto"] .room-settings-content,
+    html[data-color-scheme="auto"] .settings-panel {
+        background: var(--dark-bg-surface-elevated);
+        border-color: var(--dark-border-white);
+    }
+
+    html[data-color-scheme="auto"] .sidebar,
+    html[data-color-scheme="auto"] .settings-nav,
+    html[data-color-scheme="auto"] .chat-header,
+    html[data-color-scheme="auto"] .input-area,
+    html[data-color-scheme="auto"] .settings-panel-header,
+    html[data-color-scheme="auto"] .room-settings-header {
+        background: rgba(15, 23, 42, 0.6);
+    }
+
+    html[data-color-scheme="auto"] .chat-area {
+        background: rgba(15, 23, 42, 0.3);
+    }
+
+    html[data-color-scheme="auto"] .message-input,
+    html[data-color-scheme="auto"] input[type="text"],
+    html[data-color-scheme="auto"] .preview-input {
+        background: rgba(15, 23, 42, 0.5);
+        color: var(--dark-text-primary);
+        border-color: rgba(var(--theme-rgb), 0.2);
+    }
+
+    html[data-color-scheme="auto"] .color-scheme-option,
+    html[data-color-scheme="auto"] .theme-card,
+    html[data-color-scheme="auto"] .preview-section {
+        background: rgba(30, 41, 59, 0.5);
+        border-color: rgba(var(--theme-rgb), 0.1);
+    }
 }
