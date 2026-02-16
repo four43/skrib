@@ -2,7 +2,7 @@
   "id": "com.four43.theme-default",
   "name": "Default Theme",
   "version": "1.0.0",
-  "description": "Default dark theme for Mini Chat",
+  "description": "Default simple theme for Mini Chat",
   "author": "Four43",
   "type": "theme",
   "variants": [
@@ -18,14 +18,8 @@
   ],
   "assets": {
     "css": [
-      "css/base.css",
-      "css/components.css",
-      "css/rooms.css"
     ],
     "images": {
-      "logo": "assets/logo.png",
-      "favicon": "assets/favicon.ico",
-      "background": "assets/background.webp"
     }
   },
   "customization": {

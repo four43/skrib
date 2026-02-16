@@ -60,15 +60,14 @@ class PluginRegistry:
         self.plugins[plugin.id] = plugin
         print(f"[Plugins] Registered plugin: {plugin.id} v{plugin.version}")
 
-        # Create plugin's database table if schema provided
+        # Create plugin's database table in its own isolated DB
         schema = plugin.get_table_schema()
         if schema:
-            from ..database import get_db
             try:
-                with get_db() as conn:
+                with plugin.get_plugin_db() as conn:
                     conn.execute(schema)
                     conn.commit()
-                print(f"[Plugins]   - Created table: plugin_{plugin.name}")  # table name uses short name
+                print(f"[Plugins]   - Created table in {plugin.id}.db")
             except Exception as e:
                 print(f"[Plugins]   - Warning: Failed to create table for {plugin.id}: {e}")
 

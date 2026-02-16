@@ -1,12 +1,19 @@
-"""Chat room message storage and retrieval."""
-import sys
+"""Chat room message storage and retrieval.
+
+Uses a plugin-scoped database provider instead of the core database.
+The provider is set by the plugin during initialization.
+"""
 from datetime import datetime
-from pathlib import Path
 from typing import Dict, List, Optional
 
-sys.path.insert(0, str(Path(__file__).parent.parent.parent.parent))
 
-from mini_chat.database import get_db
+_get_db = None
+
+
+def init_db_provider(get_db_fn):
+    """Set the database provider. Called by the plugin during init."""
+    global _get_db
+    _get_db = get_db_fn
 
 
 class ChatRoom:
@@ -25,7 +32,7 @@ class ChatRoom:
         """Add a message to the room."""
         timestamp = datetime.now().isoformat()
 
-        with get_db() as conn:
+        with _get_db() as conn:
             cursor = conn.execute('''
                 INSERT INTO messages (room_id, username, content, content_type, key_epoch, timestamp)
                 VALUES (?, ?, ?, ?, ?, ?)
@@ -44,7 +51,7 @@ class ChatRoom:
 
     def get_messages(self, since: int = 0) -> List[Dict]:
         """Get messages since a certain ID."""
-        with get_db() as conn:
+        with _get_db() as conn:
             cursor = conn.execute('''
                 SELECT id, username, content, content_type, key_epoch, timestamp
                 FROM messages

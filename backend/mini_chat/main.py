@@ -20,7 +20,6 @@ from .config import (
     STATIC_DIR,
 )
 from .database import init_db
-from .messages.routes import router as messages_router
 
 # Import plugin system
 from .plugins import registry
@@ -125,7 +124,6 @@ async def shutdown_event():
 # Register API routers
 app.include_router(auth_router, prefix="/api")
 app.include_router(rooms_router, prefix="/api")
-app.include_router(messages_router, prefix="/api")
 app.include_router(server_router, prefix="/api")
 app.include_router(preferences_router, prefix="/api")
 app.include_router(ws_router, prefix="/api")

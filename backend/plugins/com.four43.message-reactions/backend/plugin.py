@@ -7,7 +7,6 @@ from pathlib import Path
 sys.path.insert(0, str(Path(__file__).parent.parent.parent.parent))
 
 from mini_chat.plugins.base import Plugin
-from mini_chat.database import get_db
 
 # Import sibling modules
 _backend_dir = Path(__file__).parent
@@ -21,6 +20,7 @@ def _load_module(name, filepath):
     return module
 
 # Load plugin modules
+db_module = _load_module("database", _backend_dir / "database.py")
 routes_module = _load_module("routes", _backend_dir / "routes.py")
 ws_handlers_module = _load_module("ws_handlers", _backend_dir / "ws_handlers.py")
 
@@ -35,9 +35,18 @@ class MessageReactionsPlugin(Plugin):
     Features:
     - React to messages with emojis
     - Real-time updates via WebSocket
-    - Server-side persistence
+    - Server-side persistence in plugin-scoped database
     - See who reacted
     """
+
+    def __init__(self):
+        # Wire up the DB provider for the database module
+        db_module.init_db_provider(self.get_plugin_db)
+        # Inject into routes and ws_handlers copies of the db module
+        if hasattr(routes_module, 'db'):
+            routes_module.db.init_db_provider(self.get_plugin_db)
+        if hasattr(ws_handlers_module, 'db'):
+            ws_handlers_module.db.init_db_provider(self.get_plugin_db)
 
     @property
     def id(self) -> str:
@@ -53,24 +62,20 @@ class MessageReactionsPlugin(Plugin):
         return "1.0.0"
 
     def get_table_schema(self) -> str:
-        """Return SQL schema for reactions table."""
+        """Return SQL schema for reactions table (no cross-DB foreign keys)."""
         return '''
             CREATE TABLE IF NOT EXISTS message_reactions (
                 message_id INTEGER NOT NULL,
                 username TEXT NOT NULL,
                 emoji TEXT NOT NULL,
                 created_at TEXT NOT NULL,
-                PRIMARY KEY (message_id, username, emoji),
-                FOREIGN KEY (message_id) REFERENCES messages(id) ON DELETE CASCADE,
-                FOREIGN KEY (username) REFERENCES users(username) ON DELETE CASCADE
+                PRIMARY KEY (message_id, username, emoji)
             )
         '''
 
     async def on_startup(self):
-        """Initialize database on startup."""
-        # Table creation is handled by registry using get_table_schema()
-        # Create index for fast lookups
-        with get_db() as conn:
+        """Create indexes on plugin database."""
+        with self.get_plugin_db() as conn:
             conn.execute('''
                 CREATE INDEX IF NOT EXISTS idx_reactions_message_id
                 ON message_reactions(message_id)

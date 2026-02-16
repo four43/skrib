@@ -79,32 +79,34 @@ export function darkenColor(hex, amount = 0.15) {
 }
 
 /**
+ * Lighten a hex color by a percentage.
+ * @param {string} hex - e.g. "#6366f1"
+ * @param {number} amount - 0-1, how much to lighten (0.15 = 15% lighter)
+ * @returns {string} lightened hex color
+ */
+export function lightenColor(hex, amount = 0.15) {
+    const rgb = hexToRgb(hex);
+    if (!rgb) return hex;
+    const r = Math.min(255, Math.round(rgb.r + (255 - rgb.r) * amount));
+    const g = Math.min(255, Math.round(rgb.g + (255 - rgb.g) * amount));
+    const b = Math.min(255, Math.round(rgb.b + (255 - rgb.b) * amount));
+    return `#${r.toString(16).padStart(2, '0')}${g.toString(16).padStart(2, '0')}${b.toString(16).padStart(2, '0')}`;
+}
+
+/**
  * Apply a theme color to the page by setting CSS custom properties.
+ * Sets --theme-color (main accent), --theme-color-dark (hover/emphasis),
+ * --theme-color-light (subtle emphasis), and --theme-rgb (for rgba()).
  * @param {string} hex - e.g. "#6366f1"
  */
 export function applyThemeColor(hex) {
     const rgb = hexToRgb(hex);
     if (!rgb) return;
     const dark = darkenColor(hex, 0.15);
+    const light = lightenColor(hex, 0.15);
     document.documentElement.style.setProperty('--theme-color', hex);
     document.documentElement.style.setProperty('--theme-color-dark', dark);
+    document.documentElement.style.setProperty('--theme-color-light', light);
     document.documentElement.style.setProperty('--theme-rgb', `${rgb.r}, ${rgb.g}, ${rgb.b}`);
 }
 
-/**
- * Fetch the server theme color and apply it.
- * Optionally override with a user theme color.
- * @param {string|null} userThemeColor - user's override, or null to use server default
- */
-export async function loadAndApplyTheme(userThemeColor = null) {
-    try {
-        const resp = await fetch(`${API_URL}/server`);
-        const data = await resp.json();
-        const color = userThemeColor || data.server_color || '#6366f1';
-        applyThemeColor(color);
-        return data.server_color;
-    } catch (error) {
-        console.error('Failed to load server theme:', error);
-        return '#6366f1';
-    }
-}

@@ -140,6 +140,7 @@ export function applyUserOverrides(overrides) {
         if (rgb) {
             cssRules.push(`    --theme-color: ${primary_color};`);
             cssRules.push(`    --theme-color-dark: ${darkenColor(primary_color, 0.15)};`);
+            cssRules.push(`    --theme-color-light: ${lightenColor(primary_color, 0.15)};`);
             cssRules.push(`    --theme-rgb: ${rgb.r}, ${rgb.g}, ${rgb.b};`);
         }
     }
@@ -163,13 +164,47 @@ export function applyUserOverrides(overrides) {
 }
 
 /**
- * Apply color scheme (auto/light/dark) by setting data attribute on <html>.
+ * Listener cleanup handle for matchMedia changes.
+ * @type {function|null}
+ */
+let _systemPrefCleanup = null;
+
+/**
+ * Apply color scheme (auto/light/dark).
+ * Stores the user preference in data-color-scheme and resolves the actual
+ * dark/light state into a data-theme-dark boolean attribute that CSS targets.
  * @param {string} scheme - 'auto', 'light', or 'dark'
  */
 export function applyColorScheme(scheme) {
     const value = scheme || 'auto';
     document.documentElement.setAttribute('data-color-scheme', value);
+
+    // Clean up previous system preference listener
+    if (_systemPrefCleanup) {
+        _systemPrefCleanup();
+        _systemPrefCleanup = null;
+    }
+
+    // Resolve whether dark mode should be active
+    if (value === 'auto') {
+        const mq = window.matchMedia('(prefers-color-scheme: dark)');
+        _resolveDarkMode(mq.matches);
+        const handler = (e) => _resolveDarkMode(e.matches);
+        mq.addEventListener('change', handler);
+        _systemPrefCleanup = () => mq.removeEventListener('change', handler);
+    } else {
+        _resolveDarkMode(value === 'dark');
+    }
+
     console.log(`[Theme] Color scheme: ${value}`);
+}
+
+/**
+ * Set or remove the data-theme-dark attribute on <html>.
+ * @param {boolean} isDark
+ */
+function _resolveDarkMode(isDark) {
+    document.documentElement.toggleAttribute('data-theme-dark', isDark);
 }
 
 /**

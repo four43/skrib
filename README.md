@@ -4,15 +4,18 @@ A secure chat application built with FastAPI backend and Vite frontend, featurin
 
 ## Features
 
+### Collaboration
+
+- **Multi-Room Chat** - Create and join multiple chat rooms
+- **Direct Messages** - Private conversations between users
+
 ### Security
 
-- **End-to-end Encryption (E2EE)** - for all messages, 0 knowledge server design
-- **Passwordless Authentication** - uses Passkeys(WebAuthn) for easy sign-up and usage
+- **No spying** - End-to-end Encryption (E2EE) for all messages, 0 knowledge server design
+- **Simple Auth** - Passwordless Authentication using Passkeys(WebAuthn) for easy sign-up and usage
   - The only info required for sign-up is a username and a compatible authenticator (e.g. phone biometrics, security key)
-- Role-based access controls
--
-- 🔐 **WebAuthn Authentication** - No passwords, uses hardware keys/biometrics
-- 👑 **Role-Based Access** - Admin and user roles
+- **Simple Moderation**  Role-based access controls for admin, mods, and regular users.
+
 - ✅ **Manual Approval** - Admins approve new registrations
 - 🔒 **Registration Control** - Toggle registration on/off from admin panel
 - 💬 **Multi-Room Chat** - Create and join multiple chat rooms

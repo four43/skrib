@@ -1,6 +1,5 @@
 """HTTP routes for chat message operations."""
 import sys
-import importlib.util
 from pathlib import Path
 
 sys.path.insert(0, str(Path(__file__).parent.parent.parent.parent))
@@ -21,13 +20,8 @@ from mini_chat.rooms.services import (
 )
 from mini_chat.ws import bus
 
-# Load sibling services module
-_svc_spec = importlib.util.spec_from_file_location(
-    "chat_services", Path(__file__).parent / "services.py"
-)
-_svc = importlib.util.module_from_spec(_svc_spec)
-_svc_spec.loader.exec_module(_svc)
-ChatRoom = _svc.ChatRoom
+# Injected by plugin.py after module load
+ChatRoom = None
 
 router = APIRouter()
 

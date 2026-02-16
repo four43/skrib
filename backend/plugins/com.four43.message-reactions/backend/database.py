@@ -1,26 +1,27 @@
-"""Reactions plugin database operations."""
-import sys
-from pathlib import Path
+"""Reactions plugin database operations.
+
+Uses a plugin-scoped database provider instead of the core database.
+The provider is set by the plugin during initialization.
+"""
 from datetime import datetime, timezone
 
-# Add parent directory to path to import mini_chat
-sys.path.insert(0, str(Path(__file__).parent.parent.parent.parent))
 
-from mini_chat.database import get_db
+_get_db = None
+
+
+def init_db_provider(get_db_fn):
+    """Set the database provider. Called by the plugin during init."""
+    global _get_db
+    _get_db = get_db_fn
 
 
 def add_reaction(message_id: int, username: str, emoji: str) -> bool:
     """Add a reaction to a message.
 
-    Args:
-        message_id: ID of the message to react to
-        username: User adding the reaction
-        emoji: Emoji character
-
     Returns:
         True if added, False if duplicate
     """
-    with get_db() as conn:
+    with _get_db() as conn:
         try:
             conn.execute('''
                 INSERT INTO message_reactions (message_id, username, emoji, created_at)
@@ -34,14 +35,8 @@ def add_reaction(message_id: int, username: str, emoji: str) -> bool:
 
 
 def remove_reaction(message_id: int, username: str, emoji: str):
-    """Remove a reaction from a message.
-
-    Args:
-        message_id: ID of the message
-        username: User removing the reaction
-        emoji: Emoji character
-    """
-    with get_db() as conn:
+    """Remove a reaction from a message."""
+    with _get_db() as conn:
         conn.execute('''
             DELETE FROM message_reactions
             WHERE message_id = ? AND username = ? AND emoji = ?
@@ -52,14 +47,10 @@ def remove_reaction(message_id: int, username: str, emoji: str):
 def get_reactions(message_id: int) -> list:
     """Get all reactions for a message grouped by emoji.
 
-    Args:
-        message_id: ID of the message
-
     Returns:
-        List of reaction objects:
-        [{"emoji": "👍", "usernames": ["alice", "bob"], "count": 2}, ...]
+        [{"emoji": "...", "usernames": [...], "count": N}, ...]
     """
-    with get_db() as conn:
+    with _get_db() as conn:
         cursor = conn.execute('''
             SELECT emoji, username
             FROM message_reactions
@@ -82,20 +73,13 @@ def get_reactions(message_id: int) -> list:
 def get_reactions_for_messages(message_ids: list) -> dict:
     """Get reactions for multiple messages efficiently.
 
-    Args:
-        message_ids: List of message IDs
-
     Returns:
-        Dictionary mapping message ID to reactions:
-        {
-            123: [{"emoji": "👍", "usernames": ["alice"], "count": 1}],
-            124: [{"emoji": "❤️", "usernames": ["bob", "charlie"], "count": 2}]
-        }
+        {message_id: [{"emoji": "...", "usernames": [...], "count": N}]}
     """
     if not message_ids:
         return {}
 
-    with get_db() as conn:
+    with _get_db() as conn:
         placeholders = ','.join('?' * len(message_ids))
         cursor = conn.execute(f'''
             SELECT message_id, emoji, username

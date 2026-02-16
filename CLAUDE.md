@@ -12,6 +12,8 @@ Read these files on demand when working on specific areas:
 - **Feature planning**: `docs/planning-feature-list.md`
 - **E2E encryption design**: `docs/end-to-end-encryption.md`
 
+**IMPORTANT**: You MUST NOT create migration functions, we are in early development and will reset the database as needed. Just modify the schema and delete the `data/*` files to reset.
+
 ## Project Structure
 
 ```

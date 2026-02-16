@@ -1,8 +1,8 @@
 {
-  "id": "com.four43.theme-plain",
-  "name": "PLain Base Theme",
+  "id": "com.four43.theme-aurora",
+  "name": "Aurora",
   "version": "1.0.0",
-  "description": "Default dark theme for Mini Chat",
+  "description": "Aurora Borealis inspired theme with cool tones and smooth gradients",
   "author": "Four43",
   "type": "theme",
   "variants": [
@@ -17,6 +17,16 @@
     }
   ],
   "assets": {
+    "css": [
+      "css/base.css",
+      "css/components.css",
+      "css/rooms.css"
+    ],
+    "images": {
+      "logo": "assets/logo.png",
+      "favicon": "assets/favicon.ico",
+      "background": "assets/background.webp"
+    }
   },
   "customization": {
     "colors": {

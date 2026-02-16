@@ -7,7 +7,7 @@
     <link rel="stylesheet" href="/src/style.css">
 </head>
 <body>
-    <div class="admin-page">
+    <div class="settings-page">
         <div class="admin-page-header">
             <div class="admin-page-header-content">
                 <h1>Admin Panel</h1>
@@ -15,48 +15,93 @@
             <a href="/chat.html" class="admin-back-btn">Back to Chat</a>
         </div>
 
-        <div class="admin-page-content">
-            <div class="admin-section admin-only">
-                <h3>Server Theme</h3>
-                <div class="preference-item">
-                    <label for="server-color-picker">Server color:</label>
-                    <input type="color" id="server-color-picker" value="#6366f1">
-                </div>
-            </div>
+        <div class="settings-layout">
+            <nav class="settings-nav">
+                <button class="settings-nav-item active admin-only" data-section="server">
+                    <span class="settings-nav-icon">&#x2699;</span>
+                    Server
+                </button>
+                <button class="settings-nav-item admin-only" data-section="appearance">
+                    <span class="settings-nav-icon">&#x1F3A8;</span>
+                    Appearance
+                </button>
+                <button class="settings-nav-item" data-section="users">
+                    <span class="settings-nav-icon">&#x1F465;</span>
+                    Users
+                </button>
+                <button class="settings-nav-item admin-only hidden" data-section="invites" id="invites-nav-item">
+                    <span class="settings-nav-icon">&#x1F517;</span>
+                    Invites
+                </button>
+            </nav>
 
-            <div class="admin-section admin-only">
-                <h3>Registration Mode</h3>
-                <div class="reg-mode-slider">
-                    <input type="range" id="reg-mode-slider" min="0" max="3" step="1" value="0">
-                    <div class="reg-mode-labels">
-                        <span>Closed</span>
-                        <span>Invite</span>
-                        <span>Approval</span>
-                        <span>Open</span>
+            <div class="settings-content">
+                <!-- Server Section -->
+                <div class="settings-panel-section active admin-only" id="section-server">
+                    <div class="admin-section">
+                        <h3>Server Name</h3>
+                        <div class="preference-item">
+                            <label for="server-name-input">Name:</label>
+                            <input type="text" id="server-name-input" class="preference-input" maxlength="64" placeholder="My Server">
+                        </div>
                     </div>
-                    <p id="reg-mode-description" class="reg-mode-description">Registration is closed</p>
+
+                    <div class="admin-section">
+                        <h3>Registration Mode</h3>
+                        <div class="reg-mode-slider">
+                            <input type="range" id="reg-mode-slider" min="0" max="3" step="1" value="0">
+                            <div class="reg-mode-labels">
+                                <span>Closed</span>
+                                <span>Invite</span>
+                                <span>Approval</span>
+                                <span>Open</span>
+                            </div>
+                            <p id="reg-mode-description" class="reg-mode-description">Registration is closed</p>
+                        </div>
+                    </div>
                 </div>
-            </div>
 
-            <div id="invite-section" class="admin-section admin-only hidden">
-                <h3>Invite Links</h3>
-                <button id="generate-invite-btn" class="invite-generate-btn">Generate Invite Link</button>
-                <div id="invite-list"></div>
-            </div>
+                <!-- Appearance Section -->
+                <div class="settings-panel-section admin-only" id="section-appearance">
+                    <div class="admin-section">
+                        <h3>Default Theme</h3>
+                        <div id="admin-theme-list" class="theme-list">
+                            <!-- Theme cards populated by JS -->
+                        </div>
+                    </div>
 
-            <div class="admin-section">
-                <h3>Pending Approvals (<span id="pending-count">0</span>)</h3>
-                <div id="pending-list"></div>
-            </div>
+                    <div class="admin-section">
+                        <h3>Preview</h3>
+                        <div id="admin-theme-preview-container"></div>
+                    </div>
+                </div>
 
-            <div class="admin-section">
-                <h3>All Users (<span id="user-count">0</span>)</h3>
-                <div id="users-list"></div>
-            </div>
+                <!-- Users Section -->
+                <div class="settings-panel-section" id="section-users">
+                    <div class="admin-section">
+                        <h3>Pending Approvals (<span id="pending-count">0</span>)</h3>
+                        <div id="pending-list"></div>
+                    </div>
 
-            <div class="admin-section admin-only">
-                <h3>User Preferences</h3>
-                <div id="user-preferences-list"></div>
+                    <div class="admin-section">
+                        <h3>All Users (<span id="user-count">0</span>)</h3>
+                        <div id="users-list"></div>
+                    </div>
+
+                    <div class="admin-section admin-only">
+                        <h3>User Preferences</h3>
+                        <div id="user-preferences-list"></div>
+                    </div>
+                </div>
+
+                <!-- Invites Section -->
+                <div class="settings-panel-section admin-only" id="section-invites">
+                    <div class="admin-section">
+                        <h3>Invite Links</h3>
+                        <button id="generate-invite-btn" class="invite-generate-btn">Generate Invite Link</button>
+                        <div id="invite-list"></div>
+                    </div>
+                </div>
             </div>
         </div>
     </div>

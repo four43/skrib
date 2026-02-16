@@ -1,10 +1,10 @@
 import { API_URL, applyThemeColor } from './utils.js';
 import { loadTheme, fetchAvailableThemes, loadThemeCSS, applyUserOverrides, applyColorScheme } from './theme-manager.js';
+import { createThemePreviewHTML } from './theme-preview.js';
 
 let sessionToken = null;
 let currentUsername = null;
 let currentRole = null;
-let serverColor = '#6366f1';
 let currentThemeName = null;
 let currentColorScheme = 'auto';
 
@@ -60,6 +60,12 @@ async function initializeSettingsPage() {
         badge.classList.remove('hidden');
     }
 
+    // Inject theme preview
+    const previewContainer = document.getElementById('theme-preview-container');
+    if (previewContainer) {
+        previewContainer.innerHTML = createThemePreviewHTML();
+    }
+
     // Load user settings (sets currentThemeName)
     await loadUserSettings();
 
@@ -97,7 +103,6 @@ async function loadUserSettings() {
                     const serverResp = await fetch(`${API_URL}/server`);
                     const serverInfo = await serverResp.json();
                     currentThemeName = serverInfo.default_theme || 'com.four43.theme-default';
-                    serverColor = serverInfo.server_color || serverColor;
                 } catch (e) {
                     currentThemeName = 'com.four43.theme-default';
                 }
@@ -105,7 +110,8 @@ async function loadUserSettings() {
             // Apply user's theme color override if set
             const themeInput = document.getElementById('user-theme-color');
             if (themeInput) {
-                themeInput.value = data.theme_color || serverColor;
+                const defaultColor = getComputedStyle(document.documentElement).getPropertyValue('--theme-color').trim() || '#6366f1';
+                themeInput.value = data.theme_color || defaultColor;
             }
             if (data.theme_color) {
                 applyThemeColor(data.theme_color);
@@ -166,12 +172,17 @@ async function resetUserThemeColor() {
             body: JSON.stringify({ theme_color: '' })
         });
         if (response.ok) {
-            // Reset to server color
+            // Remove inline overrides so the theme CSS takes effect
+            document.documentElement.style.removeProperty('--theme-color');
+            document.documentElement.style.removeProperty('--theme-color-dark');
+            document.documentElement.style.removeProperty('--theme-color-light');
+            document.documentElement.style.removeProperty('--theme-rgb');
+            // Read the computed value from the loaded theme CSS
+            const defaultColor = getComputedStyle(document.documentElement).getPropertyValue('--theme-color').trim() || '#6366f1';
             const themeInput = document.getElementById('user-theme-color');
             if (themeInput) {
-                themeInput.value = serverColor;
+                themeInput.value = defaultColor;
             }
-            applyThemeColor(serverColor);
         }
     } catch (error) {
         console.error('[HTTP] Error resetting theme color:', error);

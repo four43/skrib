@@ -1,6 +1,19 @@
 """Base plugin interface for Mini Chat plugin system."""
+import sqlite3
+import threading
+from contextlib import contextmanager
+from pathlib import Path
 from typing import Optional, Any
 from abc import ABC, abstractmethod
+
+from ..config import DB_DIR
+
+# Plugin databases directory
+PLUGINS_DB_DIR = DB_DIR / "plugins"
+PLUGINS_DB_DIR.mkdir(parents=True, exist_ok=True)
+
+# Thread-local storage for plugin DB connections (keyed by plugin id)
+_plugin_local = threading.local()
 
 
 class Plugin(ABC):
@@ -259,37 +272,58 @@ class Plugin(ABC):
     def get_table_schema(self) -> Optional[str]:
         """Return SQL CREATE TABLE statement for plugin data.
 
-        Table will be named: plugin_{self.name}
+        The table is created in the plugin's own isolated database
+        at data/plugins/{plugin_id}.db.
 
         Returns:
             SQL CREATE TABLE statement, or None if plugin doesn't need storage
 
         Example:
             return '''
-                CREATE TABLE IF NOT EXISTS plugin_myplug (
+                CREATE TABLE IF NOT EXISTS my_data (
                     username TEXT NOT NULL,
                     setting_key TEXT NOT NULL,
                     setting_value TEXT,
                     updated_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP,
-                    PRIMARY KEY (username, setting_key),
-                    FOREIGN KEY (username) REFERENCES users(username) ON DELETE CASCADE
+                    PRIMARY KEY (username, setting_key)
                 )
             '''
         """
         return None
 
-    def _get_table_name(self) -> str:
-        """Get this plugin's table name.
+    @contextmanager
+    def get_plugin_db(self):
+        """Get a connection to this plugin's private SQLite database.
 
-        Returns:
-            Table name in format: plugin_{plugin_name} (hyphens converted to underscores)
+        Each plugin has its own database file at data/plugins/{plugin_id}.db.
+        Connections are cached per-thread for performance.
+
+        Yields:
+            sqlite3.Connection to the plugin's private database
         """
-        # Replace hyphens with underscores for SQL compatibility
-        safe_name = self.name.replace('-', '_')
-        return f"plugin_{safe_name}"
+        # Use thread-local connection cache keyed by plugin id
+        connections = getattr(_plugin_local, 'connections', None)
+        if connections is None:
+            _plugin_local.connections = {}
+            connections = _plugin_local.connections
+
+        conn = connections.get(self.id)
+        if conn is None:
+            db_path = PLUGINS_DB_DIR / f"{self.id}.db"
+            conn = sqlite3.connect(str(db_path), timeout=30.0)
+            conn.row_factory = sqlite3.Row
+            conn.execute('PRAGMA journal_mode=WAL')
+            conn.execute('PRAGMA foreign_keys=ON')
+            connections[self.id] = conn
+
+        try:
+            yield conn
+        except Exception:
+            conn.rollback()
+            raise
 
     def execute_query(self, query: str, params: tuple = ()) -> list[dict]:
-        """Execute a SELECT query on this plugin's table.
+        """Execute a SELECT query on this plugin's private database.
 
         Args:
             query: SQL query string
@@ -297,32 +331,18 @@ class Plugin(ABC):
 
         Returns:
             List of row dictionaries
-
-        Example:
-            rows = self.execute_query(
-                f"SELECT * FROM {self._get_table_name()} WHERE username = ?",
-                (username,)
-            )
         """
-        from ..database import get_db
-        with get_db() as conn:
+        with self.get_plugin_db() as conn:
             cursor = conn.execute(query, params)
             return [dict(row) for row in cursor.fetchall()]
 
     def execute_write(self, query: str, params: tuple = ()):
-        """Execute an INSERT/UPDATE/DELETE query on this plugin's table.
+        """Execute an INSERT/UPDATE/DELETE query on this plugin's private database.
 
         Args:
             query: SQL query string
             params: Query parameters (tuple)
-
-        Example:
-            self.execute_write(
-                f"INSERT INTO {self._get_table_name()} (username, key) VALUES (?, ?)",
-                (username, key)
-            )
         """
-        from ..database import get_db
-        with get_db() as conn:
+        with self.get_plugin_db() as conn:
             conn.execute(query, params)
             conn.commit()

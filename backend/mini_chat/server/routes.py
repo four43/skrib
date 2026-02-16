@@ -37,9 +37,6 @@ async def update_server(
     if updates.registration_mode is not None:
         set_registration_mode(updates.registration_mode)
 
-    if updates.server_color is not None:
-        set_setting('server_color', updates.server_color)
-
     if updates.default_theme is not None:
         set_setting('default_theme', updates.default_theme)
 

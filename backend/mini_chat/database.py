@@ -1,10 +1,14 @@
 """Database utilities and connection management."""
+import logging
+import os
 import sqlite3
 import threading
 from contextlib import contextmanager
 from typing import Optional
 
 from .config import DB_FILE, DB_TIMEOUT
+
+logger = logging.getLogger(__name__)
 
 # Thread-local storage for database connections
 thread_local = threading.local()
@@ -82,24 +86,7 @@ def init_db():
             )
         ''')
 
-        # Messages table
-        conn.execute('''
-            CREATE TABLE IF NOT EXISTS messages (
-                id INTEGER PRIMARY KEY AUTOINCREMENT,
-                room_id TEXT NOT NULL,
-                username TEXT NOT NULL,
-                content TEXT NOT NULL,
-                content_type TEXT NOT NULL DEFAULT 'text',
-                key_epoch INTEGER,
-                timestamp TEXT NOT NULL
-            )
-        ''')
-
-        # Create index for faster message queries
-        conn.execute('''
-            CREATE INDEX IF NOT EXISTS idx_messages_room_id
-            ON messages(room_id, id)
-        ''')
+        # Messages table is now managed by the chat plugin (com.four43.room-type-chat)
 
         # Rooms table
         conn.execute('''
@@ -156,18 +143,32 @@ def init_db():
             )
         ''')
 
-        # Set default registration mode
+        # Set default registration mode (env var override on first startup only)
         cursor = conn.execute("SELECT value FROM settings WHERE key = 'registration_mode'")
         if not cursor.fetchone():
+            valid_modes = ('closed', 'invite_only', 'approval_required', 'open')
+            env_mode = os.getenv('MINICHAT_REGISTRATION_MODE')
+            if env_mode and env_mode in valid_modes:
+                default_reg_mode = env_mode
+            else:
+                if env_mode:
+                    logger.warning(
+                        "Invalid MINICHAT_REGISTRATION_MODE '%s', falling back to 'approval_required'",
+                        env_mode
+                    )
+                default_reg_mode = 'approval_required'
             conn.execute(
-                "INSERT INTO settings (key, value) VALUES ('registration_mode', 'approval_required')"
+                "INSERT INTO settings (key, value) VALUES ('registration_mode', ?)",
+                (default_reg_mode,)
             )
 
-        # Set default server color
-        cursor = conn.execute("SELECT value FROM settings WHERE key = 'server_color'")
+        # Set default theme (env var override on first startup only)
+        cursor = conn.execute("SELECT value FROM settings WHERE key = 'default_theme'")
         if not cursor.fetchone():
+            default_theme = os.getenv('MINICHAT_DEFAULT_THEME', 'com.four43.theme-default')
             conn.execute(
-                "INSERT INTO settings (key, value) VALUES ('server_color', '#6366f1')"
+                "INSERT INTO settings (key, value) VALUES ('default_theme', ?)",
+                (default_theme,)
             )
 
         conn.commit()

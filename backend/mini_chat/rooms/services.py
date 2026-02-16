@@ -31,21 +31,6 @@ def load_rooms_from_db():
             for row in cursor:
                 ROOMS[row['room_id']] = row['room_type']
 
-        # Also pick up any rooms that exist in messages but not in the rooms table
-        cursor = conn.execute('''
-            SELECT DISTINCT m.room_id FROM messages m
-            LEFT JOIN rooms r ON m.room_id = r.room_id
-            WHERE r.room_id IS NULL
-        ''')
-        now = datetime.now().isoformat()
-        for row in cursor:
-            room_id = row['room_id']
-            conn.execute(
-                'INSERT INTO rooms (room_id, room_type, created_at) VALUES (?, ?, ?)',
-                (room_id, 'chat', now)
-            )
-            with ROOMS_LOCK:
-                ROOMS[room_id] = 'chat'
         conn.commit()
 
 
@@ -410,27 +395,74 @@ def set_room_role(room_id: str, target_username: str, role: str) -> Dict:
 
 
 def get_unread_counts(username: str) -> Dict[str, int]:
-    """Get unread message counts for all rooms the user is a member of."""
+    """Get unread message counts for all rooms the user is a member of.
+
+    Queries room read positions from core DB, then delegates to the
+    room-type plugin to count unread messages in its own DB.
+    """
+    # Get read positions from core DB
     with get_db() as conn:
         cursor = conn.execute('''
-            SELECT rm.room_id, COUNT(m.id) as unread_count
+            SELECT rm.room_id, rm.last_read_message_id, r.room_type
             FROM room_users rm
             JOIN rooms r ON rm.room_id = r.room_id AND r.deleted = 0
-            LEFT JOIN messages m ON rm.room_id = m.room_id AND m.id > rm.last_read_message_id
             WHERE rm.username = ?
-            GROUP BY rm.room_id
         ''', (username,))
-        return {row['room_id']: row['unread_count'] for row in cursor}
+        rooms = [
+            {'room_id': row['room_id'], 'last_read': row['last_read_message_id'], 'room_type': row['room_type']}
+            for row in cursor
+        ]
+
+    if not rooms:
+        return {}
+
+    # Group by room type and delegate to plugins
+    from ..plugins import registry
+    by_type: Dict[str, Dict[str, int]] = {}
+    for room in rooms:
+        rt = room['room_type']
+        if rt not in by_type:
+            by_type[rt] = {}
+        by_type[rt][room['room_id']] = room['last_read'] or 0
+
+    result = {}
+    for room_type, positions in by_type.items():
+        plugin = registry.get_plugin_for_room_type(room_type)
+        if plugin and hasattr(plugin, 'get_unread_counts_batch'):
+            counts = plugin.get_unread_counts_batch(positions)
+            result.update(counts)
+        else:
+            # No plugin or plugin doesn't support unread counts
+            for room_id in positions:
+                result[room_id] = 0
+
+    return result
 
 
 def get_unread_count_for_room(room_id: str, username: str) -> int:
-    """Get unread message count for a specific room and user."""
+    """Get unread message count for a specific room and user.
+
+    Queries read position from core DB, then delegates to the
+    room-type plugin to count unread messages in its own DB.
+    """
     with get_db() as conn:
-        cursor = conn.execute('''
-            SELECT COUNT(m.id) as unread_count
-            FROM room_users rm
-            LEFT JOIN messages m ON rm.room_id = m.room_id AND m.id > rm.last_read_message_id
-            WHERE rm.room_id = ? AND rm.username = ?
-        ''', (room_id, username))
+        cursor = conn.execute(
+            'SELECT last_read_message_id FROM room_users WHERE room_id = ? AND username = ?',
+            (room_id, username)
+        )
         row = cursor.fetchone()
-        return row['unread_count'] if row else 0
+        if not row:
+            return 0
+        last_read = row['last_read_message_id'] or 0
+
+    # Get room type and delegate to plugin
+    room_type = get_room_type(room_id)
+    if not room_type:
+        return 0
+
+    from ..plugins import registry
+    plugin = registry.get_plugin_for_room_type(room_type)
+    if plugin and hasattr(plugin, 'get_unread_count'):
+        return plugin.get_unread_count(room_id, last_read)
+
+    return 0

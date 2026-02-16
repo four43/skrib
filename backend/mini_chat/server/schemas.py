@@ -13,7 +13,6 @@ class RegistrationMode(str, Enum):
 
 class ServerInfoResponse(BaseModel):
     registration_mode: RegistrationMode
-    server_color: str
     default_theme: str
     name: str
 
@@ -21,7 +20,6 @@ class ServerInfoResponse(BaseModel):
 class ServerUpdateRequest(BaseModel):
     """Request body for updating server properties via PATCH."""
     registration_mode: Optional[RegistrationMode] = None
-    server_color: Optional[str] = None
     default_theme: Optional[str] = None
     name: Optional[str] = None
 
@@ -55,13 +53,3 @@ class RegistrationStatusResponse(BaseModel):
     mode: RegistrationMode
 
 
-class ServerThemeResponse(BaseModel):
-    server_color: str
-
-
-class UpdateServerColorRequest(BaseModel):
-    server_color: str
-
-
-class UpdateServerColorResponse(BaseModel):
-    server_color: str

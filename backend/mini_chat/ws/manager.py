@@ -108,11 +108,13 @@ class UnifiedConnectionManager:
         if rooms:
             rooms.discard(room_id)
 
-    async def broadcast_to_room(self, room_id: str, message: dict):
+    async def broadcast_to_room(self, room_id: str, message: dict, exclude_user: str = None):
         """Send a message to all sockets subscribed to a room."""
         sockets = self.room_subscriptions.get(room_id, set()).copy()
         disconnected = []
         for ws in sockets:
+            if exclude_user and self.ws_to_user.get(ws) == exclude_user:
+                continue
             try:
                 await ws.send_json(message)
             except Exception:

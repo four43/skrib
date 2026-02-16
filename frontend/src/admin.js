@@ -1,11 +1,14 @@
 import { API_URL, escapeHtml } from './utils.js';
-import { loadTheme } from './theme-manager.js';
+import { loadTheme, fetchAvailableThemes, loadThemeCSS } from './theme-manager.js';
+import { createThemePreviewHTML } from './theme-preview.js';
 
 let sessionToken = null;
 let currentUsername = null;
 let currentRole = null;
 let adminPollInterval = null;
 let currentRegMode = 'closed';
+let currentDefaultTheme = null;
+let currentSection = 'server';
 
 // Check session and redirect if not authenticated or not admin/mod
 checkSession();
@@ -39,9 +42,16 @@ async function checkSession() {
             // Load user's theme preferences
             await loadTheme(username, sessionToken);
 
-            // Hide admin-only sections for moderators
+            // Hide admin-only sections for moderators and default to Users
             if (currentRole === 'moderator') {
                 document.querySelectorAll('.admin-only').forEach(el => el.style.display = 'none');
+                switchSection('users');
+            }
+
+            // Inject theme preview
+            const previewContainer = document.getElementById('admin-theme-preview-container');
+            if (previewContainer) {
+                previewContainer.innerHTML = createThemePreviewHTML();
             }
 
             loadAdminSettings();
@@ -57,6 +67,22 @@ async function checkSession() {
     }
 }
 
+// Section navigation
+
+function switchSection(sectionId) {
+    currentSection = sectionId;
+    // Update nav items
+    document.querySelectorAll('.settings-nav-item').forEach(item => {
+        item.classList.toggle('active', item.dataset.section === sectionId);
+    });
+    // Update content panels
+    document.querySelectorAll('.settings-panel-section').forEach(panel => {
+        panel.classList.toggle('active', panel.id === `section-${sectionId}`);
+    });
+}
+
+// Admin settings
+
 async function loadAdminSettings() {
     try {
         const resp = await fetch(`${API_URL}/server`, {
@@ -64,19 +90,51 @@ async function loadAdminSettings() {
         });
         const data = await resp.json();
 
+        // Server name
+        const nameInput = document.getElementById('server-name-input');
+        if (nameInput) {
+            nameInput.value = data.name || '';
+        }
+
+        // Registration mode
         updateRegModeSlider(data.registration_mode);
+
+        // Default theme
+        currentDefaultTheme = data.default_theme || 'com.four43.theme-default';
+        loadAdminThemeList();
+
+        // Users
         loadPendingUsers();
         loadAllUsers();
         loadUserPreferences();
+
+        // Invites
         if (data.registration_mode === 'invite_only') {
             loadInviteTokens();
         }
-        const serverColorPicker = document.getElementById('server-color-picker');
-        if (serverColorPicker && data.server_color) {
-            serverColorPicker.value = data.server_color;
-        }
     } catch (error) {
         console.error('Failed to load admin settings:', error);
+    }
+}
+
+// Server name
+
+async function updateServerName() {
+    const name = document.getElementById('server-name-input').value.trim();
+    try {
+        const resp = await fetch(`${API_URL}/server`, {
+            method: 'PATCH',
+            headers: {
+                'Content-Type': 'application/json',
+                'Authorization': `Bearer ${sessionToken}`
+            },
+            body: JSON.stringify({ name })
+        });
+        if (!resp.ok) {
+            console.error('Failed to update server name');
+        }
+    } catch (error) {
+        console.error('[HTTP] Error updating server name:', error);
     }
 }
 
@@ -135,12 +193,16 @@ async function setRegistrationMode() {
 }
 
 function updateInviteSectionVisibility(mode) {
-    const section = document.getElementById('invite-section');
+    const navItem = document.getElementById('invites-nav-item');
     if (mode === 'invite_only') {
-        section.classList.remove('hidden');
+        if (navItem) navItem.classList.remove('hidden');
         loadInviteTokens();
     } else {
-        section.classList.add('hidden');
+        if (navItem) navItem.classList.add('hidden');
+        // If currently viewing invites, switch away
+        if (currentSection === 'invites') {
+            switchSection('server');
+        }
     }
 }
 
@@ -156,10 +218,50 @@ function updatePendingPoll() {
     }
 }
 
-// Server color
+// Default theme management
 
-async function updateServerColor() {
-    const color = document.getElementById('server-color-picker').value;
+async function loadAdminThemeList() {
+    const container = document.getElementById('admin-theme-list');
+    if (!container) return;
+
+    const themes = await fetchAvailableThemes();
+    container.innerHTML = '';
+
+    if (themes.length === 0) {
+        container.innerHTML = '<p style="color: var(--text-muted); font-size: 14px;">No themes available.</p>';
+        return;
+    }
+
+    for (const theme of themes) {
+        const card = document.createElement('div');
+        card.className = 'theme-card' + (theme.id === currentDefaultTheme ? ' active' : '');
+        card.dataset.themeId = theme.id;
+
+        const variantText = theme.variants.map(v => v.name).join(', ');
+
+        card.innerHTML = `
+            <div class="theme-card-info">
+                <div class="theme-card-name">${theme.name}</div>
+                <div class="theme-card-meta">${theme.description}</div>
+                <div class="theme-card-meta">by ${theme.author} &middot; v${theme.version}${variantText ? ' &middot; ' + variantText : ''}</div>
+            </div>
+            <div class="theme-card-status">
+                ${theme.id === currentDefaultTheme ? '<span class="theme-active-badge">Default</span>' : '<button class="btn-sm theme-select-btn" type="button">Set Default</button>'}
+            </div>
+        `;
+
+        card.addEventListener('click', () => selectDefaultTheme(theme.id));
+        container.appendChild(card);
+    }
+}
+
+async function selectDefaultTheme(themeId) {
+    if (themeId === currentDefaultTheme) return;
+
+    // Preview live
+    loadThemeCSS(themeId);
+
+    // Save to backend
     try {
         const response = await fetch(`${API_URL}/server`, {
             method: 'PATCH',
@@ -167,14 +269,14 @@ async function updateServerColor() {
                 'Authorization': `Bearer ${sessionToken}`,
                 'Content-Type': 'application/json'
             },
-            body: JSON.stringify({ server_color: color })
+            body: JSON.stringify({ default_theme: themeId })
         });
-        if (!response.ok) {
-            alert('Failed to update server color');
+        if (response.ok) {
+            currentDefaultTheme = themeId;
+            await loadAdminThemeList();
         }
     } catch (error) {
-        console.error('[HTTP] Error updating server color:', error);
-        alert('Failed to update server color');
+        console.error('[HTTP] Error updating default theme:', error);
     }
 }
 
@@ -214,7 +316,7 @@ async function loadInviteTokens() {
                             <div class="invite-url" onclick="copyInviteLink('${inviteUrl}')" title="Click to copy">${inviteUrl}</div>
                             <div class="invite-meta">${status} &middot; by ${escapeHtml(inv.created_by)}</div>
                         </div>
-                        ${!inv.used_by ? `<button class="reject-btn btn-sm invite-delete-btn" onclick="deleteInvite('${inv.token}')">✕</button>` : ''}
+                        ${!inv.used_by ? `<button class="reject-btn btn-sm invite-delete-btn" onclick="deleteInvite('${inv.token}')">&#x2715;</button>` : ''}
                     </div>
                 `;
             }).join('');
@@ -264,12 +366,12 @@ async function loadPendingUsers() {
         } else {
             pendingList.innerHTML = data.users.map(user => `
                 <div class="pending-user">
-                    <h4>👤 ${user.username}</h4>
+                    <h4>&#x1F464; ${user.username}</h4>
                     <div class="code">Code: ${user.approval_code}</div>
                     <div style="font-size: 12px; color: #666;">${new Date(user.created_at).toLocaleString()}</div>
                     <div class="pending-user-actions">
-                        <button class="approve-btn btn-sm" onclick="window.approveUser('${user.approval_code}')">✓ Approve</button>
-                        <button class="reject-btn btn-sm" onclick="window.rejectUser('${user.approval_code}')">✕ Reject</button>
+                        <button class="approve-btn btn-sm" onclick="window.approveUser('${user.approval_code}')">&#x2713; Approve</button>
+                        <button class="reject-btn btn-sm" onclick="window.rejectUser('${user.approval_code}')">&#x2715; Reject</button>
                     </div>
                 </div>
             `).join('');
@@ -487,15 +589,19 @@ window.approveUser = approveUser;
 window.rejectUser = rejectUser;
 window.setUserRole = setUserRole;
 window.deleteUser = deleteUser;
-window.updateServerColor = updateServerColor;
 window.updateUserColorAdmin = updateUserColorAdmin;
 
 // Event listeners
 document.addEventListener('DOMContentLoaded', () => {
-    // Server color picker
-    const serverColorPicker = document.getElementById('server-color-picker');
-    if (serverColorPicker) {
-        serverColorPicker.addEventListener('change', updateServerColor);
+    // Nav switching
+    document.querySelectorAll('.settings-nav-item').forEach(item => {
+        item.addEventListener('click', () => switchSection(item.dataset.section));
+    });
+
+    // Server name input
+    const serverNameInput = document.getElementById('server-name-input');
+    if (serverNameInput) {
+        serverNameInput.addEventListener('change', updateServerName);
     }
 
     // Registration mode slider

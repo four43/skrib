@@ -12,6 +12,8 @@ export default defineConfig({
         login: resolve(__dirname, 'login.html'),
         register: resolve(__dirname, 'register.html'),
         admin: resolve(__dirname, 'admin.html'),
+        settings: resolve(__dirname, 'settings.html'),
+        roomSettings: resolve(__dirname, 'room-settings.html'),
       },
     },
   },
