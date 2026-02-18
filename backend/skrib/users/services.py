@@ -3,6 +3,7 @@ from datetime import datetime
 from typing import Dict, List, Optional
 
 from ..database import get_db
+from .avatar import generate_identicon
 
 
 def get_user_preferences(username: str) -> Optional[Dict]:
@@ -41,6 +42,12 @@ def update_user_preferences(username: str, color: Optional[str] = None, theme_co
             trimmed = nickname.strip()
             updates.append('nickname = ?')
             params.append(trimmed if trimmed and len(trimmed) <= 32 else None)
+
+        if color is not None:
+            # Regenerate identicon when color changes
+            avatar_data = generate_identicon(username, color)
+            updates.append('avatar_data = ?')
+            params.append(avatar_data)
 
         if updates:
             params.append(username)

@@ -6,6 +6,7 @@ from datetime import datetime
 from typing import Optional, Tuple
 
 from ..database import get_db, get_setting
+from ..users.avatar import generate_identicon
 
 # Matplotlib "tab10" color cycle — 10 perceptually distinct, medium-bright colors
 # designed for good mutual contrast.  We assign them round-robin by total user count.
@@ -146,22 +147,23 @@ def create_pending_user(username: str, credential_id: str, public_key: str,
         cursor = conn.execute("SELECT COUNT(*) as count FROM users")
         total_users = cursor.fetchone()['count']
         color = USER_COLOR_PALETTE[total_users % len(USER_COLOR_PALETTE)]
+        avatar_data = generate_identicon(username, color)
 
         if user_count == 0:
             # First user - auto-approve as admin
             conn.execute('''
-                INSERT INTO users (username, credential_id, public_key, role, status, color, created_at, approved_at, approved_by)
-                VALUES (?, ?, ?, 'admin', 'active', ?, ?, ?, 'system')
-            ''', (username, credential_id, public_key, color, now, now))
+                INSERT INTO users (username, credential_id, public_key, role, status, color, avatar_data, created_at, approved_at, approved_by)
+                VALUES (?, ?, ?, 'admin', 'active', ?, ?, ?, ?, 'system')
+            ''', (username, credential_id, public_key, color, avatar_data, now, now))
             conn.commit()
             return (approval_code, True)
 
         if mode == 'open':
             # Open mode - auto-approve immediately
             conn.execute('''
-                INSERT INTO users (username, credential_id, public_key, role, status, color, created_at, approved_at, approved_by)
-                VALUES (?, ?, ?, 'user', 'active', ?, ?, ?, 'OPEN_STATE')
-            ''', (username, credential_id, public_key, color, now, now))
+                INSERT INTO users (username, credential_id, public_key, role, status, color, avatar_data, created_at, approved_at, approved_by)
+                VALUES (?, ?, ?, 'user', 'active', ?, ?, ?, ?, 'OPEN_STATE')
+            ''', (username, credential_id, public_key, color, avatar_data, now, now))
             conn.commit()
             return (approval_code, True)
 
@@ -169,17 +171,17 @@ def create_pending_user(username: str, credential_id: str, public_key: str,
             # Invite-only mode with valid token - auto-approve
             consume_invite_token(invite_token, username)
             conn.execute('''
-                INSERT INTO users (username, credential_id, public_key, role, status, color, created_at, approved_at, approved_by)
-                VALUES (?, ?, ?, 'user', 'active', ?, ?, ?, 'INVITE')
-            ''', (username, credential_id, public_key, color, now, now))
+                INSERT INTO users (username, credential_id, public_key, role, status, color, avatar_data, created_at, approved_at, approved_by)
+                VALUES (?, ?, ?, 'user', 'active', ?, ?, ?, ?, 'INVITE')
+            ''', (username, credential_id, public_key, color, avatar_data, now, now))
             conn.commit()
             return (approval_code, True)
 
         # approval_required mode - require approval
         conn.execute('''
-            INSERT INTO users (username, credential_id, public_key, status, color, approval_code, created_at)
-            VALUES (?, ?, ?, 'pending', ?, ?, ?)
-        ''', (username, credential_id, public_key, color, approval_code, now))
+            INSERT INTO users (username, credential_id, public_key, status, color, avatar_data, approval_code, created_at)
+            VALUES (?, ?, ?, 'pending', ?, ?, ?, ?)
+        ''', (username, credential_id, public_key, color, avatar_data, approval_code, now))
         conn.commit()
         return (approval_code, False)
 

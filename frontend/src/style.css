@@ -750,6 +750,10 @@ input:focus-visible {
     text-decoration: none;
 }
 
+.sidebar-avatar {
+    margin-right: 8px;
+}
+
 .sidebar-username {
     flex: 1;
     overflow: hidden;
@@ -846,6 +850,15 @@ input:focus-visible {
     font-size: 12px;
     color: var(--text-muted);
     margin-bottom: 4px;
+    display: flex;
+    align-items: center;
+    gap: 4px;
+}
+
+.user-avatar {
+    border-radius: 4px;
+    flex-shrink: 0;
+    vertical-align: middle;
 }
 
 .username {

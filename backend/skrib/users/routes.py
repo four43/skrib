@@ -2,9 +2,11 @@
 from typing import Optional
 
 from fastapi import APIRouter, Depends, HTTPException
+from fastapi.responses import Response
 
 from ..dependencies import require_auth, require_admin, require_moderator, get_username_from_token
 from pydantic import BaseModel
+from .avatar import get_or_generate_avatar
 from .schemas import (
     UpdatePendingUserRequest,
     UsersListResponse,
@@ -63,6 +65,21 @@ async def delete_user(username: str, _: str = Depends(require_admin)):
             detail="Cannot delete user (not found or last admin)",
         )
     return {"status": "ok"}
+
+
+# --- Avatar ---
+
+@router.get("/{username}/avatar")
+async def get_avatar(username: str):
+    """Get user avatar image. Public endpoint (no auth required)."""
+    avatar_data = get_or_generate_avatar(username)
+    if not avatar_data:
+        raise HTTPException(status_code=404, detail="User not found")
+    return Response(
+        content=avatar_data,
+        media_type="image/png",
+        headers={"Cache-Control": "public, max-age=3600"},
+    )
 
 
 # --- User profile and properties ---

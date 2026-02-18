@@ -20,3 +20,4 @@ A manual todo list of features I think of:
 - [ ] Message pinning and starring
 - [ ] Message search and filtering
 - [ ] Server name and icon, customization
+- [ ] Emoiji packs - https://github.com/linusg/serenityos-emoji-font

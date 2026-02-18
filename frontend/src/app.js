@@ -738,10 +738,14 @@ async function checkSession() {
 async function initializeChatView() {
     // Note: settings panel has been moved to settings.html page
 
-    // Update sidebar username
+    // Update sidebar username and avatar
     const sidebarUsername = document.getElementById('sidebar-username');
     if (sidebarUsername) {
         sidebarUsername.textContent = currentUsername;
+    }
+    const sidebarAvatar = document.getElementById('sidebar-avatar');
+    if (sidebarAvatar) {
+        sidebarAvatar.src = `${API_URL}/users/${encodeURIComponent(currentUsername)}/avatar`;
     }
 
     // Fetch and display server title
@@ -1334,6 +1338,14 @@ async function openMembersPanel() {
 
             const memberInfo = document.createElement('div');
             memberInfo.className = 'member-info';
+
+            const avatar = document.createElement('img');
+            avatar.className = 'user-avatar';
+            avatar.src = `${API_URL}/users/${encodeURIComponent(member.username)}/avatar`;
+            avatar.width = 28;
+            avatar.height = 28;
+            avatar.alt = '';
+            memberInfo.appendChild(avatar);
 
             const memberName = document.createElement('span');
             memberName.className = 'member-name';

@@ -16,6 +16,7 @@ dependencies = [
     "requests",
     "pywebpush",
     "py-vapid",
+    "Pillow",
 ]
 
 [project.optional-dependencies]

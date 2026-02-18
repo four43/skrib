@@ -74,6 +74,12 @@ def init_db():
         except Exception:
             pass
 
+        # Add avatar_data column for generated identicon PNG
+        try:
+            conn.execute('ALTER TABLE users ADD COLUMN avatar_data BLOB')
+        except Exception:
+            pass
+
         # Challenges table for WebAuthn
         conn.execute('''
             CREATE TABLE IF NOT EXISTS challenges (

@@ -241,8 +241,10 @@ const RoomTypeChatPlugin = (function() {
         const messageBody = linkifyRoomRefs(ctx.escapeHtml(plaintext));
         const displayName = ctx.getDisplayName(msg.username);
 
+        const avatarUrl = `${ctx.API_URL}/users/${encodeURIComponent(msg.username)}/avatar`;
         messageDiv.innerHTML = `
             <div class="message-header">
+                <img class="user-avatar" src="${avatarUrl}" width="20" height="20" alt="">
                 <span class="username" style="color: ${userColor};" title="${ctx.escapeHtml(msg.username)}">${ctx.escapeHtml(displayName)}</span>
                 <span class="timestamp">${timeStr}</span>
             </div>
