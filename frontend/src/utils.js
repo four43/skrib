@@ -95,18 +95,14 @@ export function lightenColor(hex, amount = 0.15) {
 
 /**
  * Apply a theme color to the page by setting CSS custom properties.
- * Sets --theme-color (main accent), --theme-color-dark (hover/emphasis),
- * --theme-color-light (subtle emphasis), and --theme-rgb (for rgba()).
+ * Sets --theme-color and --theme-rgb. Darker/lighter variants are
+ * derived in CSS via filter: brightness().
  * @param {string} hex - e.g. "#6366f1"
  */
 export function applyThemeColor(hex) {
     const rgb = hexToRgb(hex);
     if (!rgb) return;
-    const dark = darkenColor(hex, 0.15);
-    const light = lightenColor(hex, 0.15);
     document.documentElement.style.setProperty('--theme-color', hex);
-    document.documentElement.style.setProperty('--theme-color-dark', dark);
-    document.documentElement.style.setProperty('--theme-color-light', light);
     document.documentElement.style.setProperty('--theme-rgb', `${rgb.r}, ${rgb.g}, ${rgb.b}`);
 }
 

@@ -3,14 +3,11 @@
    ═══════════════════════════════════════════ */
 
 :root {
-    /* Primary accent color and its shades
-       --theme-color:       main accent (buttons, links, active states)
-       --theme-color-dark:  darker shade (hover states, emphasized text)
-       --theme-color-light: lighter shade (admin usernames, subtle emphasis)
-       --theme-rgb:         RGB components of --theme-color for rgba() usage */
-    --theme-color: #6366f1;
-    --theme-color-dark: #4f46e5;
-    --theme-color-light: #818cf8;
+    /* Primary accent color
+       --theme-color: main accent (buttons, links, active states)
+       --theme-rgb:   RGB components of --theme-color for rgba() usage
+       Use filter: brightness() to derive darker/lighter variants */
+    --theme-color: rgb(99, 102, 241);
     --theme-rgb: 99, 102, 241;
 
     /* Text Colors */
@@ -21,11 +18,11 @@
     --text-inverse: #ffffff;
 
     /* Background Colors */
-    --bg-body-start: #f8f9fc;
-    --bg-body-mid: #eef0f7;
-    --bg-body-end: #e8eaf5;
+    --bg-body-start: hsl(226, 100%, 95%);
+    --bg-body-mid: hsl(224, 54%, 95%);
+    --bg-body-end: hsl(215, 45%, 95%);
     --bg-surface: rgba(255, 255, 255, 0.45);
-    --bg-surface-elevated: rgba(255, 255, 255, 0.65);
+    --bg-surface-elevated: rgba(255, 255, 255, 0.4);
     --bg-surface-elevated-dark: rgba(255, 255, 255, 0.92);
     --bg-overlay: rgba(255, 255, 255, 0.15);
     --bg-overlay-dark: rgba(15, 23, 42, 0.4);
@@ -38,12 +35,8 @@
 
     /* Status Colors */
     --color-success: #10b981;
-    --color-success-dark: #059669;
-    --color-success-darker: #047857;
     --color-error: #ef4444;
-    --color-error-dark: #dc2626;
     --color-warning: #f59e0b;
-    --color-warning-dark: #d97706;
     --color-info: #4338ca;
 
     /* Disabled State */
@@ -57,9 +50,9 @@
     /* Glassmorphism Effects */
     --blur-sm: 8px;
     --blur-md: 12px;
-    --blur-lg: 24px;
-    --blur-xl: 30px;
-    --blur-2xl: 40px;
+    --blur-lg: 35px;
+    --blur-xl: 45px;
+    --blur-2xl: 64px;
 
     /* Border Radius */
     --radius-sm: 6px;
@@ -88,10 +81,10 @@ html[data-theme-dark] {
     --text-tertiary: #64748b;
     --text-muted: #475569;
     --bg-body-start: #0f172a;
-    --bg-body-mid: #1e293b;
-    --bg-body-end: #0f172a;
+    --bg-body-mid: #1e1b4b;
+    --bg-body-end: #0c1445;
     --bg-surface: rgba(30, 41, 59, 0.7);
-    --bg-surface-elevated: rgba(30, 41, 59, 0.85);
+    --bg-surface-elevated: rgba(30, 41, 59, 0.4);
     --bg-surface-elevated-dark: rgba(15, 23, 42, 0.92);
     --bg-overlay: rgba(255, 255, 255, 0.05);
     --bg-overlay-dark: rgba(0, 0, 0, 0.5);
@@ -158,7 +151,14 @@ body {
     font-family: var(--font-family);
     -webkit-font-smoothing: antialiased;
     -moz-osx-font-smoothing: grayscale;
-    background: linear-gradient(135deg, var(--bg-body-start) 0%, var(--bg-body-mid) 50%, var(--bg-body-end) 100%);
+    background: linear-gradient(135deg,
+            var(--bg-body-start) 0%,
+            var(--bg-body-mid) 15%,
+            var(--bg-body-start) 25%,
+            var(--bg-body-end) 45%,
+            var(--bg-body-mid) 55%,
+            var(--bg-body-start) 75%,
+            var(--bg-body-end) 100%);
     min-height: 100vh;
 }
 
@@ -193,14 +193,14 @@ body {
 }
 
 .auth-box {
-    background: rgba(255, 255, 255, 0.65);
+    background: var(--bg-surface-elevated);
     backdrop-filter: blur(var(--blur-lg));
     -webkit-backdrop-filter: blur(var(--blur-lg));
     padding: 48px;
     border-radius: 20px;
     border: 1px solid rgba(255, 255, 255, 0.5);
     box-shadow: 0 20px 40px -12px rgba(var(--theme-rgb), 0.12),
-                0 8px 20px -8px rgba(0, 0, 0, 0.06);
+        0 8px 20px -8px rgba(0, 0, 0, 0.06);
     max-width: 420px;
     width: 100%;
 }
@@ -295,14 +295,15 @@ button {
     font-size: 15px;
     font-weight: 600;
     margin-top: 10px;
-    transition: background 0.2s ease, transform 0.2s ease, box-shadow 0.2s ease;
+    transition: filter 0.2s ease, transform 0.2s ease, box-shadow 0.2s ease;
     box-shadow: 0 2px 8px rgba(var(--theme-rgb), 0.25);
 }
 
 button:hover {
-    background: var(--theme-color-dark);
+    filter: brightness(1.15);
     transform: translateY(-1px);
-    box-shadow: 0 4px 12px rgba(var(--theme-rgb), 0.35);
+
+    box-shadow: 0 4px 12px color-mix(in oklab, var(--theme-color), rgba(0, 0, 0, 0.6) 30%);
 }
 
 button:active {
@@ -347,7 +348,7 @@ input:focus-visible {
 
 .btn-ghost:hover {
     background: rgba(var(--theme-rgb), 0.15);
-    color: var(--theme-color-dark);
+    color: var(--theme-color);
     transform: none;
     box-shadow: none;
 }
@@ -364,7 +365,7 @@ input:focus-visible {
 
 .link-button:hover {
     background: rgba(var(--theme-rgb), 0.06);
-    color: var(--theme-color-dark);
+    color: var(--theme-color);
     transform: none;
     box-shadow: none;
 }
@@ -379,13 +380,13 @@ input:focus-visible {
 
 .success {
     background: rgba(16, 185, 129, 0.1);
-    color: var(--color-success-darker);
+    color: var(--color-success);
     border: 1px solid rgba(16, 185, 129, 0.2);
 }
 
 .error {
     background: rgba(239, 68, 68, 0.1);
-    color: var(--color-error-dark);
+    color: var(--color-error);
     border: 1px solid rgba(239, 68, 68, 0.2);
 }
 
@@ -404,10 +405,22 @@ input:focus-visible {
     text-align: center;
 }
 
+.status .approval-code {
+    background: none;
+    border: none;
+    padding: 0;
+    margin: 0;
+    border-radius: 0;
+}
+
 .approval-code h3 {
-    color: var(--theme-color-dark);
+    color: var(--theme-color);
     margin-bottom: 10px;
     font-weight: 700;
+}
+
+.approval-code p {
+    color: var(--text-secondary);
 }
 
 .code {
@@ -427,7 +440,6 @@ input:focus-visible {
    ═══════════════════════════════════════════ */
 
 .container {
-    max-width: 1200px;
     margin: 0 auto;
     background: rgba(255, 255, 255, 0.45);
     backdrop-filter: blur(var(--blur-xl));
@@ -481,7 +493,8 @@ input:focus-visible {
     border: 1px solid rgba(255, 255, 255, 0.25);
 }
 
-.logout-btn, .admin-btn {
+.logout-btn,
+.admin-btn {
     width: auto;
     padding: 8px 16px;
     font-size: 13px;
@@ -493,7 +506,8 @@ input:focus-visible {
     font-weight: 500;
 }
 
-.logout-btn:hover, .admin-btn:hover {
+.logout-btn:hover,
+.admin-btn:hover {
     background: rgba(255, 255, 255, 0.3);
     transform: none;
     box-shadow: none;
@@ -589,7 +603,7 @@ input:focus-visible {
 }
 
 .add-room-btn:hover {
-    background: var(--theme-color-dark);
+    filter: brightness(0.85);
     transform: scale(1.05);
     box-shadow: 0 3px 8px rgba(var(--theme-rgb), 0.4);
 }
@@ -617,12 +631,12 @@ input:focus-visible {
 
 .room-item:hover {
     background: rgba(var(--theme-rgb), 0.06);
-    color: var(--theme-color-dark);
+    color: var(--theme-color);
 }
 
 .room-item.active {
     background: rgba(var(--theme-rgb), 0.12);
-    color: var(--theme-color-dark);
+    color: var(--theme-color);
     font-weight: 600;
 }
 
@@ -718,7 +732,7 @@ input:focus-visible {
 .sidebar-settings-btn:hover {
     background: rgba(var(--theme-rgb), 0.06);
     border-color: rgba(var(--theme-rgb), 0.25);
-    color: var(--theme-color-dark);
+    color: var(--theme-color);
     transform: none;
     box-shadow: none;
 }
@@ -781,7 +795,7 @@ input:focus-visible {
 
 .members-toggle-btn.active {
     background: rgba(var(--theme-rgb), 0.12);
-    color: var(--theme-color-dark);
+    color: var(--theme-color);
 }
 
 .messages {
@@ -806,7 +820,7 @@ input:focus-visible {
 }
 
 .username.admin {
-    color: var(--theme-color-light);
+    color: var(--theme-color);
 }
 
 .timestamp {
@@ -1049,7 +1063,7 @@ input:focus-visible {
 }
 
 .reg-mode-labels span.active {
-    color: var(--theme-color-dark);
+    color: var(--theme-color);
     font-weight: 700;
 }
 
@@ -1165,7 +1179,7 @@ input:focus-visible {
 }
 
 .approve-btn:hover {
-    background: var(--color-success-dark);
+    filter: brightness(0.85);
 }
 
 .reject-btn {
@@ -1174,7 +1188,7 @@ input:focus-visible {
 }
 
 .reject-btn:hover {
-    background: var(--color-error-dark);
+    filter: brightness(0.85);
 }
 
 /* ═══════════════════════════════════════════
@@ -1214,13 +1228,13 @@ input:focus-visible {
 
 .user-role.admin {
     background: rgba(var(--theme-rgb), 0.12);
-    color: var(--theme-color-dark);
+    color: var(--theme-color);
     border: 1px solid rgba(var(--theme-rgb), 0.2);
 }
 
 .user-role.moderator {
     background: rgba(245, 158, 11, 0.12);
-    color: var(--color-warning-dark);
+    color: var(--color-warning);
     border: 1px solid rgba(245, 158, 11, 0.2);
 }
 
@@ -1242,7 +1256,7 @@ input:focus-visible {
 }
 
 .promote-btn:hover {
-    background: var(--theme-color-dark);
+    filter: brightness(0.85);
 }
 
 .demote-btn {
@@ -1302,7 +1316,7 @@ input:focus-visible {
 
 .settings-panel-header .close-btn:hover {
     background: rgba(var(--theme-rgb), 0.12);
-    color: var(--theme-color-dark);
+    color: var(--theme-color);
 }
 
 .settings-user-identity {
@@ -1376,14 +1390,14 @@ input:focus-visible {
 
 .settings-nav-item:hover {
     background: rgba(var(--theme-rgb), 0.06);
-    color: var(--theme-color-dark);
+    color: var(--theme-color);
     transform: none;
     box-shadow: none;
 }
 
 .settings-nav-item.active {
     background: rgba(var(--theme-rgb), 0.12);
-    color: var(--theme-color-dark);
+    color: var(--theme-color);
     font-weight: 600;
 }
 
@@ -1485,7 +1499,7 @@ input:focus-visible {
 .color-scheme-option.active {
     border-color: var(--theme-color);
     background: rgba(var(--theme-rgb), 0.08);
-    color: var(--theme-color-dark);
+    color: var(--theme-color);
     font-weight: 600;
     box-shadow: 0 0 0 2px rgba(var(--theme-rgb), 0.15);
 }
@@ -1561,7 +1575,7 @@ input:focus-visible {
     font-weight: 700;
     letter-spacing: 0.3px;
     background: rgba(var(--theme-rgb), 0.12);
-    color: var(--theme-color-dark);
+    color: var(--theme-color);
     border: 1px solid rgba(var(--theme-rgb), 0.2);
 }
 
@@ -1622,7 +1636,8 @@ input:focus-visible {
 }
 
 .preview-swatch-primary-light {
-    background: var(--theme-color-light);
+    background: var(--theme-color);
+    filter: brightness(1.2);
 }
 
 .preview-swatch-primary {
@@ -1630,7 +1645,8 @@ input:focus-visible {
 }
 
 .preview-swatch-primary-dark {
-    background: var(--theme-color-dark);
+    background: var(--theme-color);
+    filter: brightness(0.75);
 }
 
 .preview-swatch-success {
@@ -1731,7 +1747,7 @@ input:focus-visible {
     font-weight: 600;
     padding: 2px 8px;
     background: rgba(var(--theme-rgb), 0.15);
-    color: var(--theme-color-dark);
+    color: var(--theme-color);
     border-radius: 4px;
     text-transform: uppercase;
     letter-spacing: 0.5px;
@@ -1799,7 +1815,7 @@ input:focus-visible {
 
 .members-panel-header .close-btn:hover {
     background: rgba(var(--theme-rgb), 0.12);
-    color: var(--theme-color-dark);
+    color: var(--theme-color);
 }
 
 .members-panel-count {
@@ -1860,7 +1876,7 @@ input:focus-visible {
     width: 400px;
     max-width: 90vw;
     box-shadow: 0 20px 40px -12px rgba(0, 0, 0, 0.15),
-                0 8px 20px -8px rgba(0, 0, 0, 0.08);
+        0 8px 20px -8px rgba(0, 0, 0, 0.08);
     border: 1px solid rgba(255, 255, 255, 0.5);
 }
 
@@ -1889,7 +1905,7 @@ input:focus-visible {
 
 .room-settings-header .close-btn:hover {
     background: rgba(var(--theme-rgb), 0.12);
-    color: var(--theme-color-dark);
+    color: var(--theme-color);
 }
 
 .room-settings-body {
@@ -1944,7 +1960,7 @@ input:focus-visible {
 }
 
 .room-settings-danger h4 {
-    color: var(--color-error-dark);
+    color: var(--color-error);
     margin: 0 0 8px 0;
     font-size: 14px;
     font-weight: 700;
@@ -2018,7 +2034,8 @@ input:focus-visible {
         font-size: 13px;
     }
 
-    .logout-btn, .admin-btn {
+    .logout-btn,
+    .admin-btn {
         padding: 6px 12px;
         font-size: 12px;
     }
@@ -2247,10 +2264,10 @@ input:focus-visible {
 
 .dm-user-item:hover {
     background: rgba(var(--theme-rgb), 0.08);
-    color: var(--theme-color-dark);
+    color: var(--theme-color);
 }
 
-.dm-user-item + .dm-user-item {
+.dm-user-item+.dm-user-item {
     margin-top: 2px;
 }
 
@@ -2270,10 +2287,10 @@ input:focus-visible {
 .preference-input {
     flex: 1;
     padding: 4px 8px;
-    border: 1px solid rgba(255,255,255,0.2);
+    border: 1px solid rgba(255, 255, 255, 0.2);
     border-radius: 4px;
     font-size: 14px;
-    background: rgba(255,255,255,0.1);
+    background: rgba(255, 255, 255, 0.1);
     color: inherit;
 }
 
@@ -2293,4 +2310,3 @@ input:focus-visible {
     align-items: center;
     gap: 12px;
 }
-

@@ -4,14 +4,11 @@
    ═══════════════════════════════════════════ */
 
 :root {
-    /* Primary accent color and its shades
-       --theme-color:       main accent (buttons, links, active states)
-       --theme-color-dark:  darker shade (hover states, emphasized text)
-       --theme-color-light: lighter shade (admin usernames, subtle emphasis)
-       --theme-rgb:         RGB components of --theme-color for rgba() usage */
+    /* Primary accent color
+       --theme-color: main accent (buttons, links, active states)
+       --theme-rgb:   RGB components of --theme-color for rgba() usage
+       Use filter: brightness() to derive darker/lighter variants */
     --theme-color: #6366f1;
-    --theme-color-dark: #4f46e5;
-    --theme-color-light: #8b5cf6;
     --theme-rgb: 99, 102, 241;
 
     /* Text Colors */
@@ -39,12 +36,8 @@
 
     /* Status Colors */
     --color-success: #10b981;
-    --color-success-dark: #059669;
-    --color-success-darker: #047857;
     --color-error: #ef4444;
-    --color-error-dark: #dc2626;
     --color-warning: #f59e0b;
-    --color-warning-dark: #d97706;
     --color-info: #4338ca;
 
     /* Disabled State */

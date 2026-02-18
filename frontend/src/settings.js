@@ -174,8 +174,6 @@ async function resetUserThemeColor() {
         if (response.ok) {
             // Remove inline overrides so the theme CSS takes effect
             document.documentElement.style.removeProperty('--theme-color');
-            document.documentElement.style.removeProperty('--theme-color-dark');
-            document.documentElement.style.removeProperty('--theme-color-light');
             document.documentElement.style.removeProperty('--theme-rgb');
             // Read the computed value from the loaded theme CSS
             const defaultColor = getComputedStyle(document.documentElement).getPropertyValue('--theme-color').trim() || '#6366f1';

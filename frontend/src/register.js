@@ -206,7 +206,7 @@ async function register() {
                     <div class="code">${completeData.approval_code}</div>
                     <p style="margin-top: 10px; font-size: 12px;">You'll be able to login once approved.</p>
                 </div>`,
-                'success'
+                'info'
             );
         }
 

@@ -139,8 +139,6 @@ export function applyUserOverrides(overrides) {
         const rgb = hexToRgb(primary_color);
         if (rgb) {
             cssRules.push(`    --theme-color: ${primary_color};`);
-            cssRules.push(`    --theme-color-dark: ${darkenColor(primary_color, 0.15)};`);
-            cssRules.push(`    --theme-color-light: ${lightenColor(primary_color, 0.15)};`);
             cssRules.push(`    --theme-rgb: ${rgb.r}, ${rgb.g}, ${rgb.b};`);
         }
     }

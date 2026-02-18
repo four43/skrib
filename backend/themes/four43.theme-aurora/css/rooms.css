@@ -172,7 +172,7 @@
 }
 
 .add-room-btn:hover {
-    background: var(--theme-color-dark);
+    filter: brightness(0.85);
     transform: scale(1.05);
     box-shadow: 0 3px 8px rgba(var(--theme-rgb), 0.4);
 }
@@ -200,12 +200,12 @@
 
 .room-item:hover {
     background: rgba(var(--theme-rgb), 0.06);
-    color: var(--theme-color-dark);
+    color: var(--theme-color);
 }
 
 .room-item.active {
     background: rgba(var(--theme-rgb), 0.12);
-    color: var(--theme-color-dark);
+    color: var(--theme-color);
     font-weight: 600;
 }
 
@@ -302,7 +302,7 @@
 .sidebar-settings-btn:hover {
     background: rgba(var(--theme-rgb), 0.06);
     border-color: rgba(var(--theme-rgb), 0.25);
-    color: var(--theme-color-dark);
+    color: var(--theme-color);
     transform: none;
     box-shadow: none;
 }
@@ -322,7 +322,7 @@
 }
 
 .create-room-submit-btn:hover {
-    background: var(--theme-color-dark);
+    filter: brightness(0.85);
 }
 
 /* ── Chat Area ── */
@@ -377,7 +377,7 @@
 }
 
 .username.admin {
-    color: var(--theme-color-light);
+    color: var(--theme-color);
 }
 
 .timestamp {
@@ -496,7 +496,7 @@
 
 .dm-user-item:hover {
     background: rgba(var(--theme-rgb), 0.08);
-    color: var(--theme-color-dark);
+    color: var(--theme-color);
 }
 
 .dm-user-item + .dm-user-item {
@@ -537,7 +537,7 @@
     font-weight: 600;
     padding: 2px 8px;
     background: rgba(var(--theme-rgb), 0.15);
-    color: var(--theme-color-dark);
+    color: var(--theme-color);
     border-radius: 4px;
     text-transform: uppercase;
     letter-spacing: 0.5px;
@@ -562,7 +562,7 @@
 
 .member-action-btn:hover {
     background: rgba(var(--theme-rgb), 0.15);
-    color: var(--theme-color-dark);
+    color: var(--theme-color);
     transform: none;
     box-shadow: none;
 }
