@@ -27,6 +27,21 @@ let roomMeta = {};  // Cache of room_id -> { room_type, display_name, members }
 let privateKey = null;  // User's RSA-OAEP private key (loaded from IndexedDB)
 let roomKeys = {};  // room_id -> { epoch: CryptoKey }
 
+// Local-only UI preferences (localStorage)
+const UI_PREFS_KEY = 'minichat_ui_prefs';
+function getUiPref(key) {
+    try {
+        return (JSON.parse(localStorage.getItem(UI_PREFS_KEY) || '{}'))[key] ?? null;
+    } catch { return null; }
+}
+function setUiPref(key, value) {
+    try {
+        const prefs = JSON.parse(localStorage.getItem(UI_PREFS_KEY) || '{}');
+        prefs[key] = value;
+        localStorage.setItem(UI_PREFS_KEY, JSON.stringify(prefs));
+    } catch {}
+}
+
 // Plugin system
 const pluginHandlers = {};  // namespace -> handler function
 let pluginsLoaded = false;
@@ -1217,10 +1232,14 @@ function selectRoom(roomId) {
     const topicEl = document.getElementById('chat-header-topic');
     topicEl.textContent = (meta && meta.topic) ? meta.topic : '';
 
-    // Show members button and close any open panel (stale data)
+    // Show members button; auto-open panel on wide screens unless user closed it
     const membersBtn = document.getElementById('members-toggle-btn');
     if (membersBtn) membersBtn.classList.remove('hidden');
     closeMembersPanel();
+    const membersPref = getUiPref('members_panel');
+    if (membersPref === true || (membersPref === null && window.innerWidth > 1024)) {
+        openMembersPanel();
+    }
 
     document.querySelectorAll('.room-item').forEach(item => {
         item.classList.toggle('active', item.dataset.roomId === roomId);
@@ -1339,8 +1358,10 @@ function toggleMembersPanel() {
     const panel = document.getElementById('members-panel');
     if (panel.classList.contains('open')) {
         closeMembersPanel();
+        setUiPref('members_panel', false);
     } else {
         openMembersPanel();
+        setUiPref('members_panel', true);
     }
 }
 
@@ -1688,6 +1709,9 @@ document.addEventListener('DOMContentLoaded', () => {
 
     const membersPanelCloseBtn = document.getElementById('members-panel-close-btn');
     if (membersPanelCloseBtn) {
-        membersPanelCloseBtn.addEventListener('click', closeMembersPanel);
+        membersPanelCloseBtn.addEventListener('click', () => {
+            closeMembersPanel();
+            setUiPref('members_panel', false);
+        });
     }
 });
