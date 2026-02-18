@@ -177,6 +177,9 @@ export function applyColorScheme(scheme) {
     const value = scheme || 'auto';
     document.documentElement.setAttribute('data-color-scheme', value);
 
+    // Cache for instant dark-mode on next page load (avoids white flash)
+    try { localStorage.setItem('skrib-color-scheme', value); } catch (_) {}
+
     // Clean up previous system preference listener
     if (_systemPrefCleanup) {
         _systemPrefCleanup();

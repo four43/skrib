@@ -1,19 +1,10 @@
 """REST API endpoints for reactions plugin."""
-import sys
-import importlib.util
-from pathlib import Path
-
-# Add parent directory to path to import skrib
-sys.path.insert(0, str(Path(__file__).parent.parent.parent.parent))
-
 from fastapi import APIRouter, Depends, HTTPException
 from pydantic import BaseModel
+
 from skrib.dependencies import require_auth
 
-# Load database module
-_db_spec = importlib.util.spec_from_file_location("db", Path(__file__).parent / "database.py")
-db = importlib.util.module_from_spec(_db_spec)
-_db_spec.loader.exec_module(db)
+from . import database as db
 
 router = APIRouter(prefix="/reactions", tags=["reactions"])
 

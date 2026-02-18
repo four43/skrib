@@ -1,27 +1,10 @@
 """Web Push Notifications Plugin — sends push notifications for new messages."""
-import sys
-import importlib.util
-from pathlib import Path
 from typing import Optional
-
-sys.path.insert(0, str(Path(__file__).parent.parent.parent.parent))
 
 from skrib.plugins.base import Plugin
 
-# Load sibling modules
-_backend_dir = Path(__file__).parent
-
-
-def _load_module(name, filepath):
-    spec = importlib.util.spec_from_file_location(name, filepath)
-    module = importlib.util.module_from_spec(spec)
-    sys.modules[f"web_push_{name}"] = module
-    spec.loader.exec_module(module)
-    return module
-
-
-services_module = _load_module("services", _backend_dir / "services.py")
-routes_module = _load_module("routes", _backend_dir / "routes.py")
+from . import services as services_module
+from . import routes as routes_module
 
 router = routes_module.router
 
@@ -88,12 +71,7 @@ class WebPushPlugin(Plugin):
         return router
 
     def register_ws_namespace(self, bus):
-        """Listen for room:message events to trigger push notifications.
-
-        We listen to room:message (the room broadcast, fired once per message)
-        rather than room:new_message (fired per-member via notify_user) to
-        avoid duplicate pushes.
-        """
+        """Listen for room:message events to trigger push notifications."""
         bus.on_event("room:message", self._handle_room_message)
         self._bus = bus
 
@@ -135,7 +113,7 @@ class WebPushPlugin(Plugin):
                 room_label = room_id
 
                 payload = {
-                    "title": "Skrīb",
+                    "title": "Skrib",
                     "body": f"{sender} sent a message in {room_label}",
                     "url": f"/app.html#/r/{room_id}",
                 }

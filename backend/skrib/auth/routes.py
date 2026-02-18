@@ -26,6 +26,7 @@ from .services import (
 )
 from ..dependencies import get_username_from_token, require_auth
 from ..database import get_db
+from ..config import WEBAUTHN_RP_NAME, WEBAUTHN_RP_ID
 
 router = APIRouter(prefix="/auth", tags=["authentication"])
 
@@ -47,7 +48,7 @@ async def begin_registration(invite: Optional[str] = Query(None)):
 
     return RegistrationBeginResponse(
         challenge=challenge,
-        rp={'name': 'Mini-Chat', 'id': 'localhost'}
+        rp={'name': WEBAUTHN_RP_NAME, 'id': WEBAUTHN_RP_ID}
     )
 
 
@@ -101,6 +102,7 @@ async def begin_login():
     # Empty allowCredentials means any credential can be used (discoverable credentials)
     return LoginBeginResponse(
         challenge=challenge,
+        rpId=WEBAUTHN_RP_ID,
         allowCredentials=[]
     )
 

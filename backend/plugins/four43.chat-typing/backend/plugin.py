@@ -1,10 +1,6 @@
 """Typing indicators plugin - backend handler."""
 import time
-import sys
-from pathlib import Path
 
-# Add parent directory to path to make skrib importable as a package
-sys.path.insert(0, str(Path(__file__).parent.parent.parent.parent))
 from skrib.plugins.base import Plugin
 
 

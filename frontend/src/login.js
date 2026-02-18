@@ -52,6 +52,7 @@ async function login() {
         const assertion = await navigator.credentials.get({
             publicKey: {
                 challenge: challenge,
+                rpId: beginData.rpId,
                 timeout: 60000,
                 userVerification: "preferred"
             }

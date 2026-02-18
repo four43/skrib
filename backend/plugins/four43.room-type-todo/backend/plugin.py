@@ -1,30 +1,11 @@
 """Todo List Room Type Plugin — provides collaborative todo lists."""
-import sys
-import importlib.util
-from pathlib import Path
 from typing import Optional
-
-sys.path.insert(0, str(Path(__file__).parent.parent.parent.parent))
 
 from skrib.plugins.base import Plugin
 from skrib.rooms.services import get_room_members
 
-# Load sibling modules
-_backend_dir = Path(__file__).parent
-
-
-def _load_module(name, filepath):
-    spec = importlib.util.spec_from_file_location(name, filepath)
-    module = importlib.util.module_from_spec(spec)
-    sys.modules[f"room_type_todo_{name}"] = module
-    spec.loader.exec_module(module)
-    return module
-
-
-services_module = _load_module("services", _backend_dir / "services.py")
-routes_module = _load_module("routes", _backend_dir / "routes.py")
-
-router = routes_module.router
+from . import services as services_module
+from .routes import router
 
 
 class RoomTypeTodoPlugin(Plugin):
@@ -39,6 +20,7 @@ class RoomTypeTodoPlugin(Plugin):
     def __init__(self):
         super().__init__()
         services_module.init_db_provider(self.get_plugin_db)
+        from . import routes as routes_module
         routes_module.TodoList = services_module.TodoList
 
     @property

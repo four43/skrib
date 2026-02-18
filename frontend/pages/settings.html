@@ -9,7 +9,11 @@
     <meta name="theme-color" content="#6366f1">
     <meta name="apple-mobile-web-app-capable" content="yes">
     <link rel="apple-touch-icon" href="/icons/icon-192.png">
-    <script>if('serviceWorker' in navigator) navigator.serviceWorker.register('/sw.js');</script>
+    <script>
+        // Apply dark mode before first paint to prevent white flash
+        (function(){var s=localStorage.getItem('skrib-color-scheme')||'auto';var d=s==='dark'||(s==='auto'&&matchMedia('(prefers-color-scheme:dark)').matches);if(d)document.documentElement.toggleAttribute('data-theme-dark',true)})();
+        if('serviceWorker' in navigator) navigator.serviceWorker.register('/sw.js');
+    </script>
 </head>
 <body>
     <div class="settings-page">
@@ -62,15 +66,15 @@
                         <h3>Color Scheme</h3>
                         <div class="color-scheme-picker" id="color-scheme-picker">
                             <button class="color-scheme-option active" data-scheme="auto" type="button">
-                                <span class="color-scheme-icon">&#x1F5A5;</span>
+                                <span class="color-scheme-icon">🌓</span>
                                 Auto
                             </button>
                             <button class="color-scheme-option" data-scheme="light" type="button">
-                                <span class="color-scheme-icon">&#x2600;</span>
+                                <span class="color-scheme-icon">☀️</span>
                                 Light
                             </button>
                             <button class="color-scheme-option" data-scheme="dark" type="button">
-                                <span class="color-scheme-icon">&#x1F319;</span>
+                                <span class="color-scheme-icon">🌙 </span>
                                 Dark
                             </button>
                         </div>

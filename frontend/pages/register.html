@@ -9,7 +9,11 @@
     <meta name="theme-color" content="#6366f1">
     <meta name="apple-mobile-web-app-capable" content="yes">
     <link rel="apple-touch-icon" href="/icons/icon-192.png">
-    <script>if('serviceWorker' in navigator) navigator.serviceWorker.register('/sw.js');</script>
+    <script>
+        // Apply dark mode before first paint to prevent white flash
+        (function(){var s=localStorage.getItem('skrib-color-scheme')||'auto';var d=s==='dark'||(s==='auto'&&matchMedia('(prefers-color-scheme:dark)').matches);if(d)document.documentElement.toggleAttribute('data-theme-dark',true)})();
+        if('serviceWorker' in navigator) navigator.serviceWorker.register('/sw.js');
+    </script>
 </head>
 <body>
     <!-- Register View -->
@@ -28,6 +32,7 @@
                            pattern="[a-zA-Z0-9_]{4,15}"
                            title="4–15 characters: letters, numbers, and underscores only"
                            autocomplete="username"
+                           autocapitalize="none"
                            autofocus>
                     <small class="form-hint-small">4–15 characters: letters, numbers, underscores only</small>
                 </div>

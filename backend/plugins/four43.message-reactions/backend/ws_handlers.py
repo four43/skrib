@@ -1,12 +1,5 @@
 """WebSocket handlers for reactions plugin."""
-import sys
-import importlib.util
-from pathlib import Path
-
-# Load database module
-_db_spec = importlib.util.spec_from_file_location("db", Path(__file__).parent / "database.py")
-db = importlib.util.module_from_spec(_db_spec)
-_db_spec.loader.exec_module(db)
+from . import database as db
 
 # Plugin namespace - must match plugin ID
 PLUGIN_NAMESPACE = "four43.message-reactions"

@@ -27,3 +27,7 @@ CORS_ALLOW_HEADERS = ["*"]
 # Application settings
 APP_TITLE = "Skrīb Server"
 APP_VERSION = "1.0.0"
+
+# WebAuthn settings
+WEBAUTHN_RP_NAME = "Skrīb"
+WEBAUTHN_RP_ID = os.getenv('SKRIB_RP_ID', 'localhost')

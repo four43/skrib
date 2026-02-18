@@ -51,6 +51,15 @@ const ReactionsPlugin = (function() {
             return;
         }
 
+        // Dismiss hover bar when tapping outside a message
+        document.addEventListener('click', (e) => {
+            if (!e.target.closest('.message')) {
+                document.querySelectorAll('.four43-reaction-hover-bar.active').forEach(bar => {
+                    bar.classList.remove('active');
+                });
+            }
+        });
+
         // Observe new messages being added to the DOM
         const observer = new MutationObserver(mutations => {
             mutations.forEach(mutation => {
@@ -89,11 +98,27 @@ const ReactionsPlugin = (function() {
             btn.onclick = (e) => {
                 e.stopPropagation();
                 addReaction(messageId, emoji);
+                // Dismiss the hover bar after selecting
+                hoverBar.classList.remove('active');
             };
             hoverBar.appendChild(btn);
         });
 
         messageElement.appendChild(hoverBar);
+
+        // Tap-to-show for mobile (and works as click fallback on desktop)
+        messageElement.addEventListener('click', (e) => {
+            // Don't trigger if clicking a reaction pill or the hover bar itself
+            if (e.target.closest('.four43-reaction-hover-bar') ||
+                e.target.closest('.four43-reaction-btn')) {
+                return;
+            }
+            // Dismiss any other open hover bars first
+            document.querySelectorAll('.four43-reaction-hover-bar.active').forEach(bar => {
+                if (bar !== hoverBar) bar.classList.remove('active');
+            });
+            hoverBar.classList.add('active');
+        });
 
         // Create reactions container (shows existing reaction pills below message)
         const container = document.createElement('div');

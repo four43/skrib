@@ -1,8 +1,10 @@
 /**
  * Message Reactions Plugin Styles
  *
- * Slack-like hover toolbar: emoji bar appears top-right on message hover.
- * Existing reaction pills show below the message text.
+ * Hover toolbar: emoji bar appears top-right on message hover (desktop)
+ * or on tap (mobile). Reaction pills show below the message text.
+ *
+ * Uses the app's CSS custom properties for consistent theming.
  */
 
 /* Message needs relative positioning for the hover bar overlay */
@@ -10,7 +12,7 @@
     position: relative;
 }
 
-/* ── Hover toolbar (appears on message hover, top-right) ────────────── */
+/* ── Hover toolbar (appears on message hover / tap) ──────────────────── */
 
 .four43-reaction-hover-bar {
     display: none;
@@ -19,14 +21,24 @@
     right: 8px;
     gap: 2px;
     padding: 3px 4px;
-    background: #ffffff;
-    border: 1px solid #d0d0d0;
-    border-radius: 6px;
-    box-shadow: 0 2px 8px rgba(0, 0, 0, 0.12);
+    background: var(--bg-surface-elevated-dark);
+    backdrop-filter: blur(var(--blur-lg));
+    -webkit-backdrop-filter: blur(var(--blur-lg));
+    border: 1px solid var(--border-white);
+    border-radius: var(--radius-lg);
+    box-shadow: 0 8px 20px -8px rgba(0, 0, 0, 0.12),
+        0 2px 8px rgba(var(--theme-rgb), 0.08);
     z-index: 10;
 }
 
-.message:hover .four43-reaction-hover-bar {
+/* Desktop: show on mouse hover (only when not already tap-activated) */
+.message:hover .four43-reaction-hover-bar:not(.active) {
+    display: flex;
+}
+
+/* Tap/click activated — needs .message prefix for 0-3-0 specificity
+   to match the :hover rule above and win by source order */
+.message .four43-reaction-hover-bar.active {
     display: flex;
 }
 
@@ -42,7 +54,7 @@
     font-size: 16px;
     font-weight: normal;
     cursor: pointer;
-    border-radius: 4px;
+    border-radius: var(--radius-sm);
     transition: background 0.1s ease, transform 0.1s ease;
     line-height: 1;
     display: inline-flex;
@@ -52,7 +64,7 @@
 }
 
 .four43-hover-emoji-btn:hover {
-    background: #f0f0f0;
+    background: rgba(var(--theme-rgb), 0.1);
     transform: scale(1.2);
     box-shadow: none;
 }
@@ -78,11 +90,11 @@
     display: inline-flex;
     align-items: center;
     gap: 3px;
-    padding: 2px 6px;
-    border: 1px solid #e0e0e0;
-    border-radius: 10px;
-    background: #f5f5f5;
-    color: inherit;
+    padding: 4px 8px;
+    border: 1px solid var(--border-strong);
+    border-radius: var(--radius-lg);
+    background: var(--bg-surface-elevated);
+    color: var(--text-secondary);
     cursor: pointer;
     font-size: 12px;
     font-weight: normal;
@@ -93,19 +105,19 @@
 }
 
 .four43-reaction-btn:hover {
-    background: #eaeaea;
-    border-color: #d0d0d0;
+    background: rgba(var(--theme-rgb), 0.08);
+    border-color: rgba(var(--theme-rgb), 0.15);
     transform: none;
     box-shadow: none;
 }
 
 .four43-reaction-btn.reacted {
-    background: #e3f2fd;
-    border-color: #2196f3;
+    background: rgba(var(--theme-rgb), 0.12);
+    border-color: var(--theme-color);
 }
 
 .four43-reaction-btn.reacted:hover {
-    background: #bbdefb;
+    background: rgba(var(--theme-rgb), 0.18);
 }
 
 .four43-reaction-btn .emoji {
@@ -116,45 +128,12 @@
 .four43-reaction-btn .count {
     font-size: 11px;
     font-weight: 500;
-    color: #666;
+    color: var(--text-tertiary);
     min-width: 10px;
     text-align: center;
 }
 
 .four43-reaction-btn.reacted .count {
-    color: #1976d2;
+    color: var(--theme-color);
 }
 
-/* ── Dark mode ──────────────────────────────────────────────────────── */
-
-@media (prefers-color-scheme: dark) {
-    .four43-reaction-hover-bar {
-        background: #2a2a2a;
-        border-color: #444;
-        box-shadow: 0 2px 8px rgba(0, 0, 0, 0.4);
-    }
-
-    .four43-hover-emoji-btn:hover {
-        background: #3a3a3a;
-    }
-
-    .four43-reaction-btn {
-        background: #2a2a2a;
-        border-color: #444;
-        color: #e0e0e0;
-    }
-
-    .four43-reaction-btn:hover {
-        background: #333;
-        border-color: #555;
-    }
-
-    .four43-reaction-btn.reacted {
-        background: #1e3a5f;
-        border-color: #42a5f5;
-    }
-
-    .four43-reaction-btn.reacted:hover {
-        background: #2a4a73;
-    }
-}

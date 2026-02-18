@@ -16,7 +16,8 @@
       ],
       "cwd": "${workspaceFolder}/backend",
       "env": {
-        "PYTHONUNBUFFERED": "1"
+        "PYTHONUNBUFFERED": "1",
+        "SKRIB_RP_ID": "pinggy.link"
       },
       "console": "integratedTerminal",
       "justMyCode": false,
@@ -41,31 +42,6 @@
       "console": "integratedTerminal",
       "justMyCode": false,
       "jinja": true
-    },
-    {
-      "name": "Python: Current File",
-      "type": "debugpy",
-      "request": "launch",
-      "program": "${file}",
-      "console": "integratedTerminal",
-      "cwd": "${workspaceFolder}/backend",
-      "justMyCode": false
-    },
-    {
-      "name": "Admin CLI: Interactive",
-      "type": "debugpy",
-      "request": "launch",
-      "program": "${workspaceFolder}/backend/skrib/admin_cli.py",
-      "console": "integratedTerminal",
-      "cwd": "${workspaceFolder}/backend",
-      "justMyCode": false
-    },
-    {
-      "name": "Frontend Dev",
-      "type": "shell",
-      "command": "npm run dev",
-      "console": "integratedTerminal",
-      "cwd": "${workspaceFolder}/frontend"
     }
   ]
 }

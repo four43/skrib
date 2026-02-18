@@ -1,7 +1,8 @@
-"""Plugin registry for managing Mini Chat plugins."""
+"""Plugin registry for managing Skrib plugins."""
 import json
 import os
 import sys
+import types
 import importlib.util
 import inspect
 from pathlib import Path
@@ -176,13 +177,24 @@ class PluginRegistry:
             print(f"[Plugins] Loading plugin: {plugin_id}")
 
             try:
+                # Create a synthetic package for the plugin's backend/ directory
+                # so plugin files can use relative imports (from . import routes, etc.)
+                package_name = f"skrib_plugin_{plugin_id.replace('.', '_').replace('-', '_')}"
+                package = types.ModuleType(package_name)
+                package.__path__ = [str(backend_file.parent)]
+                package.__package__ = package_name
+                sys.modules[package_name] = package
+
+                # Load plugin.py as a submodule of that package
+                module_name = f"{package_name}.plugin"
                 spec = importlib.util.spec_from_file_location(
-                    f"plugin_{plugin_id}",
+                    module_name,
                     backend_file
                 )
                 if spec and spec.loader:
                     module = importlib.util.module_from_spec(spec)
-                    sys.modules[spec.name] = module
+                    module.__package__ = package_name
+                    sys.modules[module_name] = module
                     spec.loader.exec_module(module)
 
                     # Look for Plugin subclasses

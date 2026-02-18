@@ -1,0 +1,20 @@
+{
+  "version": "2.0.0",
+  "tasks": [
+    {
+      "label": "Frontend Dev",
+      "type": "npm",
+      "script": "dev",
+      "path": "frontend",
+      "problemMatcher": [],
+      "isBackground": true
+    },
+    {
+      "label": "Pinggy Tunnel",
+      "type": "shell",
+      "command": "ssh -p 443 -R0:localhost:5173 qr@free.pinggy.io",
+      "problemMatcher": [],
+      "isBackground": true
+    }
+  ]
+}

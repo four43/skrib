@@ -39,6 +39,7 @@ class RegistrationCompleteResponse(BaseModel):
 
 class LoginBeginResponse(BaseModel):
     challenge: str
+    rpId: str
     allowCredentials: List[AllowCredential]
 
 

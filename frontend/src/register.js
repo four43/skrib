@@ -154,6 +154,7 @@ async function register() {
                 const loginAssertion = await navigator.credentials.get({
                     publicKey: {
                         challenge: loginChallenge,
+                        rpId: loginBeginData.rpId,
                         timeout: 60000,
                         userVerification: "preferred"
                     }

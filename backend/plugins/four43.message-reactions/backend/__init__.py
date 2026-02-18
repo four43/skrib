@@ -1,1 +1,0 @@
-"""Message Reactions Plugin Backend."""

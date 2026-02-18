@@ -31,6 +31,14 @@ from .themes.routes import router as themes_router
 from .users.routes import router as preferences_router
 from .ws.routes import router as ws_router
 
+# Initialize database and discover plugins at module level so that plugin
+# routes are registered before the app starts serving requests.  Doing this
+# in a startup event caused plugin routes to be added AFTER the catch-all
+# static Mount("/"), resulting in 404s for plugin API endpoints.
+init_db()
+load_rooms_from_db()
+registry.discover_plugins()
+
 # Create FastAPI app
 app = FastAPI(title=APP_TITLE, version=APP_VERSION)
 
@@ -47,80 +55,6 @@ app.add_middleware(
 if STATIC_DIR.exists():
     app.mount("/assets", StaticFiles(directory=str(STATIC_DIR / "assets")), name="assets")
 
-
-@app.on_event("startup")
-async def startup_event():
-    """Initialize database and load rooms on startup."""
-    init_db()
-    load_rooms_from_db()
-
-    # Count users
-    from .database import get_db, get_setting
-    with get_db() as conn:
-        cursor = conn.execute("SELECT COUNT(*) as count FROM users WHERE status = 'active'")
-        user_count = cursor.fetchone()['count']
-
-        cursor = conn.execute("SELECT COUNT(*) as count FROM users WHERE status = 'pending'")
-        pending_count = cursor.fetchone()['count']
-
-        reg_mode = get_setting('registration_mode', 'closed')
-
-    from .rooms.services import ROOMS
-    print(f"Loaded {len(ROOMS)} rooms")
-    print(f"Users: {user_count}, Pending: {pending_count}")
-    print(f"Registration mode: {reg_mode}")
-
-    # Initialize plugin system
-    print("\n[Plugins] Initializing plugin system...")
-
-    # Discover and load plugins
-    registry.discover_plugins()
-
-    # Register plugin routes
-    for plugin in registry.get_all_plugins():
-        try:
-            router = plugin.register_routes(app)
-            if router:
-                # Namespace plugin routes under /api/plugins/{plugin.id}
-                app.include_router(router, prefix=f"/api/plugins/{plugin.id}")
-                print(f"[Plugins] Registered routes for: {plugin.id} at /api/plugins/{plugin.id}")
-        except Exception as e:
-            print(f"[Plugins] Failed to register routes for {plugin.id}: {e}")
-
-    # Register plugin WebSocket namespaces
-    from . import ws
-    for plugin in registry.get_all_plugins():
-        try:
-            plugin.register_ws_namespace(ws.bus)
-            print(f"[Plugins] Registered WebSocket namespace for: {plugin.id}")
-        except Exception as e:
-            print(f"[Plugins] Failed to register WS namespace for {plugin.id}: {e}")
-
-    # Call on_startup for all plugins
-    for plugin in registry.get_all_plugins():
-        try:
-            await plugin.on_startup()
-        except Exception as e:
-            print(f"[Plugins] Error in on_startup for {plugin.id}: {e}")
-
-    all_info = registry.get_all_plugin_info()
-    enabled = sum(1 for p in all_info if p['enabled'])
-    disabled = sum(1 for p in all_info if not p['enabled'])
-    print(f"[Plugins] Loaded {enabled} plugins ({disabled} disabled)")
-    print()
-
-
-@app.on_event("shutdown")
-async def shutdown_event():
-    """Call on_shutdown for all plugins."""
-    print("\n[Plugins] Shutting down plugins...")
-    for plugin in registry.get_all_plugins():
-        try:
-            await plugin.on_shutdown()
-        except Exception as e:
-            print(f"[Plugins] Error in on_shutdown for {plugin.id}: {e}")
-
-
 # Register API routers
 app.include_router(auth_router, prefix="/api")
 app.include_router(rooms_router, prefix="/api")
@@ -129,6 +63,21 @@ app.include_router(preferences_router, prefix="/api")
 app.include_router(ws_router, prefix="/api")
 app.include_router(plugins_router, prefix="/api")
 app.include_router(themes_router, prefix="/api")
+
+# Register plugin routes at module level, before the static catch-all mount
+print("\n[Plugins] Initializing plugin system...")
+for _plugin in registry.get_all_plugins():
+    try:
+        _plugin_router = _plugin.register_routes(app)
+        if _plugin_router:
+            app.include_router(_plugin_router, prefix=f"/api/plugins/{_plugin.id}")
+            print(f"[Plugins] Registered routes for: {_plugin.id} at /api/plugins/{_plugin.id}")
+    except Exception as _e:
+        print(f"[Plugins] Failed to register routes for {_plugin.id}: {_e}")
+
+_all_info = registry.get_all_plugin_info()
+print(f"[Plugins] Loaded {sum(1 for p in _all_info if p['enabled'])} plugins "
+      f"({sum(1 for p in _all_info if not p['enabled'])} disabled)")
 
 
 @app.get("/")
@@ -151,6 +100,55 @@ async def read_root():
 # and /assets take priority.
 if STATIC_DIR.exists():
     app.mount("/", StaticFiles(directory=str(STATIC_DIR), html=True), name="static-root")
+
+
+@app.on_event("startup")
+async def startup_event():
+    """Async plugin startup callbacks and status logging."""
+    from .database import get_db, get_setting
+
+    with get_db() as conn:
+        cursor = conn.execute("SELECT COUNT(*) as count FROM users WHERE status = 'active'")
+        user_count = cursor.fetchone()['count']
+
+        cursor = conn.execute("SELECT COUNT(*) as count FROM users WHERE status = 'pending'")
+        pending_count = cursor.fetchone()['count']
+
+        reg_mode = get_setting('registration_mode', 'closed')
+
+    from .rooms.services import ROOMS
+    print(f"Loaded {len(ROOMS)} rooms")
+    print(f"Users: {user_count}, Pending: {pending_count}")
+    print(f"Registration mode: {reg_mode}")
+
+    # Register plugin WebSocket namespaces
+    from . import ws
+    for plugin in registry.get_all_plugins():
+        try:
+            plugin.register_ws_namespace(ws.bus)
+            print(f"[Plugins] Registered WebSocket namespace for: {plugin.id}")
+        except Exception as e:
+            print(f"[Plugins] Failed to register WS namespace for {plugin.id}: {e}")
+
+    # Call on_startup for all plugins
+    for plugin in registry.get_all_plugins():
+        try:
+            await plugin.on_startup()
+        except Exception as e:
+            print(f"[Plugins] Error in on_startup for {plugin.id}: {e}")
+
+    print()
+
+
+@app.on_event("shutdown")
+async def shutdown_event():
+    """Call on_shutdown for all plugins."""
+    print("\n[Plugins] Shutting down plugins...")
+    for plugin in registry.get_all_plugins():
+        try:
+            await plugin.on_shutdown()
+        except Exception as e:
+            print(f"[Plugins] Error in on_shutdown for {plugin.id}: {e}")
 
 
 def signal_handler(sig, frame):
