@@ -1,5 +1,5 @@
 [project]
-name = "mini_chat"
+name = "skrib"
 version = "0.0.1"
 authors = [
     { name = "Seth Miller", email = "seth@four43.com" }
@@ -24,10 +24,10 @@ dev = [
 ]
 
 [tool.setuptools.packages.find]
-include = ["mini_chat*"]
+include = ["skrib*"]
 
 [tool.xwe_build]
 modules = [
-    "mini_chat",
+    "skrib",
     "tests",
 ]

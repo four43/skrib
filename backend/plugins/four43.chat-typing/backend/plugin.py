@@ -3,9 +3,9 @@ import time
 import sys
 from pathlib import Path
 
-# Add parent directory to path to make mini_chat importable as a package
+# Add parent directory to path to make skrib importable as a package
 sys.path.insert(0, str(Path(__file__).parent.parent.parent.parent))
-from mini_chat.plugins.base import Plugin
+from skrib.plugins.base import Plugin
 
 
 class ChatTypingPlugin(Plugin):

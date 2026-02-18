@@ -6,8 +6,8 @@ from typing import Optional
 
 sys.path.insert(0, str(Path(__file__).parent.parent.parent.parent))
 
-from mini_chat.plugins.base import Plugin
-from mini_chat.rooms.services import (
+from skrib.plugins.base import Plugin
+from skrib.rooms.services import (
     get_room_members,
     get_notify_level,
     get_unread_count_for_room,

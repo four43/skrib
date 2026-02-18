@@ -1,6 +1,6 @@
-# Mini Chat
+# Skrīb
 
-Real-time chat app with WebAuthn/Passkey auth. FastAPI backend, vanilla JS frontend, SQLite DB, WebSocket messaging.
+Real-time collaboration app with WebAuthn/Passkey auth. FastAPI backend, vanilla JS frontend, SQLite DB, WebSocket messaging.
 
 ## Detailed Documentation
 

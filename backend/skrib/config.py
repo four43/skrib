@@ -6,7 +6,7 @@ from pathlib import Path
 BACKEND_ROOT = Path(__file__).parent.parent
 
 # Database configuration
-DB_DIR = Path(os.getenv('MINICHAT_DATA_DIR', str(BACKEND_ROOT.parent / "data")))
+DB_DIR = Path(os.getenv('SKRIB_DATA_DIR', str(BACKEND_ROOT.parent / "data")))
 DB_FILE = str(DB_DIR / "chat.db")
 DB_TIMEOUT = 30.0  # 30 seconds timeout for busy database
 
@@ -25,5 +25,5 @@ CORS_ALLOW_METHODS = ["*"]
 CORS_ALLOW_HEADERS = ["*"]
 
 # Application settings
-APP_TITLE = "Mini-Chat Server"
+APP_TITLE = "Skrīb Server"
 APP_VERSION = "1.0.0"

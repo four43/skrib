@@ -147,13 +147,13 @@ def init_db():
         cursor = conn.execute("SELECT value FROM settings WHERE key = 'registration_mode'")
         if not cursor.fetchone():
             valid_modes = ('closed', 'invite_only', 'approval_required', 'open')
-            env_mode = os.getenv('MINICHAT_REGISTRATION_MODE')
+            env_mode = os.getenv('SKRIB_REGISTRATION_MODE')
             if env_mode and env_mode in valid_modes:
                 default_reg_mode = env_mode
             else:
                 if env_mode:
                     logger.warning(
-                        "Invalid MINICHAT_REGISTRATION_MODE '%s', falling back to 'approval_required'",
+                        "Invalid SKRIB_REGISTRATION_MODE '%s', falling back to 'approval_required'",
                         env_mode
                     )
                 default_reg_mode = 'approval_required'
@@ -165,7 +165,7 @@ def init_db():
         # Set default theme (env var override on first startup only)
         cursor = conn.execute("SELECT value FROM settings WHERE key = 'default_theme'")
         if not cursor.fetchone():
-            default_theme = os.getenv('MINICHAT_DEFAULT_THEME', 'four43.theme-default')
+            default_theme = os.getenv('SKRIB_DEFAULT_THEME', 'four43.theme-default')
             conn.execute(
                 "INSERT INTO settings (key, value) VALUES ('default_theme', ?)",
                 (default_theme,)

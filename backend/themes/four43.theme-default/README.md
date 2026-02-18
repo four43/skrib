@@ -1,6 +1,6 @@
 # Default Theme
 
-The default dark theme for Mini Chat with light variant support.
+The default dark theme for Skrīb with light variant support.
 
 Background cred: https://unsplash.com/photos/northern-lights-over-snow-capped-mountian-LtnPejWDSAY
 

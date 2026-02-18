@@ -6,7 +6,7 @@ services:
         - github_token
       ssh:
         - default
-    image: mini-chat:latest
+    image: skrib:latest
     ports:
       - "8000:8000"
       - "5173:5173"
@@ -27,7 +27,7 @@ services:
       - -c
       - |
         npm run dev -- --host &
-        cd /app && python -m uvicorn mini_chat.main:app --host 0.0.0.0 --port 8000 --reload
+        cd /app && python -m uvicorn skrib.main:app --host 0.0.0.0 --port 8000 --reload
 
 secrets:
   github_token:

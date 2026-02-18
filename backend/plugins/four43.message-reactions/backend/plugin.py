@@ -3,10 +3,10 @@ import sys
 import importlib.util
 from pathlib import Path
 
-# Add parent directory to path to import mini_chat as a package
+# Add parent directory to path to import skrib as a package
 sys.path.insert(0, str(Path(__file__).parent.parent.parent.parent))
 
-from mini_chat.plugins.base import Plugin
+from skrib.plugins.base import Plugin
 
 # Import sibling modules
 _backend_dir = Path(__file__).parent

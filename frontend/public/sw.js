@@ -1,5 +1,5 @@
 /**
- * Mini Chat Service Worker
+ * Skrīb Service Worker
  *
  * Handles:
  * - Offline caching (network-first for navigations and assets)
@@ -7,7 +7,7 @@
  * - Notification click → focus/open app
  */
 
-const CACHE_NAME = 'minichat-v1';
+const CACHE_NAME = 'skrib-v1';
 
 // Install: activate immediately
 self.addEventListener('install', () => {
@@ -54,7 +54,7 @@ self.addEventListener('fetch', (event) => {
 self.addEventListener('push', (event) => {
   const data = event.data ? event.data.json() : {};
   event.waitUntil(
-    self.registration.showNotification(data.title || 'Mini Chat', {
+    self.registration.showNotification(data.title || 'Skrīb', {
       body: data.body || '',
       icon: '/icons/icon-192.png',
       badge: '/icons/icon-192.png',
@@ -70,7 +70,7 @@ self.addEventListener('notificationclick', (event) => {
 
   event.waitUntil(
     clients.matchAll({ type: 'window', includeUncontrolled: true }).then((windowClients) => {
-      // Focus an existing Mini Chat tab if one is open
+      // Focus an existing Skrīb tab if one is open
       for (const client of windowClients) {
         if (client.url.includes('/app.html') && 'focus' in client) {
           return client.focus();

@@ -2,7 +2,7 @@
 
 ## Overview
 
-Design a plugin architecture that allows extending Mini Chat with new room types, features, and UI customization without modifying core code.
+Design a plugin architecture that allows extending Skrīb with new room types, features, and UI customization without modifying core code.
 
 ## Goals
 
@@ -51,7 +51,7 @@ Plugins fall into several categories based on their purpose:
 
 ### 1. Plugin Registry (Backend)
 
-**Location**: `backend/mini_chat/plugins/`
+**Location**: `backend/skrib/plugins/`
 
 ```python
 # plugins/registry.py
@@ -922,7 +922,7 @@ if room_type != 'dm' and not registry.get_plugin_for_room_type(room_type):
 
 1. Create backend plugin class:
    ```python
-   from mini_chat.plugins import Plugin
+   from skrib.plugins import Plugin
 
    class MyPlugin(Plugin):
        # ... implement methods
@@ -947,7 +947,7 @@ if room_type != 'dm' and not registry.get_plugin_for_room_type(room_type):
 # My Plugin
 
 ## Installation
-1. Copy `my_plugin.py` to `backend/mini_chat/plugins/`
+1. Copy `my_plugin.py` to `backend/skrib/plugins/`
 2. Copy frontend assets to `frontend/public/plugins/my-plugin/`
 3. Restart server
 

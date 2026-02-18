@@ -28,7 +28,7 @@ let privateKey = null;  // User's RSA-OAEP private key (loaded from IndexedDB)
 let roomKeys = {};  // room_id -> { epoch: CryptoKey }
 
 // Local-only UI preferences (localStorage)
-const UI_PREFS_KEY = 'minichat_ui_prefs';
+const UI_PREFS_KEY = 'skrib_ui_prefs';
 function getUiPref(key) {
     try {
         return (JSON.parse(localStorage.getItem(UI_PREFS_KEY) || '{}'))[key] ?? null;

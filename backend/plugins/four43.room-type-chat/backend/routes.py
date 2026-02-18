@@ -8,8 +8,8 @@ from fastapi import APIRouter, HTTPException, Depends
 from pydantic import BaseModel
 from typing import List, Optional
 
-from mini_chat.dependencies import require_auth
-from mini_chat.rooms.services import (
+from skrib.dependencies import require_auth
+from skrib.rooms.services import (
     room_exists,
     is_dm,
     get_room_members,
@@ -18,7 +18,7 @@ from mini_chat.rooms.services import (
     mark_room_read,
     ensure_room_exists,
 )
-from mini_chat.ws import bus
+from skrib.ws import bus
 
 # Injected by plugin.py after module load
 ChatRoom = None

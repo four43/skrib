@@ -1,6 +1,6 @@
 # Testing WebAuthn/Passkeys with Playwright
 
-Mini Chat uses WebAuthn (Passkeys) for authentication, which normally requires a physical authenticator (fingerprint, Face ID, security key). Playwright can simulate this using Chrome DevTools Protocol (CDP) virtual authenticators.
+Skrīb uses WebAuthn (Passkeys) for authentication, which normally requires a physical authenticator (fingerprint, Face ID, security key). Playwright can simulate this using Chrome DevTools Protocol (CDP) virtual authenticators.
 
 ## Prerequisites
 

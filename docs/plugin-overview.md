@@ -1,6 +1,6 @@
 # Plugin System Overview
 
-Mini Chat uses a plugin architecture to extend functionality without modifying core code. Plugins can add new room types (e.g., chat, whiteboard), cross-cutting features (e.g., typing indicators, reactions), REST endpoints, and frontend UI.
+Skrīb uses a plugin architecture to extend functionality without modifying core code. Plugins can add new room types (e.g., chat, whiteboard), cross-cutting features (e.g., typing indicators, reactions), REST endpoints, and frontend UI.
 
 ## Plugin Structure
 
@@ -46,7 +46,7 @@ The `entry` field is the path (relative to the plugin directory) to the frontend
 Every plugin extends the abstract `Plugin` class from `mini_chat.plugins.base`:
 
 ```python
-from mini_chat.plugins.base import Plugin
+from skrib.plugins.base import Plugin
 
 class MyPlugin(Plugin):
     @property

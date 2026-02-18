@@ -6,8 +6,8 @@ from typing import Optional
 
 sys.path.insert(0, str(Path(__file__).parent.parent.parent.parent))
 
-from mini_chat.plugins.base import Plugin
-from mini_chat.rooms.services import get_room_members
+from skrib.plugins.base import Plugin
+from skrib.rooms.services import get_room_members
 
 # Load sibling modules
 _backend_dir = Path(__file__).parent
@@ -185,12 +185,12 @@ class RoomTypeTodoPlugin(Plugin):
         if username == item_username:
             return True
 
-        from mini_chat.rooms.services import get_room_role
+        from skrib.rooms.services import get_room_role
         role = get_room_role(room_id, username)
         if role in ('owner', 'op'):
             return True
 
-        from mini_chat.database import get_db
+        from skrib.database import get_db
         with get_db() as conn:
             cursor = conn.execute('SELECT role FROM users WHERE username = ?', (username,))
             row = cursor.fetchone()

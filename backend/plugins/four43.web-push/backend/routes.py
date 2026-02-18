@@ -2,7 +2,7 @@
 from fastapi import APIRouter, Depends, HTTPException
 from pydantic import BaseModel
 
-from mini_chat.dependencies import require_auth
+from skrib.dependencies import require_auth
 
 router = APIRouter()
 

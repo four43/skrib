@@ -1,6 +1,6 @@
-# Mini Chat - FastAPI + Vite Application
+# Skrīb - FastAPI + Vite Application
 
-A secure chat application built with FastAPI backend and Vite frontend, featuring WebAuthn authentication, role-based access control, and SQLite database.
+A secure collaboration application built with FastAPI backend and Vite frontend, featuring WebAuthn authentication, role-based access control, and SQLite database.
 
 ## Features
 
@@ -104,7 +104,7 @@ The Vite dev server will proxy `/api` requests to the backend at <http://localho
 ### Build the Docker image
 
 ```bash
-docker build -t mini-chat:latest .
+docker build -t skrib:latest .
 ```
 
 This creates a multi-stage build that:

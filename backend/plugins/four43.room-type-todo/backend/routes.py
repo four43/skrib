@@ -8,8 +8,8 @@ from fastapi import APIRouter, HTTPException, Depends
 from pydantic import BaseModel
 from typing import List, Optional
 
-from mini_chat.dependencies import require_auth
-from mini_chat.rooms.services import (
+from skrib.dependencies import require_auth
+from skrib.rooms.services import (
     room_exists,
     get_room_members,
     get_room_role,
@@ -70,7 +70,7 @@ def _check_edit_permission(room_id: str, username: str, item_username: str):
     if role in ('owner', 'op'):
         return
     # Check global role
-    from mini_chat.database import get_db
+    from skrib.database import get_db
     with get_db() as conn:
         cursor = conn.execute('SELECT role FROM users WHERE username = ?', (username,))
         row = cursor.fetchone()

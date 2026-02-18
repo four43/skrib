@@ -3,12 +3,12 @@ import sys
 import importlib.util
 from pathlib import Path
 
-# Add parent directory to path to import mini_chat
+# Add parent directory to path to import skrib
 sys.path.insert(0, str(Path(__file__).parent.parent.parent.parent))
 
 from fastapi import APIRouter, Depends, HTTPException
 from pydantic import BaseModel
-from mini_chat.dependencies import require_auth
+from skrib.dependencies import require_auth
 
 # Load database module
 _db_spec = importlib.util.spec_from_file_location("db", Path(__file__).parent / "database.py")

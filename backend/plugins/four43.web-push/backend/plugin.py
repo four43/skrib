@@ -6,7 +6,7 @@ from typing import Optional
 
 sys.path.insert(0, str(Path(__file__).parent.parent.parent.parent))
 
-from mini_chat.plugins.base import Plugin
+from skrib.plugins.base import Plugin
 
 # Load sibling modules
 _backend_dir = Path(__file__).parent
@@ -114,7 +114,7 @@ class WebPushPlugin(Plugin):
             return
 
         try:
-            from mini_chat.rooms.services import get_room_members
+            from skrib.rooms.services import get_room_members
 
             members = get_room_members(room_id)
             _, vapid_private_key = services_module.get_or_create_vapid_keys()
@@ -135,7 +135,7 @@ class WebPushPlugin(Plugin):
                 room_label = room_id
 
                 payload = {
-                    "title": "Mini Chat",
+                    "title": "Skrīb",
                     "body": f"{sender} sent a message in {room_label}",
                     "url": f"/app.html#/r/{room_id}",
                 }
@@ -152,7 +152,7 @@ class WebPushPlugin(Plugin):
                         subscription_info=sub_info,
                         payload=payload,
                         vapid_private_key=vapid_private_key,
-                        vapid_claims={"sub": "mailto:noreply@minichat.local"},
+                        vapid_claims={"sub": "mailto:noreply@skrib.local"},
                     )
 
         except Exception as e:

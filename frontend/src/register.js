@@ -35,7 +35,7 @@ function disableRegistration() {
 }
 
 const USERNAME_RE = /^[a-zA-Z0-9_]{4,15}$/;
-const RESERVED_WORDS = ['admin', 'minichat', 'system'];
+const RESERVED_WORDS = ['admin', 'skrib', 'system'];
 
 function validateUsername(username) {
     if (!username) return 'Please enter a username';

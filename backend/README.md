@@ -7,7 +7,7 @@ The API has been reorganized following FastAPI best practices with feature-based
 ## Directory Structure
 
 ```text
-backend/mini_chat/
+backend/skrib/
 ├── __init__.py              # Package initialization
 ├── main.py                  # App initialization & router registration
 ├── config.py                # Configuration settings
@@ -415,23 +415,23 @@ window.pluginLoader.registerWSHandler('myplugin', (action, data) => {
 
 ```bash
 cd backend
-python -m uvicorn mini_chat.main:app --reload --host 0.0.0.0 --port 8000
+python -m uvicorn skrib.main:app --reload --host 0.0.0.0 --port 8000
 ```
 
 ### Use the Admin CLI
 
 ```bash
 # Interactive mode
-python mini_chat/admin_cli.py
+python skrib/admin_cli.py
 
 # Direct commands
-python mini_chat/admin_cli.py list
-python mini_chat/admin_cli.py approve ABC123DEF456
-python mini_chat/admin_cli.py set-admin alice
-python mini_chat/admin_cli.py status
+python skrib/admin_cli.py list
+python skrib/admin_cli.py approve ABC123DEF456
+python skrib/admin_cli.py set-admin alice
+python skrib/admin_cli.py status
 
 # Remote API
-python mini_chat/admin_cli.py --url http://remote-server:8000 status
+python skrib/admin_cli.py --url http://remote-server:8000 status
 ```
 
 ## Migration Notes

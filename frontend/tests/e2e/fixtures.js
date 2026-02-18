@@ -1,5 +1,5 @@
 /**
- * Shared E2E test fixtures for Mini Chat.
+ * Shared E2E test fixtures for Skrīb.
  *
  * Provides:
  *   - authenticatedPage: a Page with a virtual WebAuthn authenticator attached

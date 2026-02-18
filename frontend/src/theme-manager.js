@@ -1,5 +1,5 @@
 /**
- * Theme Manager for Mini Chat
+ * Theme Manager for Skrīb
  *
  * Handles loading themes (CSS files) and applying user customizations.
  */

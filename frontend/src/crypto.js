@@ -1,5 +1,5 @@
 /**
- * E2E encryption module for Mini Chat.
+ * E2E encryption module for Skrīb.
  *
  * Handles RSA-OAEP key pairs (per user), AES-GCM room keys,
  * message encryption/decryption, and IndexedDB key storage.

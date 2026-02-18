@@ -1,4 +1,4 @@
-# Frontend - Mini Chat
+# Frontend - Skrīb
 
 Vanilla JavaScript (ES modules) + HTML + CSS, built with Vite.
 

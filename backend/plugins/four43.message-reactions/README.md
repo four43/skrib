@@ -13,7 +13,7 @@ Add emoji reactions to messages with real-time synchronization across all connec
 
 ## Installation
 
-This plugin is already installed in the standard Mini Chat distribution.
+This plugin is already installed in the standard Skrīb distribution.
 
 To install manually:
 
@@ -237,8 +237,8 @@ Modify `frontend/plugin.css` to match your theme:
 
 ## License
 
-Same as Mini Chat core (check root LICENSE file)
+Same as Skrīb core (check root LICENSE file)
 
 ## Credits
 
-Developed by Four43 for Mini Chat
+Developed by Four43 for Skrīb

@@ -1,6 +1,6 @@
 {
-  "name": "Mini Chat",
-  "short_name": "Mini Chat",
+  "name": "Skrīb",
+  "short_name": "Skrīb",
   "start_url": "/app.html",
   "scope": "/",
   "display": "standalone",

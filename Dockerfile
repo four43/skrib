@@ -41,4 +41,4 @@ EXPOSE 8000 5173
 # Run the application
 # Build frontend for production
 RUN cd ./frontend && npm run build
-CMD ["python", "-m", "uvicorn", "mini_chat.main:app", "--host", "0.0.0.0", "--port", "8000"]
+CMD ["python", "-m", "uvicorn", "skrib.main:app", "--host", "0.0.0.0", "--port", "8000"]

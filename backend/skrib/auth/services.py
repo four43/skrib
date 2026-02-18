@@ -9,7 +9,7 @@ from ..database import get_db, get_setting
 
 # Username rules (Twitter/X-style)
 USERNAME_RE = re.compile(r'^[a-zA-Z0-9_]{4,15}$')
-RESERVED_WORDS = ['admin', 'minichat', 'system']
+RESERVED_WORDS = ['admin', 'skrib', 'system']
 
 
 def validate_username(username: str) -> Optional[str]:
