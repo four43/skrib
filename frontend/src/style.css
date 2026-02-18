@@ -151,6 +151,14 @@ html {
     background-color: var(--bg-body-mid);
 }
 
+/* In standalone PWA mode, the notch area shows behind the container.
+   Use the header purple so it blends seamlessly with the header below. */
+@media (display-mode: standalone) {
+    html {
+        background-color: var(--theme-color);
+    }
+}
+
 body {
     font-family: var(--font-family);
     -webkit-font-smoothing: antialiased;
@@ -449,6 +457,7 @@ input:focus-visible {
     overflow: hidden;
     display: flex;
     flex-direction: column;
+    padding-top: env(safe-area-inset-top, 0px);
     background: rgba(255, 255, 255, 0.45);
     backdrop-filter: blur(var(--blur-xl));
     -webkit-backdrop-filter: blur(var(--blur-xl));
@@ -463,7 +472,6 @@ input:focus-visible {
     -webkit-backdrop-filter: blur(var(--blur-md));
     color: var(--text-inverse);
     padding: 18px 24px;
-    padding-top: calc(18px + env(safe-area-inset-top));
     display: flex;
     justify-content: space-between;
     align-items: center;
@@ -545,6 +553,7 @@ input:focus-visible {
     display: flex;
     flex: 1;
     min-height: 0;
+    position: relative;
 }
 
 /* ═══════════════════════════════════════════
@@ -2197,11 +2206,11 @@ input:focus-visible {
     }
 
     .members-panel.open {
-        position: fixed;
-        top: calc(64px + env(safe-area-inset-top));
+        position: absolute;
+        top: 0;
         right: 0;
         width: 260px;
-        height: calc(100dvh - 64px - env(safe-area-inset-top));
+        height: 100%;
         z-index: 100;
         background: rgba(255, 255, 255, 0.95);
         backdrop-filter: blur(var(--blur-2xl));

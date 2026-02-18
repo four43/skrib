@@ -1,5 +1,5 @@
 import { API_URL, showStatus, arrayBufferToBase64, base64ToArrayBuffer, friendlyError } from './utils.js';
-import { loadPrivateKey, generateEncryptionKeyPair, exportPublicKey, storePrivateKey, exportStoredPublicKey } from './crypto.js';
+import { loadPrivateKey, loadPrivateKeyJwk, generateEncryptionKeyPair, exportPublicKey, storePrivateKey, exportStoredPublicKey, PRF_SALT, deriveWrappingKey, wrapPrivateKey, unwrapPrivateKey } from './crypto.js';
 import { loadTheme } from './theme-manager.js';
 
 // Load default theme (no authentication on login page)
@@ -54,9 +54,14 @@ async function login() {
                 challenge: challenge,
                 rpId: beginData.rpId,
                 timeout: 60000,
-                userVerification: "preferred"
+                userVerification: "preferred",
+                extensions: { prf: { eval: { first: PRF_SALT } } },
             }
         });
+
+        // Extract PRF output if available (not all authenticators support it)
+        const prfResult = assertion.getClientExtensionResults()?.prf?.results?.first;
+        console.log('[E2E] PRF available:', !!prfResult);
 
         const completeResp = await fetch(`${API_URL}/auth/login/complete`, {
             method: 'POST',
@@ -77,28 +82,109 @@ async function login() {
             localStorage.setItem('username', completeData.username);
             localStorage.setItem('role', completeData.role);
 
-            // Ensure encryption keys exist and server has the public key
+            // Ensure encryption keys exist and server has the public key.
+            // 4 branches handle cross-browser key portability via PRF.
             try {
+                const authHeaders = {
+                    'Content-Type': 'application/json',
+                    'Authorization': `Bearer ${completeData.session_token}`,
+                };
                 let privKey = await loadPrivateKey(completeData.username);
-                let publicKeyJwk;
-                if (!privKey) {
-                    const keyPair = await generateEncryptionKeyPair();
-                    publicKeyJwk = await exportPublicKey(keyPair);
-                    await storePrivateKey(completeData.username, keyPair.privateKey);
+
+                if (privKey) {
+                    // Branch 1: Have local private key — re-upload matching public key
+                    const publicKeyJwk = await exportStoredPublicKey(completeData.username);
+                    if (publicKeyJwk) {
+                        const encKeyBody = { public_key: JSON.stringify(publicKeyJwk) };
+
+                        // If PRF available and server has no wrapped key, upload as backup
+                        if (prfResult) {
+                            try {
+                                const ekResp = await fetch(
+                                    `${API_URL}/auth/encryption-key/${encodeURIComponent(completeData.username)}`,
+                                    { headers: { 'Authorization': `Bearer ${completeData.session_token}` } }
+                                );
+                                const ekData = ekResp.ok ? await ekResp.json() : null;
+                                if (ekData && !ekData.encrypted_private_key) {
+                                    const wrappingKey = await deriveWrappingKey(prfResult);
+                                    const fullPrivJwk = await loadPrivateKeyJwk(completeData.username);
+                                    encKeyBody.encrypted_private_key = await wrapPrivateKey(wrappingKey, fullPrivJwk);
+                                    console.log('[E2E] Uploaded PRF-wrapped private key backup');
+                                }
+                            } catch (prfErr) {
+                                console.warn('[E2E] PRF backup upload failed:', prfErr);
+                            }
+                        }
+
+                        await fetch(`${API_URL}/auth/encryption-key`, {
+                            method: 'POST',
+                            headers: authHeaders,
+                            body: JSON.stringify(encKeyBody),
+                        });
+                    }
                 } else {
-                    // Derive public key from stored private key
-                    publicKeyJwk = await exportStoredPublicKey(completeData.username);
-                }
-                // Always upload to ensure server has the public key
-                if (publicKeyJwk) {
-                    await fetch(`${API_URL}/auth/encryption-key`, {
-                        method: 'POST',
-                        headers: {
-                            'Content-Type': 'application/json',
-                            'Authorization': `Bearer ${completeData.session_token}`,
-                        },
-                        body: JSON.stringify({ public_key: JSON.stringify(publicKeyJwk) }),
-                    });
+                    // No local private key — check server state
+                    const ekResp = await fetch(
+                        `${API_URL}/auth/encryption-key/${encodeURIComponent(completeData.username)}`,
+                        { headers: { 'Authorization': `Bearer ${completeData.session_token}` } }
+                    );
+
+                    if (ekResp.ok && prfResult) {
+                        // Branch 2: No local key, PRF available, server has key data
+                        const ekData = await ekResp.json();
+                        if (ekData.encrypted_private_key) {
+                            // Recover private key from PRF-wrapped blob
+                            const wrappingKey = await deriveWrappingKey(prfResult);
+                            const privateKeyJwk = await unwrapPrivateKey(wrappingKey, ekData.encrypted_private_key);
+                            // Import and store locally
+                            const importedKey = await crypto.subtle.importKey(
+                                'jwk', privateKeyJwk,
+                                { name: 'RSA-OAEP', hash: 'SHA-256' },
+                                true, ['decrypt'],
+                            );
+                            await storePrivateKey(completeData.username, importedKey);
+                            // Re-upload public key to ensure consistency
+                            const publicKeyJwk = {
+                                kty: privateKeyJwk.kty, n: privateKeyJwk.n, e: privateKeyJwk.e,
+                                alg: privateKeyJwk.alg, ext: true, key_ops: ['encrypt'],
+                            };
+                            await fetch(`${API_URL}/auth/encryption-key`, {
+                                method: 'POST',
+                                headers: authHeaders,
+                                body: JSON.stringify({ public_key: JSON.stringify(publicKeyJwk) }),
+                            });
+                            console.log('[E2E] Private key recovered from server via PRF');
+                        } else {
+                            // Server has public key but no wrapped private key, and no local key
+                            console.warn('[E2E] Private key lost. Server has no PRF backup. Encrypted messages from previous sessions cannot be decrypted.');
+                        }
+                    } else if (ekResp.status === 404) {
+                        // Branch 3: No local key, server has nothing — generate fresh pair
+                        const keyPair = await generateEncryptionKeyPair();
+                        const publicKeyJwk = await exportPublicKey(keyPair);
+                        await storePrivateKey(completeData.username, keyPair.privateKey);
+
+                        const encKeyBody = { public_key: JSON.stringify(publicKeyJwk) };
+                        if (prfResult) {
+                            try {
+                                const wrappingKey = await deriveWrappingKey(prfResult);
+                                const privJwk = await crypto.subtle.exportKey('jwk', keyPair.privateKey);
+                                encKeyBody.encrypted_private_key = await wrapPrivateKey(wrappingKey, privJwk);
+                                console.log('[E2E] Fresh key pair generated with PRF backup');
+                            } catch (prfErr) {
+                                console.warn('[E2E] PRF wrapping failed:', prfErr);
+                            }
+                        }
+
+                        await fetch(`${API_URL}/auth/encryption-key`, {
+                            method: 'POST',
+                            headers: authHeaders,
+                            body: JSON.stringify(encKeyBody),
+                        });
+                    } else if (ekResp.ok) {
+                        // Branch 4: No local key, server has key, no PRF — can't recover
+                        console.warn('[E2E] Private key lost from this device. No PRF available for recovery.');
+                    }
                 }
             } catch (keyError) {
                 console.error('Failed to load/generate encryption keys:', keyError);

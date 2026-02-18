@@ -12,7 +12,7 @@ import { arrayBufferToBase64, base64ToArrayBuffer } from './utils.js';
 // IndexedDB helpers
 // ---------------------------------------------------------------------------
 
-const DB_NAME = 'mini-chat-keys';
+const DB_NAME = 'skrib-keys';
 const DB_VERSION = 1;
 const STORE_NAME = 'keys';
 
@@ -103,6 +103,11 @@ export async function loadPrivateKey(username) {
         false,
         ['decrypt'],
     );
+}
+
+/** Load the raw private key JWK from IndexedDB (without importing into a CryptoKey). */
+export async function loadPrivateKeyJwk(username) {
+    return await idbGet(`private:${username}`);
 }
 
 /** Derive the public key JWK from the stored private key (for re-uploading). */
@@ -218,4 +223,44 @@ export function getMessageEpoch(ciphertextJson) {
 /** Check if a message string is an encrypted payload. */
 export function isEncryptedMessage(messageStr) {
     return messageStr && messageStr.startsWith('{"v":1');
+}
+
+// ---------------------------------------------------------------------------
+// PRF (Pseudo-Random Function) key wrapping for cross-browser key portability
+// ---------------------------------------------------------------------------
+
+/** Fixed salt for WebAuthn PRF evaluation. */
+export const PRF_SALT = new TextEncoder().encode('skrib-e2e-key-wrapping');
+
+/** Derive an AES-256-GCM wrapping key from raw PRF output via HKDF. */
+export async function deriveWrappingKey(prfOutput) {
+    const keyMaterial = await crypto.subtle.importKey(
+        'raw', prfOutput, 'HKDF', false, ['deriveKey'],
+    );
+    return await crypto.subtle.deriveKey(
+        { name: 'HKDF', salt: PRF_SALT, info: new TextEncoder().encode('skrib-wrap'), hash: 'SHA-256' },
+        keyMaterial,
+        { name: 'AES-GCM', length: 256 },
+        false,
+        ['wrapKey', 'unwrapKey', 'encrypt', 'decrypt'],
+    );
+}
+
+/** Wrap (encrypt) a private key JWK with an AES-GCM wrapping key. Returns a JSON blob string. */
+export async function wrapPrivateKey(wrappingKey, privateKeyJwk) {
+    const iv = crypto.getRandomValues(new Uint8Array(12));
+    const encoded = new TextEncoder().encode(JSON.stringify(privateKeyJwk));
+    const ct = await crypto.subtle.encrypt({ name: 'AES-GCM', iv }, wrappingKey, encoded);
+    return JSON.stringify({ iv: arrayBufferToBase64(iv.buffer), ct: arrayBufferToBase64(ct) });
+}
+
+/** Unwrap (decrypt) a private key blob back to a JWK object. */
+export async function unwrapPrivateKey(wrappingKey, blob) {
+    const { iv, ct } = JSON.parse(blob);
+    const decrypted = await crypto.subtle.decrypt(
+        { name: 'AES-GCM', iv: new Uint8Array(base64ToArrayBuffer(iv)) },
+        wrappingKey,
+        base64ToArrayBuffer(ct),
+    );
+    return JSON.parse(new TextDecoder().decode(decrypted));
 }

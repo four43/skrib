@@ -1,5 +1,5 @@
 import { API_URL, showStatus, arrayBufferToBase64, base64ToArrayBuffer, friendlyError } from './utils.js';
-import { generateEncryptionKeyPair, exportPublicKey, storePrivateKey } from './crypto.js';
+import { generateEncryptionKeyPair, exportPublicKey, storePrivateKey, PRF_SALT, deriveWrappingKey, wrapPrivateKey } from './crypto.js';
 import { loadTheme } from './theme-manager.js';
 
 // Get invite token from URL if present
@@ -112,9 +112,13 @@ async function register() {
                     userVerification: "preferred"
                 },
                 timeout: 60000,
-                attestation: "none"
+                attestation: "none",
+                extensions: { prf: {} }
             }
         });
+
+        const prfSupported = credential.getClientExtensionResults()?.prf?.enabled === true;
+        console.log('[E2E] PRF supported by authenticator:', prfSupported);
 
         const completeBody = {
             username: username,
@@ -151,14 +155,20 @@ async function register() {
                 const loginBegin = await fetch(`${API_URL}/auth/login/begin`);
                 const loginBeginData = await loginBegin.json();
                 const loginChallenge = base64ToArrayBuffer(loginBeginData.challenge);
-                const loginAssertion = await navigator.credentials.get({
+                const loginGetOptions = {
                     publicKey: {
                         challenge: loginChallenge,
                         rpId: loginBeginData.rpId,
                         timeout: 60000,
-                        userVerification: "preferred"
+                        userVerification: "preferred",
                     }
-                });
+                };
+                if (prfSupported) {
+                    loginGetOptions.publicKey.extensions = {
+                        prf: { eval: { first: PRF_SALT } },
+                    };
+                }
+                const loginAssertion = await navigator.credentials.get(loginGetOptions);
                 const loginResp = await fetch(`${API_URL}/auth/login/complete`, {
                     method: 'POST',
                     headers: { 'Content-Type': 'application/json' },
@@ -170,13 +180,30 @@ async function register() {
                 const loginData = await loginResp.json();
 
                 if (loginData.session_token) {
+                    const encKeyBody = { public_key: JSON.stringify(publicKeyJwk) };
+
+                    // If PRF available, wrap the private key for cross-browser recovery
+                    if (prfSupported) {
+                        const prfResult = loginAssertion.getClientExtensionResults()?.prf?.results?.first;
+                        if (prfResult) {
+                            try {
+                                const wrappingKey = await deriveWrappingKey(prfResult);
+                                const privateKeyJwk = await crypto.subtle.exportKey('jwk', keyPair.privateKey);
+                                encKeyBody.encrypted_private_key = await wrapPrivateKey(wrappingKey, privateKeyJwk);
+                                console.log('[E2E] Private key wrapped with PRF for cross-browser recovery');
+                            } catch (prfErr) {
+                                console.warn('[E2E] PRF wrapping failed, private key stays local-only:', prfErr);
+                            }
+                        }
+                    }
+
                     await fetch(`${API_URL}/auth/encryption-key`, {
                         method: 'POST',
                         headers: {
                             'Content-Type': 'application/json',
                             'Authorization': `Bearer ${loginData.session_token}`,
                         },
-                        body: JSON.stringify({ public_key: JSON.stringify(publicKeyJwk) }),
+                        body: JSON.stringify(encKeyBody),
                     });
 
                     // Store session so login page redirects straight to chat

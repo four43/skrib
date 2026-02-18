@@ -58,6 +58,9 @@ export default defineConfig({
     port: 5173,
     host: '0.0.0.0',
     allowedHosts: ['.pinggy.link'],
+    headers: {
+      'Cache-Control': 'no-store',
+    },
     proxy: {
       '/api': {
         target: process.env.VITE_API_TARGET || 'http://host.docker.internal:8000',

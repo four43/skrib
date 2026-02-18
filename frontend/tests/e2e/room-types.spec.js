@@ -11,7 +11,8 @@ test.describe('Chat Room Type', () => {
     await page.locator('#add-channel-btn').click();
     await expect(page.locator('#create-room-modal')).toBeVisible();
 
-    // Select "chat" room type
+    // Wait for room type plugins to load, then select "chat"
+    await page.locator('input[name="create-room-type"][value="chat"]').waitFor({ timeout: 10000 });
     await page.locator('input[name="create-room-type"][value="chat"]').check();
 
     // Enter room name
@@ -43,7 +44,8 @@ test.describe('Todo Room Type', () => {
     await page.locator('#add-channel-btn').click();
     await expect(page.locator('#create-room-modal')).toBeVisible();
 
-    // Select "todo" room type
+    // Wait for room type plugins to load, then select "todo"
+    await page.locator('input[name="create-room-type"][value="todo"]').waitFor({ timeout: 10000 });
     await page.locator('input[name="create-room-type"][value="todo"]').check();
 
     // Enter room name

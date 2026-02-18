@@ -7,6 +7,21 @@ from typing import Optional, Tuple
 
 from ..database import get_db, get_setting
 
+# Matplotlib "tab10" color cycle — 10 perceptually distinct, medium-bright colors
+# designed for good mutual contrast.  We assign them round-robin by total user count.
+USER_COLOR_PALETTE = [
+    '#1f77b4',  # blue
+    '#ff7f0e',  # orange
+    '#2ca02c',  # green
+    '#d62728',  # red
+    '#9467bd',  # purple
+    '#17becf',  # cyan
+    '#e377c2',  # pink
+    '#bcbd22',  # yellow-green
+    '#8c564b',  # brown
+    '#f7b6d2',  # light pink
+]
+
 # Username rules (Twitter/X-style)
 USERNAME_RE = re.compile(r'^[a-zA-Z0-9_]{4,15}$')
 RESERVED_WORDS = ['admin', 'skrib', 'system']
@@ -127,21 +142,26 @@ def create_pending_user(username: str, credential_id: str, public_key: str,
         cursor = conn.execute("SELECT COUNT(*) as count FROM users WHERE status = 'active'")
         user_count = cursor.fetchone()['count']
 
+        # Pick a color from the palette based on total user count (round-robin)
+        cursor = conn.execute("SELECT COUNT(*) as count FROM users")
+        total_users = cursor.fetchone()['count']
+        color = USER_COLOR_PALETTE[total_users % len(USER_COLOR_PALETTE)]
+
         if user_count == 0:
             # First user - auto-approve as admin
             conn.execute('''
-                INSERT INTO users (username, credential_id, public_key, role, status, created_at, approved_at, approved_by)
-                VALUES (?, ?, ?, 'admin', 'active', ?, ?, 'system')
-            ''', (username, credential_id, public_key, now, now))
+                INSERT INTO users (username, credential_id, public_key, role, status, color, created_at, approved_at, approved_by)
+                VALUES (?, ?, ?, 'admin', 'active', ?, ?, ?, 'system')
+            ''', (username, credential_id, public_key, color, now, now))
             conn.commit()
             return (approval_code, True)
 
         if mode == 'open':
             # Open mode - auto-approve immediately
             conn.execute('''
-                INSERT INTO users (username, credential_id, public_key, role, status, created_at, approved_at, approved_by)
-                VALUES (?, ?, ?, 'user', 'active', ?, ?, 'OPEN_STATE')
-            ''', (username, credential_id, public_key, now, now))
+                INSERT INTO users (username, credential_id, public_key, role, status, color, created_at, approved_at, approved_by)
+                VALUES (?, ?, ?, 'user', 'active', ?, ?, ?, 'OPEN_STATE')
+            ''', (username, credential_id, public_key, color, now, now))
             conn.commit()
             return (approval_code, True)
 
@@ -149,17 +169,17 @@ def create_pending_user(username: str, credential_id: str, public_key: str,
             # Invite-only mode with valid token - auto-approve
             consume_invite_token(invite_token, username)
             conn.execute('''
-                INSERT INTO users (username, credential_id, public_key, role, status, created_at, approved_at, approved_by)
-                VALUES (?, ?, ?, 'user', 'active', ?, ?, 'INVITE')
-            ''', (username, credential_id, public_key, now, now))
+                INSERT INTO users (username, credential_id, public_key, role, status, color, created_at, approved_at, approved_by)
+                VALUES (?, ?, ?, 'user', 'active', ?, ?, ?, 'INVITE')
+            ''', (username, credential_id, public_key, color, now, now))
             conn.commit()
             return (approval_code, True)
 
         # approval_required mode - require approval
         conn.execute('''
-            INSERT INTO users (username, credential_id, public_key, status, approval_code, created_at)
-            VALUES (?, ?, ?, 'pending', ?, ?)
-        ''', (username, credential_id, public_key, approval_code, now))
+            INSERT INTO users (username, credential_id, public_key, status, color, approval_code, created_at)
+            VALUES (?, ?, ?, 'pending', ?, ?, ?)
+        ''', (username, credential_id, public_key, color, approval_code, now))
         conn.commit()
         return (approval_code, False)
 

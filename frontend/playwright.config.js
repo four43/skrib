@@ -1,6 +1,6 @@
 import { defineConfig, devices } from '@playwright/test';
 
-const isE2E = !!process.env.MINICHAT_TEST_DATA_DIR;
+const isE2E = !!process.env.SKRIB_TEST_DATA_DIR;
 
 const e2eBackendPort = 8765;
 const e2eFrontendPort = 5174;
@@ -35,7 +35,7 @@ export default defineConfig({
   webServer: isE2E
     ? [
         {
-          command: `MINICHAT_DATA_DIR=${process.env.MINICHAT_TEST_DATA_DIR} MINICHAT_REGISTRATION_MODE=open .venv/bin/uvicorn skrib.main:app --host 127.0.0.1 --port ${e2eBackendPort}`,
+          command: `SKRIB_DATA_DIR=${process.env.SKRIB_TEST_DATA_DIR} SKRIB_REGISTRATION_MODE=open .venv/bin/uvicorn skrib.main:app --host 127.0.0.1 --port ${e2eBackendPort}`,
           cwd: '../backend',
           url: `http://127.0.0.1:${e2eBackendPort}/api/server`,
           reuseExistingServer: false,

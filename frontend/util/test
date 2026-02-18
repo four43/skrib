@@ -7,8 +7,8 @@ npx playwright test --project=dom
 
 echo ""
 echo "=== E2E tests ==="
-TEMP_DIR=$(mktemp -d /tmp/minichat-test-XXXXXX)
+TEMP_DIR=$(mktemp -d /tmp/skrib-test-XXXXXX)
 trap 'echo "[e2e] Cleaning up $TEMP_DIR"; rm -rf "$TEMP_DIR"' EXIT
 
 echo "[e2e] Created temp data dir: $TEMP_DIR"
-MINICHAT_TEST_DATA_DIR="$TEMP_DIR" npx playwright test --project=e2e
+SKRIB_TEST_DATA_DIR="$TEMP_DIR" npx playwright test --project=e2e

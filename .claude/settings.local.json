@@ -23,7 +23,8 @@
       "Bash(find:*)",
       "Bash(npx playwright test:*)",
       "mcp__playwright__browser_evaluate",
-      "mcp__playwright__browser_hover"
+      "mcp__playwright__browser_hover",
+      "Bash(./util/test:*)"
     ]
   }
 }

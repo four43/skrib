@@ -168,6 +168,12 @@ async def add_member(
 
     await bus.notify_user(request.username, {"type": "room:update"})
 
+    # Notify room subscribers that membership changed
+    await bus.broadcast_to_room(room_id, {
+        "type": "room:members_updated",
+        "room_id": room_id,
+    })
+
     return {"status": "ok", "room_id": room_id, "username": request.username}
 
 
@@ -195,6 +201,12 @@ async def remove_member(
         raise HTTPException(status_code=404, detail="Room not found")
 
     await bus.notify_user(target_username, {"type": "room:update"})
+
+    # Notify room subscribers that membership changed
+    await bus.broadcast_to_room(room_id, {
+        "type": "room:members_updated",
+        "room_id": room_id,
+    })
 
     return {"status": "ok", "room_id": room_id, "username": target_username}
 
@@ -226,6 +238,12 @@ async def update_member(
         result = set_room_role(room_id, target_username, updates.room_role)
         if result['status'] != 'ok':
             raise HTTPException(status_code=400, detail="Failed to update role")
+
+        # Notify room subscribers that membership changed
+        await bus.broadcast_to_room(room_id, {
+            "type": "room:members_updated",
+            "room_id": room_id,
+        })
 
     return {"status": "ok"}
 

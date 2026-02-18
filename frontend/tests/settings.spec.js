@@ -33,9 +33,12 @@ test.describe('Settings Page', () => {
   test.describe('Interactions', () => {
     test('color pickers should be functional', async ({ page }) => {
       await page.goto('/settings.html');
+      // Wait for settings JS to finish init (populates username after async API calls)
+      await expect(page.locator('#current-user')).not.toHaveText('');
 
-      // Navigate to appearance section
+      // Navigate to appearance section and wait for it to become active
       await page.locator('.settings-nav-item[data-section="appearance"]').click();
+      await expect(page.locator('#section-appearance')).toHaveClass(/active/);
 
       const userColor = page.locator('#user-color');
       const themeColor = page.locator('#user-theme-color');
@@ -58,6 +61,7 @@ test.describe('Settings Page', () => {
 
     test('section nav should switch active section', async ({ page }) => {
       await page.goto('/settings.html');
+      await expect(page.locator('#current-user')).not.toHaveText('');
 
       // Account section is active by default
       await expect(page.locator('#section-account')).toHaveClass(/active/);
@@ -72,6 +76,7 @@ test.describe('Settings Page', () => {
   test.describe('CSS Classes', () => {
     test('should have preference-input-group elements', async ({ page }) => {
       await page.goto('/settings.html');
+      await expect(page.locator('#current-user')).not.toHaveText('');
 
       // nickname group is in active account section
       await expect(page.locator('#section-account .preference-input-group')).toHaveCount(1);

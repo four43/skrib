@@ -68,6 +68,12 @@ def init_db():
         except Exception:
             pass
 
+        # Add encrypted_private_key column for PRF-wrapped E2E key backup
+        try:
+            conn.execute('ALTER TABLE users ADD COLUMN encrypted_private_key TEXT')
+        except Exception:
+            pass
+
         # Challenges table for WebAuthn
         conn.execute('''
             CREATE TABLE IF NOT EXISTS challenges (

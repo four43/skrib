@@ -63,8 +63,10 @@ class SessionResponse(BaseModel):
 
 class StoreEncryptionKeyRequest(BaseModel):
     public_key: str  # JWK JSON string
+    encrypted_private_key: Optional[str] = None  # PRF-wrapped private key blob
 
 
 class EncryptionKeyResponse(BaseModel):
     username: str
     public_key: str
+    encrypted_private_key: Optional[str] = None

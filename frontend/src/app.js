@@ -1068,6 +1068,15 @@ function handleRoomMessage(action, data) {
             loadRooms();
             break;
 
+        case 'members_updated':
+            if (data.room_id === currentRoom) {
+                const panel = document.getElementById('members-panel');
+                if (panel && panel.classList.contains('open')) {
+                    openMembersPanel();
+                }
+            }
+            break;
+
         case 'topic':
             if (data.room_id === currentRoom) {
                 if (roomMeta[currentRoom]) {
