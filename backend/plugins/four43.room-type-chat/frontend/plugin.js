@@ -76,6 +76,9 @@ const RoomTypeChatPlugin = (function() {
         input.id = 'message-input';
         input.className = 'message-input';
         input.placeholder = 'Type a message...';
+        input.setAttribute('enterkeyhint', 'send');
+        input.setAttribute('autocapitalize', 'sentences');
+        input.setAttribute('autocorrect', 'off');
 
         const button = document.createElement('button');
         button.id = 'send-button';

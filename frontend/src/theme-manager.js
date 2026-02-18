@@ -15,7 +15,7 @@ const OVERRIDE_STYLE_ID = 'theme-overrides';
  */
 export async function fetchAvailableThemes() {
     try {
-        const resp = await fetch(`${API_URL}/themes`);
+        const resp = await fetch(`${API_URL}/themes/`);
         const data = await resp.json();
         // Backend returns List[ThemeInfo] directly (array of theme manifests)
         return Array.isArray(data) ? data : (data.themes || []);

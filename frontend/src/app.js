@@ -795,6 +795,14 @@ async function initializeChatView() {
         sidebar.classList.add('show');
         overlay.classList.add('show');
     }
+
+    // Handle orientation changes and window resizes
+    window.addEventListener('resize', () => {
+        if (window.innerWidth > 768) {
+            // Moved to desktop: dismiss mobile sidebar overlay
+            hideSidebar();
+        }
+    });
 }
 
 function logout() {
