@@ -35,7 +35,7 @@ export default defineConfig({
   webServer: isE2E
     ? [
         {
-          command: `MINICHAT_DATA_DIR=${process.env.MINICHAT_TEST_DATA_DIR} MINICHAT_REGISTRATION_MODE=open .venv/bin/uvicorn mini_chat.main:app --host 127.0.0.1 --port ${e2eBackendPort}`,
+          command: `MINICHAT_DATA_DIR=${process.env.MINICHAT_TEST_DATA_DIR} MINICHAT_REGISTRATION_MODE=open .venv/bin/uvicorn skrib.main:app --host 127.0.0.1 --port ${e2eBackendPort}`,
           cwd: '../backend',
           url: `http://127.0.0.1:${e2eBackendPort}/api/server`,
           reuseExistingServer: false,

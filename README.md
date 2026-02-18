@@ -29,7 +29,7 @@ A secure collaboration application built with FastAPI backend and Vite frontend,
 ```
 /workspace
 ├── backend/              # FastAPI backend
-│   ├── mini_chat/       # Python package
+│   ├── skrib/       # Python package
 │   │   ├── chat_server_webauthn.py
 │   │   └── admin_cli.py
 │   ├── pyproject.toml
@@ -86,7 +86,7 @@ During development, the Vite dev server proxies API requests to the backend.
 ```bash
 cd backend
 pip install -e .
-python -m uvicorn mini_chat.chat_server_webauthn:app --reload --host 0.0.0.0 --port 8000
+python -m uvicorn skrib.chat_server_webauthn:app --reload --host 0.0.0.0 --port 8000
 ```
 
 #### Frontend
@@ -131,15 +131,15 @@ Since there are no users initially, you need to:
 
 **Option A: Register normally then promote via CLI**
 
-1. Enable registration: `docker-compose exec app python mini_chat/admin_cli.py toggle-reg`
+1. Enable registration: `docker-compose exec app python skrib/admin_cli.py toggle-reg`
 2. Register through web interface (get approval code)
-3. Approve yourself: `docker-compose exec app python mini_chat/admin_cli.py approve <CODE>`
-4. Make yourself admin: `docker-compose exec app python mini_chat/admin_cli.py set-admin <USERNAME>`
+3. Approve yourself: `docker-compose exec app python skrib/admin_cli.py approve <CODE>`
+4. Make yourself admin: `docker-compose exec app python skrib/admin_cli.py set-admin <USERNAME>`
 
 **Option B: Use CLI interactive mode**
 
 ```bash
-docker-compose exec app python mini_chat/admin_cli.py
+docker-compose exec app python skrib/admin_cli.py
 
 admin> toggle-reg           # Enable registration
 admin> list                 # Check pending users
@@ -241,18 +241,18 @@ The database uses:
 
 ```bash
 # Interactive mode
-docker-compose exec app python mini_chat/admin_cli.py
+docker-compose exec app python skrib/admin_cli.py
 
 # Or direct commands
-python mini_chat/admin_cli.py list                    # Show pending users
-python mini_chat/admin_cli.py approved                # Show all approved users
-python mini_chat/admin_cli.py approve <CODE>          # Approve by code
-python mini_chat/admin_cli.py reject <CODE>           # Reject registration
-python mini_chat/admin_cli.py revoke <USERNAME>       # Remove user access
-python mini_chat/admin_cli.py set-admin <USERNAME>    # Promote to admin
-python mini_chat/admin_cli.py remove-admin <USERNAME> # Demote from admin
-python mini_chat/admin_cli.py toggle-reg              # Toggle registration on/off
-python mini_chat/admin_cli.py status                  # Show system status
+python skrib/admin_cli.py list                    # Show pending users
+python skrib/admin_cli.py approved                # Show all approved users
+python skrib/admin_cli.py approve <CODE>          # Approve by code
+python skrib/admin_cli.py reject <CODE>           # Reject registration
+python skrib/admin_cli.py revoke <USERNAME>       # Remove user access
+python skrib/admin_cli.py set-admin <USERNAME>    # Promote to admin
+python skrib/admin_cli.py remove-admin <USERNAME> # Demote from admin
+python skrib/admin_cli.py toggle-reg              # Toggle registration on/off
+python skrib/admin_cli.py status                  # Show system status
 ```
 
 ## Workflow

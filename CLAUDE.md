@@ -17,7 +17,7 @@ Read these files on demand when working on specific areas:
 ## Project Structure
 
 ```
-backend/mini_chat/       # FastAPI app
+backend/skrib/       # FastAPI app
   auth/                  # WebAuthn registration/login
   rooms/                 # Chat rooms, DMs, IRC features (topic, roles)
   ws/                    # Unified WebSocket bus (single connection per client)
@@ -61,13 +61,13 @@ frontend/src/            # Vanilla JS (Vite build)
 - **Room-scoped** events (`room.message`, `room.topic`) go only to tabs that sent `room.join`
 - Client sends `room.join`/`room.leave` when switching rooms (no WS teardown)
 - Messages sent via `room.message` (from client) or HTTP `POST /rooms/{room_id}/messages`
-- Implementation in `backend/mini_chat/ws/` (manager.py, handlers.py, routes.py)
+- Implementation in `backend/skrib/ws/` (manager.py, handlers.py, routes.py)
 
 ## Running
 
 ```bash
 # Backend
-cd backend && pip install -e . && uvicorn mini_chat.main:app --reload --host 0.0.0.0 --port 8000
+cd backend && pip install -e . && uvicorn skrib.main:app --reload --host 0.0.0.0 --port 8000
 
 # Frontend
 cd frontend && npm install && npm run dev  # port 5173

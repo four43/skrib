@@ -43,7 +43,7 @@ The `entry` field is the path (relative to the plugin directory) to the frontend
 
 ### Backend: The Plugin Base Class
 
-Every plugin extends the abstract `Plugin` class from `mini_chat.plugins.base`:
+Every plugin extends the abstract `Plugin` class from `skrib.plugins.base`:
 
 ```python
 from skrib.plugins.base import Plugin
@@ -261,7 +261,7 @@ with self.get_plugin_db() as conn:
     conn.commit()
 ```
 
-**Core data access** -- Plugins should import core service functions (from `mini_chat.rooms.services`, etc.) rather than accessing the core database directly. This boundary enables eventual process isolation.
+**Core data access** -- Plugins should import core service functions (from `skrib.rooms.services`, etc.) rather than accessing the core database directly. This boundary enables eventual process isolation.
 
 ### Storage Patterns
 

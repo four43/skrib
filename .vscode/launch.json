@@ -55,7 +55,7 @@
       "name": "Admin CLI: Interactive",
       "type": "debugpy",
       "request": "launch",
-      "program": "${workspaceFolder}/backend/mini_chat/admin_cli.py",
+      "program": "${workspaceFolder}/backend/skrib/admin_cli.py",
       "console": "integratedTerminal",
       "cwd": "${workspaceFolder}/backend",
       "justMyCode": false
