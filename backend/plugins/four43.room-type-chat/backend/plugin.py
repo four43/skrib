@@ -2,6 +2,7 @@
 from typing import Optional
 
 from skrib.plugins.base import Plugin
+from skrib.database import get_db
 from skrib.rooms.services import (
     get_room_members,
     get_notify_level,
@@ -59,7 +60,9 @@ class RoomTypeChatPlugin(Plugin):
                 content TEXT NOT NULL DEFAULT '',
                 content_type TEXT NOT NULL DEFAULT 'text',
                 key_epoch INTEGER,
-                timestamp TEXT NOT NULL
+                timestamp TEXT NOT NULL,
+                edited_at TEXT,
+                deleted INTEGER NOT NULL DEFAULT 0
             )
         '''
 
@@ -71,6 +74,13 @@ class RoomTypeChatPlugin(Plugin):
                 ON messages(room_id, id)
             ''')
             conn.commit()
+
+    def get_frontend_assets(self) -> dict:
+        return {
+            "scripts": ["/api/plugins/four43.room-type-chat/file/frontend/plugin.js"],
+            "styles": ["/api/plugins/four43.room-type-chat/file/frontend/plugin.css"],
+            "config": {}
+        }
 
     def register_routes(self, app):
         return router
@@ -112,6 +122,15 @@ class RoomTypeChatPlugin(Plugin):
 
     # --- WebSocket handler ---
 
+    def _is_admin(self, username: str) -> bool:
+        """Check if a user has the admin role."""
+        with get_db() as conn:
+            cursor = conn.execute(
+                'SELECT role FROM users WHERE username = ?', (username,)
+            )
+            row = cursor.fetchone()
+            return row['role'] == 'admin' if row else False
+
     async def handle_room_action(self, bus, ws, username: str, msg: dict, action: str):
         """Handle room:message (and future chat actions) for chat rooms."""
         room_id = msg.get("room_id")
@@ -144,6 +163,47 @@ class RoomTypeChatPlugin(Plugin):
                         "sender": username,
                         "unread_count": unread_count,
                     })
+
+        elif action == "edit_message":
+            message_id = msg.get("message_id")
+            content = msg.get("content", "")
+            content_type = msg.get("content_type", "text")
+            key_epoch = msg.get("key_epoch")
+
+            room = services_module.ChatRoom(room_id)
+            try:
+                result = room.edit_message(message_id, username, content, content_type, key_epoch)
+                await bus.broadcast_to_room(room_id, {
+                    "type": "room:message_edited",
+                    "room_id": room_id,
+                    "data": result,
+                })
+            except (ValueError, PermissionError) as e:
+                await ws.send_json({
+                    "type": "room:error",
+                    "room_id": room_id,
+                    "message": str(e),
+                })
+
+        elif action == "delete_message":
+            message_id = msg.get("message_id")
+            is_admin = self._is_admin(username)
+
+            room = services_module.ChatRoom(room_id)
+            try:
+                result = room.delete_message(message_id, username, is_admin=is_admin)
+                await bus.broadcast_to_room(room_id, {
+                    "type": "room:message_deleted",
+                    "room_id": room_id,
+                    "data": result,
+                })
+            except (ValueError, PermissionError) as e:
+                await ws.send_json({
+                    "type": "room:error",
+                    "room_id": room_id,
+                    "message": str(e),
+                })
+
         else:
             await ws.send_json({
                 "type": "room:error",

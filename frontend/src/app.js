@@ -234,6 +234,7 @@ function loadPluginScript(scriptUrl, plugin) {
                     userColors: () => userColors,
                     userNicknames: () => userNicknames,
                     roomMeta: () => roomMeta,
+                    currentRole: () => currentRole,
                     API_URL,
                     loadRooms,
                     loadRoomKeys,

@@ -1,46 +1,13 @@
 /**
  * Message Reactions Plugin Styles
  *
- * Hover toolbar: emoji bar appears top-right on message hover (desktop)
- * or on tap (mobile). Reaction pills show below the message text.
+ * Emoji buttons in the hover bar (owned by room-type-chat) and
+ * reaction pills shown below the message text.
  *
  * Uses the app's CSS custom properties for consistent theming.
  */
 
-/* Message needs relative positioning for the hover bar overlay */
-.message {
-    position: relative;
-}
-
-/* ── Hover toolbar (appears on message hover / tap) ──────────────────── */
-
-.four43-reaction-hover-bar {
-    display: none;
-    position: absolute;
-    top: -12px;
-    right: 8px;
-    gap: 2px;
-    padding: 3px 4px;
-    background: var(--bg-surface-elevated-dark);
-    backdrop-filter: blur(var(--blur-lg));
-    -webkit-backdrop-filter: blur(var(--blur-lg));
-    border: 1px solid var(--border-white);
-    border-radius: var(--radius-lg);
-    box-shadow: 0 8px 20px -8px rgba(0, 0, 0, 0.12),
-        0 2px 8px rgba(var(--theme-rgb), 0.08);
-    z-index: 10;
-}
-
-/* Desktop: show on mouse hover (only when not already tap-activated) */
-.message:hover .four43-reaction-hover-bar:not(.active) {
-    display: flex;
-}
-
-/* Tap/click activated — needs .message prefix for 0-3-0 specificity
-   to match the :hover rule above and win by source order */
-.message .four43-reaction-hover-bar.active {
-    display: flex;
-}
+/* ── Emoji buttons in hover bar ──────────────────────────────────── */
 
 .four43-hover-emoji-btn {
     /* Reset global button styles */
@@ -136,4 +103,3 @@
 .four43-reaction-btn.reacted .count {
     color: var(--theme-color);
 }
-

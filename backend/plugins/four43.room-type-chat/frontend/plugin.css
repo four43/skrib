@@ -2,7 +2,339 @@
  * Room type chat plugin CSS
  */
 
-/* Message needs relative positioning for the hover bar overlay */
+/* ── Messages container ─────────────────────────────────────────── */
+
+.messages {
+    flex: 1;
+    overflow-y: auto;
+    padding: 20px 0;
+    overscroll-behavior: contain;
+}
+
+.message {
+    padding: 8px 20px;
+    position: relative;
+    display: grid;
+    grid-template-columns: auto 1fr;
+    column-gap: 10px;
+    align-items: start;
+}
+
 .message:hover {
-    background-color: --bg-surface;
+    background-color: var(--bg-surface);
+}
+
+.message > .user-avatar {
+    width: 36px;
+    height: 36px;
+    grid-row: 1 / 3;
+    margin-top: 2px;
+}
+
+.message-header {
+    font-size: 12px;
+    color: var(--text-muted);
+    margin-bottom: 4px;
+    display: flex;
+    align-items: baseline;
+    gap: 4px;
+}
+
+.username {
+    font-weight: 700;
+    color: var(--theme-color);
+}
+
+.username.admin {
+    color: var(--theme-color);
+}
+
+.timestamp {
+    margin-left: 8px;
+    font-weight: 400;
+}
+
+.message-text {
+    padding: 10px 14px;
+    border-radius: 10px;
+    display: inline-block;
+    color: var(--text-primary);
+    line-height: 1.5;
+}
+
+.room-link {
+    color: var(--theme-color);
+    text-decoration: none;
+    font-weight: 500;
+    border-bottom: 1px solid rgba(var(--theme-rgb), 0.3);
+    transition: border-color 0.2s ease;
+}
+
+.room-link:hover {
+    border-bottom-color: var(--theme-color);
+}
+
+/* System messages (slash command feedback) */
+.system-message {
+    text-align: center;
+    margin-bottom: 12px;
+    background: none;
+    border: none;
+    box-shadow: none;
+    padding: 4px 0;
+}
+
+.system-message-text {
+    background: rgba(var(--theme-rgb), 0.06);
+    border: 1px solid rgba(var(--theme-rgb), 0.12);
+    color: var(--text-tertiary);
+    font-size: 13px;
+    font-style: italic;
+    display: inline-block;
+    padding: 8px 16px;
+    border-radius: 10px;
+    text-align: left;
+    white-space: pre-wrap;
+}
+
+/* ── Hover bar (message actions) ───────────────────────────────── */
+
+.message-hover-bar {
+    display: none;
+    position: absolute;
+    top: -12px;
+    right: 8px;
+    gap: 2px;
+    padding: 3px 4px;
+    background: var(--bg-surface-elevated-dark);
+    backdrop-filter: blur(var(--blur-lg));
+    -webkit-backdrop-filter: blur(var(--blur-lg));
+    border: 1px solid var(--border-white);
+    border-radius: var(--radius-lg);
+    box-shadow: 0 8px 20px -8px rgba(0, 0, 0, 0.12),
+        0 2px 8px rgba(var(--theme-rgb), 0.08);
+    z-index: 10;
+    align-items: center;
+}
+
+/* Desktop: show on mouse hover (only when not already tap-activated) */
+.message:hover .message-hover-bar:not(.active) {
+    display: flex;
+}
+
+/* Tap/click activated */
+.message .message-hover-bar.active {
+    display: flex;
+}
+
+/* Don't show hover bar on deleted messages */
+.message-deleted .message-hover-bar {
+    display: none !important;
+}
+
+.message-hover-btn {
+    width: 28px;
+    height: 28px;
+    margin: 0;
+    padding: 2px 4px;
+    border: none;
+    background: transparent;
+    color: var(--text-secondary);
+    font-size: 16px;
+    font-weight: normal;
+    cursor: pointer;
+    border-radius: var(--radius-sm);
+    transition: background 0.1s ease, transform 0.1s ease;
+    line-height: 1;
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    box-shadow: none;
+}
+
+.message-hover-btn:hover {
+    background: rgba(var(--theme-rgb), 0.1);
+    transform: scale(1.2);
+    box-shadow: none;
+}
+
+/* ── More menu (dropdown from "..." button) ────────────────────── */
+
+.message-more-menu {
+    position: absolute;
+    top: 100%;
+    right: 0;
+    margin-top: 4px;
+    min-width: 150px;
+    background: var(--bg-surface-elevated-dark);
+    backdrop-filter: blur(var(--blur-lg));
+    -webkit-backdrop-filter: blur(var(--blur-lg));
+    border: 1px solid var(--border-white);
+    border-radius: var(--radius-md);
+    box-shadow: 0 8px 24px -4px rgba(0, 0, 0, 0.18),
+        0 2px 8px rgba(0, 0, 0, 0.08);
+    z-index: 20;
+    padding: 4px;
+}
+
+.message-more-menu-item {
+    display: block;
+    width: 100%;
+    margin: 0;
+    padding: 8px 12px;
+    border: none;
+    background: transparent;
+    color: var(--text-primary);
+    font-size: 13px;
+    font-weight: 400;
+    cursor: pointer;
+    border-radius: var(--radius-sm);
+    text-align: left;
+    box-shadow: none;
+    transition: background 0.1s ease;
+}
+
+.message-more-menu-item:hover {
+    background: rgba(var(--theme-rgb), 0.1);
+    box-shadow: none;
+    transform: none;
+}
+
+/* ── Edited indicator ──────────────────────────────────────────── */
+
+.edited-indicator {
+    font-size: 11px;
+    color: var(--text-muted);
+    font-weight: 400;
+    margin-left: 6px;
+    font-style: italic;
+}
+
+/* ── Deleted message ───────────────────────────────────────────── */
+
+.deleted-text {
+    color: var(--text-muted);
+    font-style: italic;
+    background: transparent;
+    border: 1px dashed var(--border-strong);
+    box-shadow: none;
+}
+
+/* ── Edit mode ─────────────────────────────────────────────────── */
+
+.message.editing .message-text {
+    padding: 0;
+    background: transparent;
+    border: none;
+    box-shadow: none;
+}
+
+.message-edit-input {
+    width: 100%;
+    padding: 10px 14px;
+    border: 2px solid var(--theme-color);
+    border-radius: 10px;
+    background: rgba(255, 255, 255, 0.95);
+    font-size: 14px;
+    color: var(--text-primary);
+    line-height: 1.5;
+    outline: none;
+    box-shadow: 0 0 0 3px rgba(var(--theme-rgb), 0.1);
+}
+
+/* ── Input area ─────────────────────────────────────────────────── */
+
+.input-area {
+    padding: 16px 20px;
+    padding-bottom: max(16px, env(safe-area-inset-bottom));
+    border-top: 1px solid rgba(var(--theme-rgb), 0.08);
+    display: flex;
+    gap: 10px;
+    background: rgba(255, 255, 255, 0.4);
+}
+
+.message-input {
+    flex: 1;
+    padding: 10px 14px;
+    border: 1px solid rgba(var(--theme-rgb), 0.15);
+    border-radius: 10px;
+    background: rgba(255, 255, 255, 0.7);
+    font-size: 14px;
+    color: var(--text-primary);
+    transition: border-color 0.2s ease, box-shadow 0.2s ease, background 0.2s ease;
+}
+
+.message-input:focus {
+    outline: none;
+    border-color: var(--theme-color);
+    box-shadow: 0 0 0 3px rgba(var(--theme-rgb), 0.1);
+    background: rgba(255, 255, 255, 0.95);
+}
+
+.send-button {
+    width: auto;
+    padding: 10px 24px;
+    margin: 0;
+    border-radius: 10px;
+    font-size: 14px;
+    font-weight: 600;
+}
+
+.empty-state {
+    text-align: center;
+    color: var(--text-muted);
+    padding: 60px 40px;
+    font-size: 15px;
+}
+
+/* ── Dark mode overrides ────────────────────────────────────────── */
+
+html[data-theme-dark] .message-text {
+    background: var(--bg-surface-elevated);
+    border-color: var(--border-white);
+}
+
+html[data-theme-dark] .input-area {
+    background: rgba(15, 23, 42, 0.6);
+}
+
+html[data-theme-dark] .message-input {
+    background: rgba(15, 23, 42, 0.5);
+    color: var(--text-primary);
+    border-color: rgba(var(--theme-rgb), 0.2);
+}
+
+html[data-theme-dark] .message-edit-input {
+    background: rgba(15, 23, 42, 0.8);
+    color: var(--text-primary);
+}
+
+html[data-theme-dark] .deleted-text {
+    background: transparent;
+}
+
+/* ── Mobile overrides ───────────────────────────────────────────── */
+
+@media (max-width: 768px) {
+    .messages {
+        padding: 15px 0;
+    }
+
+    .message {
+        padding: 0 10px;
+    }
+
+    .message-text {
+        max-width: 85%;
+        word-wrap: break-word;
+    }
+
+    .input-area {
+        padding: 10px;
+        padding-bottom: max(10px, env(safe-area-inset-bottom));
+    }
+
+    .message-input {
+        font-size: 16px;
+    }
 }

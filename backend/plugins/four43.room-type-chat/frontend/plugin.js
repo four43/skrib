@@ -2,7 +2,7 @@
  * Chat Room Type Plugin (four43.room-type-chat)
  *
  * Handles message rendering, history loading, sending, read receipts,
- * and notifications for chat room types.
+ * notifications, and message edit/delete for chat room types.
  */
 
 const RoomTypeChatPlugin = (function() {
@@ -28,6 +28,16 @@ const RoomTypeChatPlugin = (function() {
             onRoomLeft,
             onRoomAction,
             onSendMessage,
+        });
+
+        // Dismiss hover bars and menus when clicking outside messages
+        document.addEventListener('click', (e) => {
+            if (!e.target.closest('.message')) {
+                document.querySelectorAll('.message-hover-bar.active').forEach(bar => {
+                    bar.classList.remove('active');
+                });
+                dismissMoreMenu();
+            }
         });
 
         console.log('[RoomTypeChat] Initialized successfully');
@@ -123,6 +133,14 @@ const RoomTypeChatPlugin = (function() {
                 }
                 break;
 
+            case 'message_edited':
+                handleMessageEdited(data.data);
+                break;
+
+            case 'message_deleted':
+                handleMessageDeleted(data.data);
+                break;
+
             default:
                 console.warn('[RoomTypeChat] Unknown room action:', action);
         }
@@ -171,35 +189,23 @@ const RoomTypeChatPlugin = (function() {
     }
 
     // -----------------------------------------------------------------------
-    // Message display
+    // Encryption helpers
     // -----------------------------------------------------------------------
 
-    function linkifyRoomRefs(text) {
-        return text.replace(/#\/r\/(\S+)/g, (match, room) => {
-            return `<a href="#/r/${room}" class="room-link">#/r/${room}</a>`;
-        });
+    async function encryptContent(plaintext) {
+        const currentRoom = ctx.currentRoom();
+        const roomKeys = ctx.roomKeys();
+        const epochs = roomKeys[currentRoom];
+        if (epochs) {
+            const epochNums = Object.keys(epochs).map(Number);
+            const latestEpoch = Math.max(...epochNums);
+            const encrypted = await ctx.encryptMessage(epochs[latestEpoch], plaintext, latestEpoch);
+            return { content: encrypted, contentType: 'encrypted', keyEpoch: latestEpoch };
+        }
+        return { content: plaintext, contentType: 'text', keyEpoch: undefined };
     }
 
-    async function displayMessage(msg) {
-        const messagesDiv = document.getElementById('messages');
-
-        // Clear empty state if present
-        if (messagesDiv.querySelector('.empty-state')) {
-            messagesDiv.innerHTML = '';
-        }
-
-        const messageDiv = document.createElement('div');
-        messageDiv.className = 'message';
-        messageDiv.dataset.messageId = msg.id;
-
-        const date = new Date(msg.timestamp);
-        const timeStr = date.toLocaleTimeString();
-
-        // Get user's color preference, default to blue
-        const userColors = ctx.userColors();
-        const userColor = userColors[msg.username] || '#1976d2';
-
-        // Decrypt if encrypted
+    async function decryptContent(msg) {
         let plaintext = msg.content;
         const contentType = msg.content_type || 'text';
 
@@ -238,18 +244,77 @@ const RoomTypeChatPlugin = (function() {
             }
         }
 
-        const messageBody = linkifyRoomRefs(ctx.escapeHtml(plaintext));
-        const displayName = ctx.getDisplayName(msg.username);
+        return plaintext;
+    }
 
+    // -----------------------------------------------------------------------
+    // Message display
+    // -----------------------------------------------------------------------
+
+    function linkifyRoomRefs(text) {
+        return text.replace(/#\/r\/(\S+)/g, (match, room) => {
+            return `<a href="#/r/${room}" class="room-link">#/r/${room}</a>`;
+        });
+    }
+
+    async function displayMessage(msg) {
+        const messagesDiv = document.getElementById('messages');
+
+        // Clear empty state if present
+        if (messagesDiv.querySelector('.empty-state')) {
+            messagesDiv.innerHTML = '';
+        }
+
+        const messageDiv = document.createElement('div');
+        messageDiv.className = 'message';
+        messageDiv.dataset.messageId = msg.id;
+        messageDiv.dataset.username = msg.username;
+
+        const date = new Date(msg.timestamp);
+        const timeStr = date.toLocaleTimeString();
+
+        // Get user's color preference, default to blue
+        const userColors = ctx.userColors();
+        const userColor = userColors[msg.username] || '#1976d2';
+        const displayName = ctx.getDisplayName(msg.username);
         const avatarUrl = `${ctx.API_URL}/users/${encodeURIComponent(msg.username)}/avatar`;
-        messageDiv.innerHTML = `
-            <div class="message-header">
-                <img class="user-avatar" src="${avatarUrl}" width="20" height="20" alt="">
-                <span class="username" style="color: ${userColor};" title="${ctx.escapeHtml(msg.username)}">${ctx.escapeHtml(displayName)}</span>
-                <span class="timestamp">${timeStr}</span>
-            </div>
-            <div class="message-text">${messageBody}</div>
-        `;
+
+        const isDeleted = msg.deleted;
+
+        if (isDeleted) {
+            messageDiv.classList.add('message-deleted');
+            messageDiv.innerHTML = `
+                <img class="user-avatar" src="${avatarUrl}" alt="">
+                <div class="message-header">
+                    <span class="username" style="color: ${userColor};" title="${ctx.escapeHtml(msg.username)}">${ctx.escapeHtml(displayName)}</span>
+                    <span class="timestamp">${timeStr}</span>
+                </div>
+                <div class="message-text deleted-text">[deleted]</div>
+            `;
+        } else {
+            const plaintext = await decryptContent(msg);
+            const messageBody = linkifyRoomRefs(ctx.escapeHtml(plaintext));
+
+            // Store plaintext for editing
+            messageDiv.dataset.plaintext = plaintext;
+
+            const editedHtml = msg.edited_at
+                ? '<span class="edited-indicator">(edited)</span>'
+                : '';
+
+            messageDiv.innerHTML = `
+                <img class="user-avatar" src="${avatarUrl}" alt="">
+                <div class="message-header">
+                    <span class="username" style="color: ${userColor};" title="${ctx.escapeHtml(msg.username)}">${ctx.escapeHtml(displayName)}</span>
+                    <span class="timestamp">${timeStr}</span>
+                    ${editedHtml}
+                </div>
+                <div class="message-text">${messageBody}</div>
+            `;
+
+            // Add hover bar with action buttons
+            createHoverBar(messageDiv, msg);
+        }
 
         messagesDiv.appendChild(messageDiv);
 
@@ -260,6 +325,277 @@ const RoomTypeChatPlugin = (function() {
 
         // Scroll to bottom
         messagesDiv.scrollTop = messagesDiv.scrollHeight;
+    }
+
+    // -----------------------------------------------------------------------
+    // Hover bar
+    // -----------------------------------------------------------------------
+
+    function createHoverBar(messageDiv, msg) {
+        const hoverBar = document.createElement('div');
+        hoverBar.className = 'message-hover-bar';
+
+        const isAuthor = msg.username === ctx.currentUsername();
+        const isAdmin = ctx.currentRole() === 'admin';
+
+        // Edit button — author only
+        if (isAuthor) {
+            const editBtn = document.createElement('button');
+            editBtn.className = 'message-hover-btn';
+            editBtn.innerHTML = '&#9998;'; // ✎ pencil
+            editBtn.title = 'Edit';
+            editBtn.onclick = (e) => {
+                e.stopPropagation();
+                hoverBar.classList.remove('active');
+                startEditMode(messageDiv);
+            };
+            hoverBar.appendChild(editBtn);
+        }
+
+        // "..." more button — author or admin
+        if (isAuthor || isAdmin) {
+            const moreBtn = document.createElement('button');
+            moreBtn.className = 'message-hover-btn message-more-btn';
+            moreBtn.textContent = '\u22EF'; // ⋯ midline horizontal ellipsis
+            moreBtn.title = 'More';
+            moreBtn.onclick = (e) => {
+                e.stopPropagation();
+                toggleMoreMenu(moreBtn, messageDiv);
+            };
+            hoverBar.appendChild(moreBtn);
+        }
+
+        messageDiv.appendChild(hoverBar);
+
+        // Mobile: tap message to toggle hover bar
+        messageDiv.addEventListener('click', (e) => {
+            if (e.target.closest('.message-hover-bar') ||
+                e.target.closest('.message-more-menu') ||
+                e.target.closest('.four43-reaction-btn') ||
+                e.target.closest('.message-edit-input')) {
+                return;
+            }
+            // Dismiss other hover bars
+            document.querySelectorAll('.message-hover-bar.active').forEach(bar => {
+                if (bar !== hoverBar) bar.classList.remove('active');
+            });
+            dismissMoreMenu();
+            hoverBar.classList.add('active');
+        });
+    }
+
+    // -----------------------------------------------------------------------
+    // "..." more menu
+    // -----------------------------------------------------------------------
+
+    function toggleMoreMenu(moreBtn, messageDiv) {
+        // If a menu is already open, dismiss it
+        const existing = document.querySelector('.message-more-menu');
+        if (existing) {
+            existing.remove();
+            return;
+        }
+
+        const menu = document.createElement('div');
+        menu.className = 'message-more-menu';
+
+        const deleteItem = document.createElement('button');
+        deleteItem.className = 'message-more-menu-item';
+        deleteItem.textContent = 'Delete message';
+        deleteItem.onclick = (e) => {
+            e.stopPropagation();
+            menu.remove();
+            deleteMessage(messageDiv);
+        };
+
+        menu.appendChild(deleteItem);
+        moreBtn.parentElement.appendChild(menu);
+    }
+
+    function dismissMoreMenu() {
+        document.querySelectorAll('.message-more-menu').forEach(m => m.remove());
+    }
+
+    // -----------------------------------------------------------------------
+    // Edit mode
+    // -----------------------------------------------------------------------
+
+    function startEditMode(messageDiv) {
+        const textEl = messageDiv.querySelector('.message-text');
+        if (!textEl || messageDiv.classList.contains('editing')) return;
+
+        dismissMoreMenu();
+        messageDiv.classList.add('editing');
+
+        const originalPlaintext = messageDiv.dataset.plaintext || '';
+        const originalHtml = textEl.innerHTML;
+
+        const input = document.createElement('input');
+        input.type = 'text';
+        input.className = 'message-edit-input';
+        input.value = originalPlaintext;
+
+        // Replace message text with input
+        textEl.innerHTML = '';
+        textEl.appendChild(input);
+        input.focus();
+        input.setSelectionRange(input.value.length, input.value.length);
+
+        let saved = false;
+
+        function saveEdit() {
+            if (saved) return;
+            saved = true;
+
+            const newText = input.value.trim();
+            if (newText && newText !== originalPlaintext) {
+                // Send edit via WebSocket (encryption handled async)
+                sendEdit(messageDiv, newText);
+            } else {
+                // No change or empty — restore original
+                cancelEdit(messageDiv, textEl, originalHtml);
+            }
+        }
+
+        function cancel() {
+            if (saved) return;
+            saved = true;
+            cancelEdit(messageDiv, textEl, originalHtml);
+        }
+
+        input.addEventListener('blur', () => {
+            // Small delay to allow click events on other elements to fire first
+            setTimeout(() => { if (!saved) saveEdit(); }, 100);
+        });
+
+        input.addEventListener('keydown', (e) => {
+            if (e.key === 'Enter') {
+                e.preventDefault();
+                input.blur();
+            } else if (e.key === 'Escape') {
+                e.preventDefault();
+                cancel();
+            }
+        });
+    }
+
+    function cancelEdit(messageDiv, textEl, originalHtml) {
+        messageDiv.classList.remove('editing');
+        textEl.innerHTML = originalHtml;
+    }
+
+    async function sendEdit(messageDiv, newText) {
+        const messageId = parseInt(messageDiv.dataset.messageId);
+        const currentRoom = ctx.currentRoom();
+
+        try {
+            const { content, contentType, keyEpoch } = await encryptContent(newText);
+
+            const payload = {
+                type: 'room:edit_message',
+                room_id: currentRoom,
+                message_id: messageId,
+                content: content,
+                content_type: contentType,
+            };
+            if (keyEpoch !== undefined) {
+                payload.key_epoch = keyEpoch;
+            }
+
+            ctx.sendWs(payload);
+
+            // Optimistic update
+            messageDiv.classList.remove('editing');
+            messageDiv.dataset.plaintext = newText;
+            const textEl = messageDiv.querySelector('.message-text');
+            textEl.innerHTML = linkifyRoomRefs(ctx.escapeHtml(newText));
+
+            // Add/update edited indicator
+            let indicator = messageDiv.querySelector('.edited-indicator');
+            if (!indicator) {
+                indicator = document.createElement('span');
+                indicator.className = 'edited-indicator';
+                indicator.textContent = '(edited)';
+                messageDiv.querySelector('.message-header').appendChild(indicator);
+            }
+        } catch (error) {
+            console.error('[RoomTypeChat] Error sending edit:', error);
+            // Restore original on failure
+            const textEl = messageDiv.querySelector('.message-text');
+            const originalPlaintext = messageDiv.dataset.plaintext || newText;
+            textEl.innerHTML = linkifyRoomRefs(ctx.escapeHtml(originalPlaintext));
+            messageDiv.classList.remove('editing');
+        }
+    }
+
+    // -----------------------------------------------------------------------
+    // Delete
+    // -----------------------------------------------------------------------
+
+    function deleteMessage(messageDiv) {
+        const messageId = parseInt(messageDiv.dataset.messageId);
+        const currentRoom = ctx.currentRoom();
+
+        ctx.sendWs({
+            type: 'room:delete_message',
+            room_id: currentRoom,
+            message_id: messageId,
+        });
+    }
+
+    // -----------------------------------------------------------------------
+    // Real-time edit/delete handlers
+    // -----------------------------------------------------------------------
+
+    async function handleMessageEdited(data) {
+        const messageDiv = document.querySelector(`.message[data-message-id="${data.message_id}"]`);
+        if (!messageDiv) return;
+
+        // Decrypt new content
+        const plaintext = await decryptContent({
+            content: data.content,
+            content_type: data.content_type,
+            key_epoch: data.key_epoch,
+        });
+
+        messageDiv.dataset.plaintext = plaintext;
+        messageDiv.classList.remove('editing');
+
+        const textEl = messageDiv.querySelector('.message-text');
+        if (textEl) {
+            textEl.innerHTML = linkifyRoomRefs(ctx.escapeHtml(plaintext));
+        }
+
+        // Add/update edited indicator
+        let indicator = messageDiv.querySelector('.edited-indicator');
+        if (!indicator) {
+            indicator = document.createElement('span');
+            indicator.className = 'edited-indicator';
+            indicator.textContent = '(edited)';
+            messageDiv.querySelector('.message-header').appendChild(indicator);
+        }
+    }
+
+    function handleMessageDeleted(data) {
+        const messageDiv = document.querySelector(`.message[data-message-id="${data.message_id}"]`);
+        if (!messageDiv) return;
+
+        messageDiv.classList.add('message-deleted');
+        delete messageDiv.dataset.plaintext;
+
+        // Replace message text
+        const textEl = messageDiv.querySelector('.message-text');
+        if (textEl) {
+            textEl.className = 'message-text deleted-text';
+            textEl.textContent = '[deleted]';
+        }
+
+        // Remove hover bar and reactions
+        const hoverBar = messageDiv.querySelector('.message-hover-bar');
+        if (hoverBar) hoverBar.remove();
+
+        const reactions = messageDiv.querySelector('.four43-reactions-container');
+        if (reactions) reactions.remove();
     }
 
     // -----------------------------------------------------------------------

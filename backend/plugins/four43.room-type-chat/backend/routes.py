@@ -29,6 +29,8 @@ class MessageResponse(BaseModel):
     content_type: str = 'text'
     key_epoch: Optional[int] = None
     timestamp: str
+    edited_at: Optional[str] = None
+    deleted: bool = False
 
 
 class SendMessageRequest(BaseModel):
