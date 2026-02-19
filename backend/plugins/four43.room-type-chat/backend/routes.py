@@ -18,8 +18,7 @@ from skrib.ws import bus
 # Injected by plugin.py after module load
 ChatRoom = None
 
-router = APIRouter()
-
+router = APIRouter(tags=["Plugin: four43/room-type-chat"])
 
 # --- Schemas ---
 

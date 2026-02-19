@@ -14,7 +14,7 @@ from skrib.rooms.services import (
 # Injected by plugin.py after module load
 TodoList = None
 
-router = APIRouter()
+router = APIRouter(tags=["Plugin: four43/room-type-todo"])
 
 
 # --- Schemas ---

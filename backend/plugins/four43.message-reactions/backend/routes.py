@@ -6,7 +6,7 @@ from skrib.dependencies import require_auth
 
 from . import database as db
 
-router = APIRouter(prefix="/reactions", tags=["reactions"])
+router = APIRouter(prefix="/reactions", tags=["Plugin: four43/message-reactions"])
 
 
 class AddReactionRequest(BaseModel):

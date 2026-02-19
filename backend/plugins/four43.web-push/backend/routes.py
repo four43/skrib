@@ -4,7 +4,7 @@ from pydantic import BaseModel
 
 from skrib.dependencies import require_auth
 
-router = APIRouter()
+router = APIRouter(tags=["Plugin: four43/web-push"])
 
 # Injected by plugin.py
 services = None
