@@ -18,9 +18,7 @@
   ],
   "assets": {
     "css": [
-      "css/base.css",
-      "css/components.css",
-      "css/rooms.css"
+      "css/style.css"
     ],
     "images": {
       "logo": "assets/logo.png",

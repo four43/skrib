@@ -11,8 +11,8 @@
     <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
     <link rel="apple-touch-icon" href="/icons/icon-192.png">
     <script>
-        // Apply dark mode before first paint to prevent white flash
-        (function(){var s=localStorage.getItem('skrib-color-scheme')||'auto';var d=s==='dark'||(s==='auto'&&matchMedia('(prefers-color-scheme:dark)').matches);if(d)document.documentElement.toggleAttribute('data-theme-dark',true)})();
+        // Apply dark mode + theme before first paint to prevent flash
+        (function(){var s=localStorage.getItem('skrib-color-scheme')||'auto';var d=s==='dark'||(s==='auto'&&matchMedia('(prefers-color-scheme:dark)').matches);if(d)document.documentElement.toggleAttribute('data-theme-dark',true);var t=localStorage.getItem('skrib-theme');if(t){var l=document.createElement('link');l.id='theme-stylesheet';l.rel='stylesheet';l.href='/api/themes/'+t;document.head.appendChild(l)}})();
         if('serviceWorker' in navigator) navigator.serviceWorker.register('/sw.js');
     </script>
 </head>

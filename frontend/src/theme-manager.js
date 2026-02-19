@@ -8,6 +8,7 @@ import { API_URL } from './utils.js';
 
 const THEME_LINK_ID = 'theme-stylesheet';
 const OVERRIDE_STYLE_ID = 'theme-overrides';
+const THEME_CACHE_KEY = 'skrib-theme';
 
 /**
  * Fetch list of available themes from backend.
@@ -89,20 +90,29 @@ export async function saveUserThemePreferences(token, preferences) {
  * @param {string} themeName - Name of the theme to load
  */
 export function loadThemeCSS(themeName) {
-    // Remove existing theme link if present
+    const href = `${API_URL}/themes/${themeName}`;
     const existing = document.getElementById(THEME_LINK_ID);
+
+    // If the inline script already injected the right theme, keep it
+    if (existing && existing.getAttribute('href') === href) {
+        // Cache and bail — stylesheet already in place
+        try { localStorage.setItem(THEME_CACHE_KEY, themeName); } catch (_) {}
+        console.log(`[Theme] Already loaded: ${themeName}`);
+        return;
+    }
+
     if (existing) {
         existing.remove();
     }
 
-    // Create new link element for theme CSS
     const link = document.createElement('link');
     link.id = THEME_LINK_ID;
     link.rel = 'stylesheet';
-    link.href = `${API_URL}/themes/${themeName}`;
-
-    // Insert after existing stylesheets so theme overrides style.css
+    link.href = href;
     document.head.appendChild(link);
+
+    // Cache for instant theme load on next page visit (avoids FOUC)
+    try { localStorage.setItem(THEME_CACHE_KEY, themeName); } catch (_) {}
 
     console.log(`[Theme] Loaded theme: ${themeName}`);
 }
