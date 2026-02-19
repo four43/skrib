@@ -4,8 +4,7 @@ services:
     ports:
       - "8010:8000"
     volumes:
-      - skrib-data:/data
+      - ./skrib-data:/data
+    environment:
+      - SKRIB_RP_ID=chat.four43.com
     restart: unless-stopped
-
-volumes:
-  skrib-data:
