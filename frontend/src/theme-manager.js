@@ -51,7 +51,6 @@ export async function fetchUserThemePreferences(username, token) {
         console.error('[Theme] Failed to fetch preferences:', error);
         return {
             theme_name: 'four43.theme-default',
-            theme_color: null,
             nickname: null
         };
     }
@@ -122,7 +121,7 @@ export function loadThemeCSS(themeName) {
  * @param {object} overrides - User overrides
  */
 export function applyUserOverrides(overrides) {
-    const { font_family, font_size, primary_color, background_color } = overrides;
+    const { font_family, font_size, background_color } = overrides;
 
     // Remove existing override style if present
     let style = document.getElementById(OVERRIDE_STYLE_ID);
@@ -142,15 +141,6 @@ export function applyUserOverrides(overrides) {
     if (font_size) {
         // Parse font size (e.g., "14px", "1rem", etc.)
         cssRules.push(`    font-size: ${font_size};`);
-    }
-
-    if (primary_color) {
-        // Parse hex color to RGB for --theme-rgb
-        const rgb = hexToRgb(primary_color);
-        if (rgb) {
-            cssRules.push(`    --theme-color: ${primary_color};`);
-            cssRules.push(`    --theme-rgb: ${rgb.r}, ${rgb.g}, ${rgb.b};`);
-        }
     }
 
     if (background_color) {

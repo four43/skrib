@@ -66,7 +66,6 @@ export async function setupAuthMocks(page, { role = 'admin' } = {}) {
             contentType: 'application/json',
             body: JSON.stringify({
                 theme_name: null,
-                theme_color: null,
                 nickname: null,
                 color: '#1976d2',
             }),

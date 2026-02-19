@@ -720,7 +720,6 @@ async function checkSession() {
             }
 
             await loadUserColors();
-            await loadUserSettings();
             initializeChatView();
         } else {
             // Session invalid, clear and redirect
@@ -857,29 +856,6 @@ function getDisplayName(username) {
 // Expose for plugins
 window.getDisplayName = getDisplayName;
 
-// Note: Settings panel has been moved to settings.html page
-// This function is kept only for loading theme color preferences
-async function loadUserSettings() {
-    try {
-        const response = await fetch(`${API_URL}/users/${currentUsername}/preferences`, {
-            headers: {
-                'Authorization': `Bearer ${sessionToken}`
-            }
-        });
-        if (response.ok) {
-            const data = await response.json();
-            // Apply user's theme color override if set
-            if (data.theme_color) {
-                applyThemeColor(data.theme_color);
-            }
-        }
-    } catch (error) {
-        console.error('[HTTP] Error loading settings:', error);
-    }
-}
-
-// Note: User settings functions (updateUserColor, updateUserThemeColor, etc.)
-// have been moved to settings.js since settings panel is now a separate page
 
 async function loadRooms() {
     try {

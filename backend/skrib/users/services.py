@@ -10,14 +10,14 @@ def get_user_preferences(username: str) -> Optional[Dict]:
     """Get preferences for a user. Returns None if not found."""
     with get_db() as conn:
         cursor = conn.execute(
-            'SELECT username, color, theme_color, theme_name, color_scheme, nickname FROM users WHERE username = ? AND status = ?',
+            'SELECT username, color, theme_name, color_scheme, nickname FROM users WHERE username = ? AND status = ?',
             (username, 'active')
         )
         row = cursor.fetchone()
         return dict(row) if row else None
 
 
-def update_user_preferences(username: str, color: Optional[str] = None, theme_color: Optional[str] = None, theme_name: Optional[str] = None, color_scheme: Optional[str] = None, nickname: Optional[str] = None) -> bool:
+def update_user_preferences(username: str, color: Optional[str] = None, theme_name: Optional[str] = None, color_scheme: Optional[str] = None, nickname: Optional[str] = None) -> bool:
     """Update user preferences on the users table."""
     with get_db() as conn:
         updates = []
@@ -25,10 +25,6 @@ def update_user_preferences(username: str, color: Optional[str] = None, theme_co
         if color is not None:
             updates.append('color = ?')
             params.append(color)
-        if theme_color is not None:
-            # Empty string means "use server default"
-            updates.append('theme_color = ?')
-            params.append(theme_color if theme_color != '' else None)
         if theme_name is not None:
             # Empty string means "use server default"
             updates.append('theme_name = ?')

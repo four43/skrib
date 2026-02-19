@@ -93,16 +93,4 @@ export function lightenColor(hex, amount = 0.15) {
     return `#${r.toString(16).padStart(2, '0')}${g.toString(16).padStart(2, '0')}${b.toString(16).padStart(2, '0')}`;
 }
 
-/**
- * Apply a theme color to the page by setting CSS custom properties.
- * Sets --theme-color and --theme-rgb. Darker/lighter variants are
- * derived in CSS via filter: brightness().
- * @param {string} hex - e.g. "#6366f1"
- */
-export function applyThemeColor(hex) {
-    const rgb = hexToRgb(hex);
-    if (!rgb) return;
-    document.documentElement.style.setProperty('--theme-color', hex);
-    document.documentElement.style.setProperty('--theme-rgb', `${rgb.r}, ${rgb.g}, ${rgb.b}`);
-}
 

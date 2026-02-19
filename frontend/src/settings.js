@@ -1,5 +1,5 @@
-import { API_URL, applyThemeColor } from './utils.js';
-import { loadTheme, fetchAvailableThemes, loadThemeCSS, applyUserOverrides, applyColorScheme } from './theme-manager.js';
+import { API_URL } from './utils.js';
+import { loadTheme, fetchAvailableThemes, loadThemeCSS, applyColorScheme } from './theme-manager.js';
 import { createThemePreviewHTML } from './theme-preview.js';
 
 let sessionToken = null;
@@ -107,15 +107,6 @@ async function loadUserSettings() {
                     currentThemeName = 'four43.theme-default';
                 }
             }
-            // Apply user's theme color override if set
-            const themeInput = document.getElementById('user-theme-color');
-            if (themeInput) {
-                const defaultColor = getComputedStyle(document.documentElement).getPropertyValue('--theme-color').trim() || '#6366f1';
-                themeInput.value = data.theme_color || defaultColor;
-            }
-            if (data.theme_color) {
-                applyThemeColor(data.theme_color);
-            }
         }
     } catch (error) {
         console.error('[HTTP] Error loading settings:', error);
@@ -139,51 +130,6 @@ async function updateUserColor() {
     } catch (error) {
         console.error('[HTTP] Error updating color:', error);
         alert('Failed to update color preference');
-    }
-}
-
-async function updateUserThemeColor() {
-    const themeColor = document.getElementById('user-theme-color').value;
-    try {
-        const response = await fetch(`${API_URL}/users/${encodeURIComponent(currentUsername)}`, {
-            method: 'PATCH',
-            headers: {
-                'Authorization': `Bearer ${sessionToken}`,
-                'Content-Type': 'application/json'
-            },
-            body: JSON.stringify({ theme_color: themeColor })
-        });
-        if (response.ok) {
-            applyThemeColor(themeColor);
-        }
-    } catch (error) {
-        console.error('[HTTP] Error updating theme color:', error);
-    }
-}
-
-async function resetUserThemeColor() {
-    try {
-        const response = await fetch(`${API_URL}/users/${encodeURIComponent(currentUsername)}`, {
-            method: 'PATCH',
-            headers: {
-                'Authorization': `Bearer ${sessionToken}`,
-                'Content-Type': 'application/json'
-            },
-            body: JSON.stringify({ theme_color: '' })
-        });
-        if (response.ok) {
-            // Remove inline overrides so the theme CSS takes effect
-            document.documentElement.style.removeProperty('--theme-color');
-            document.documentElement.style.removeProperty('--theme-rgb');
-            // Read the computed value from the loaded theme CSS
-            const defaultColor = getComputedStyle(document.documentElement).getPropertyValue('--theme-color').trim() || '#6366f1';
-            const themeInput = document.getElementById('user-theme-color');
-            if (themeInput) {
-                themeInput.value = defaultColor;
-            }
-        }
-    } catch (error) {
-        console.error('[HTTP] Error resetting theme color:', error);
     }
 }
 
@@ -344,18 +290,6 @@ function setupEventListeners() {
     const userColorInput = document.getElementById('user-color');
     if (userColorInput) {
         userColorInput.addEventListener('change', updateUserColor);
-    }
-
-    // User theme color input
-    const userThemeColorInput = document.getElementById('user-theme-color');
-    if (userThemeColorInput) {
-        userThemeColorInput.addEventListener('change', updateUserThemeColor);
-    }
-
-    // Reset theme color button
-    const resetThemeColorBtn = document.getElementById('reset-theme-color-btn');
-    if (resetThemeColorBtn) {
-        resetThemeColorBtn.addEventListener('click', resetUserThemeColor);
     }
 
     // Clear nickname button

@@ -25,13 +25,11 @@ test.describe('Settings Page', () => {
       // Appearance section (non-active tab, attached but not visible)
       await expect(page.locator('#section-appearance')).toBeAttached();
       await expect(page.locator('#user-color')).toBeAttached();
-      await expect(page.locator('#user-theme-color')).toBeAttached();
-      await expect(page.locator('#reset-theme-color-btn')).toBeAttached();
     });
   });
 
   test.describe('Interactions', () => {
-    test('color pickers should be functional', async ({ page }) => {
+    test('color picker should be functional', async ({ page }) => {
       await page.goto('/settings.html');
       // Wait for settings JS to finish init (populates username after async API calls)
       await expect(page.locator('#current-user')).not.toHaveText('');
@@ -41,14 +39,10 @@ test.describe('Settings Page', () => {
       await expect(page.locator('#section-appearance')).toHaveClass(/active/);
 
       const userColor = page.locator('#user-color');
-      const themeColor = page.locator('#user-theme-color');
-
       await expect(userColor).toBeVisible();
-      await expect(themeColor).toBeVisible();
 
       // Should be able to set values
       await userColor.evaluate(el => el.value = '#ff0000');
-      await themeColor.evaluate(el => el.value = '#00ff00');
     });
 
     test('back to chat link should navigate', async ({ page }) => {
@@ -80,10 +74,6 @@ test.describe('Settings Page', () => {
 
       // nickname group is in active account section
       await expect(page.locator('#section-account .preference-input-group')).toHaveCount(1);
-
-      // Switch to appearance to check the theme color group
-      await page.locator('.settings-nav-item[data-section="appearance"]').click();
-      await expect(page.locator('#section-appearance .preference-input-group')).toHaveCount(1);
     });
 
     test('should have no inline styles in HTML', async ({ page }) => {

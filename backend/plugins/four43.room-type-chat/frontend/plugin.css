@@ -1,0 +1,8 @@
+/**
+ * Room type chat plugin CSS
+ */
+
+/* Message needs relative positioning for the hover bar overlay */
+.message:hover {
+    background-color: --bg-surface;
+}

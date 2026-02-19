@@ -49,7 +49,6 @@ def init_db():
                 encryption_public_key TEXT,
                 color TEXT NOT NULL DEFAULT '#1976d2',
                 nickname TEXT,
-                theme_color TEXT,
                 created_at TEXT NOT NULL,
                 approved_at TEXT,
                 approved_by TEXT

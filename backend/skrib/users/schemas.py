@@ -4,14 +4,12 @@ from typing import List, Optional, Literal
 
 class UserPreferences(BaseModel):
     color: str
-    theme_color: Optional[str] = None
     nickname: Optional[str] = None
 
 
 class GetPreferencesResponse(BaseModel):
     username: str
     color: str
-    theme_color: Optional[str] = None
     theme_name: Optional[str] = None
     color_scheme: Optional[str] = None
     nickname: Optional[str] = None
@@ -19,7 +17,6 @@ class GetPreferencesResponse(BaseModel):
 
 class UpdatePreferencesRequest(BaseModel):
     color: Optional[str] = None
-    theme_color: Optional[str] = None
     nickname: Optional[str] = None
 
 
@@ -66,7 +63,6 @@ class UserProfile(BaseModel):
     role: str
     status: str
     color: str
-    theme_color: Optional[str] = None
     theme_name: Optional[str] = None
     color_scheme: Optional[str] = None
     nickname: Optional[str] = None
@@ -75,7 +71,6 @@ class UserProfile(BaseModel):
 class UserUpdateRequest(BaseModel):
     """Request body for updating user properties via PATCH."""
     color: Optional[str] = None
-    theme_color: Optional[str] = None
     theme_name: Optional[str] = None
     color_scheme: Optional[str] = None
     nickname: Optional[str] = None

@@ -28,11 +28,6 @@
   },
   "customization": {
     "colors": {
-      "primary": {
-        "type": "color",
-        "default": "#6366f1",
-        "description": "Primary accent color"
-      },
       "background": {
         "type": "color",
         "default": "#1e1e2e",
