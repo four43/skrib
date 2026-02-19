@@ -132,7 +132,12 @@
                 <div class="form-group">
                     <label for="new-room-input">Channel name</label>
                     <input type="text" id="new-room-input" placeholder="e.g. general, my-channel"
-                           pattern="[a-z0-9]+(-[a-z0-9]+)*">
+                           pattern="[a-z0-9]+(-[a-z0-9]+)*"
+                           autocapitalize="none"
+                           autocomplete="username"
+                           autocorrect="off"
+                           spellcheck="false"
+                           autofocus>
                     <p class="form-hint">Lowercase letters, numbers, and hyphens only</p>
                 </div>
                 <button id="create-room-submit-btn">Create</button>
