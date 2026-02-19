@@ -1,0 +1,11 @@
+services:
+  app:
+    image: skrib:latest
+    ports:
+      - "8010:8000"
+    volumes:
+      - skrib-data:/data
+    restart: unless-stopped
+
+volumes:
+  skrib-data:
