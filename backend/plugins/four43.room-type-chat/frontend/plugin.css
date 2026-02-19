@@ -55,7 +55,6 @@
 }
 
 .message-text {
-    padding: 10px 14px;
     border-radius: 10px;
     display: inline-block;
     color: var(--text-primary);
@@ -288,11 +287,6 @@
 }
 
 /* ── Dark mode overrides ────────────────────────────────────────── */
-
-html[data-theme-dark] .message-text {
-    background: var(--bg-surface-elevated);
-    border-color: var(--border-white);
-}
 
 html[data-theme-dark] .input-area {
     background: rgba(15, 23, 42, 0.6);
