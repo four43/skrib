@@ -945,11 +945,13 @@ function connectWebSocket() {
     console.log('[WS] Connecting...');
     ws = new WebSocket(wsUrl);
 
-    ws.onopen = () => {
+    ws.onopen = async () => {
         console.log('[WS] Connected');
         reconnectAttempts = 0;
         // Re-join current room if we're reconnecting
         if (currentRoom) {
+            // Reload keys before rejoining to handle any new epochs created while disconnected
+            await loadRoomKeys(currentRoom);
             ws.send(JSON.stringify({ type: 'room:join', room_id: currentRoom }));
         }
     };
@@ -1190,7 +1192,7 @@ function getRoomFromHash() {
     return match ? decodeURIComponent(match[1]) : null;
 }
 
-function selectRoom(roomId) {
+async function selectRoom(roomId) {
     // Don't do anything if already in this room
     if (currentRoom === roomId) {
         // Just hide sidebar on mobile if clicking the same room
@@ -1243,7 +1245,10 @@ function selectRoom(roomId) {
         item.classList.toggle('active', item.dataset.roomId === roomId);
     });
 
-    // Join new room on unified WS
+    // Load encryption keys BEFORE joining so incoming WS messages can decrypt
+    await loadRoomKeys(roomId);
+
+    // Join new room on unified WS (after keys are ready)
     if (ws && ws.readyState === WebSocket.OPEN) {
         ws.send(JSON.stringify({ type: 'room:join', room_id: roomId }));
     }

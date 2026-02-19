@@ -55,7 +55,7 @@ const RoomTypeChatPlugin = (function() {
 
         createInputArea();
 
-        await ctx.loadRoomKeys(roomId);
+        // Keys are loaded by core (selectRoom) before room:join to prevent race conditions
         await loadMessages(roomId);
         await markRoomAsRead(roomId, lastMessageId);
         ctx.loadRooms();
@@ -159,16 +159,23 @@ const RoomTypeChatPlugin = (function() {
             let contentType = 'text';
             let keyEpoch = undefined;
 
-            // Encrypt if we have a room key
+            // Encrypt — room keys must be available
             const roomKeys = ctx.roomKeys();
-            const epochs = roomKeys[currentRoom];
-            if (epochs) {
-                const epochNums = Object.keys(epochs).map(Number);
-                const latestEpoch = Math.max(...epochNums);
-                content = await ctx.encryptMessage(epochs[latestEpoch], text, latestEpoch);
-                contentType = 'encrypted';
-                keyEpoch = latestEpoch;
+            let epochs = roomKeys[currentRoom];
+            if (!epochs || Object.keys(epochs).length === 0) {
+                // Keys may not have loaded yet; try once more
+                await ctx.loadRoomKeys(currentRoom);
+                epochs = ctx.roomKeys()[currentRoom];
             }
+            if (!epochs || Object.keys(epochs).length === 0) {
+                alert('Encryption keys not available. Please reload the page.');
+                return;
+            }
+            const epochNums = Object.keys(epochs).map(Number);
+            const latestEpoch = Math.max(...epochNums);
+            content = await ctx.encryptMessage(epochs[latestEpoch], text, latestEpoch);
+            contentType = 'encrypted';
+            keyEpoch = latestEpoch;
 
             const payload = {
                 type: 'room:message',
@@ -195,14 +202,18 @@ const RoomTypeChatPlugin = (function() {
     async function encryptContent(plaintext) {
         const currentRoom = ctx.currentRoom();
         const roomKeys = ctx.roomKeys();
-        const epochs = roomKeys[currentRoom];
-        if (epochs) {
-            const epochNums = Object.keys(epochs).map(Number);
-            const latestEpoch = Math.max(...epochNums);
-            const encrypted = await ctx.encryptMessage(epochs[latestEpoch], plaintext, latestEpoch);
-            return { content: encrypted, contentType: 'encrypted', keyEpoch: latestEpoch };
+        let epochs = roomKeys[currentRoom];
+        if (!epochs || Object.keys(epochs).length === 0) {
+            await ctx.loadRoomKeys(currentRoom);
+            epochs = ctx.roomKeys()[currentRoom];
         }
-        return { content: plaintext, contentType: 'text', keyEpoch: undefined };
+        if (!epochs || Object.keys(epochs).length === 0) {
+            throw new Error('Encryption keys not available');
+        }
+        const epochNums = Object.keys(epochs).map(Number);
+        const latestEpoch = Math.max(...epochNums);
+        const encrypted = await ctx.encryptMessage(epochs[latestEpoch], plaintext, latestEpoch);
+        return { content: encrypted, contentType: 'encrypted', keyEpoch: latestEpoch };
     }
 
     async function decryptContent(msg) {

@@ -2268,3 +2268,7 @@ input:focus-visible {
         animation-duration: 0.01ms !important;
     }
 }
+
+.empty-state {
+    margin: auto;
+}
