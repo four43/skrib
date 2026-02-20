@@ -155,8 +155,26 @@ async function login() {
                             });
                             console.log('[E2E] Private key recovered from server via PRF');
                         } else {
-                            // Server has public key but no wrapped private key, and no local key
-                            console.warn('[E2E] Private key lost. Server has no PRF backup. Encrypted messages from previous sessions cannot be decrypted.');
+                            // PRF available but no backup on server — generate fresh pair with backup
+                            console.warn('[E2E] No PRF backup on server. Generating fresh key pair.');
+                            const keyPair = await generateEncryptionKeyPair();
+                            const publicKeyJwk = await exportPublicKey(keyPair);
+                            await storePrivateKey(completeData.username, keyPair.privateKey);
+
+                            const encKeyBody = { public_key: JSON.stringify(publicKeyJwk) };
+                            try {
+                                const wrappingKey = await deriveWrappingKey(prfResult);
+                                const privJwk = await crypto.subtle.exportKey('jwk', keyPair.privateKey);
+                                encKeyBody.encrypted_private_key = await wrapPrivateKey(wrappingKey, privJwk);
+                            } catch (prfErr) {
+                                console.warn('[E2E] PRF wrapping failed:', prfErr);
+                            }
+                            await fetch(`${API_URL}/auth/encryption-key`, {
+                                method: 'POST',
+                                headers: authHeaders,
+                                body: JSON.stringify(encKeyBody),
+                            });
+                            localStorage.setItem('e2e_key_regenerated', 'true');
                         }
                     } else if (ekResp.status === 404) {
                         // Branch 3: No local key, server has nothing — generate fresh pair
@@ -182,8 +200,18 @@ async function login() {
                             body: JSON.stringify(encKeyBody),
                         });
                     } else if (ekResp.ok) {
-                        // Branch 4: No local key, server has key, no PRF — can't recover
-                        console.warn('[E2E] Private key lost from this device. No PRF available for recovery.');
+                        // Branch 4: No local key, no PRF — generate fresh pair (old messages unreadable)
+                        console.warn('[E2E] Private key lost. No PRF for recovery. Generating fresh key pair.');
+                        const keyPair = await generateEncryptionKeyPair();
+                        const publicKeyJwk = await exportPublicKey(keyPair);
+                        await storePrivateKey(completeData.username, keyPair.privateKey);
+
+                        await fetch(`${API_URL}/auth/encryption-key`, {
+                            method: 'POST',
+                            headers: authHeaders,
+                            body: JSON.stringify({ public_key: JSON.stringify(publicKeyJwk) }),
+                        });
+                        localStorage.setItem('e2e_key_regenerated', 'true');
                     }
                 }
             } catch (keyError) {

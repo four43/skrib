@@ -7,7 +7,12 @@
       "script": "dev",
       "path": "frontend",
       "problemMatcher": [],
-      "isBackground": true
+      "isBackground": true,
+      "options": {
+        "env": {
+          "VITE_DEBUG": "true"
+        }
+      }
     },
     {
       "label": "Pinggy Tunnel",

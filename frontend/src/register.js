@@ -2,6 +2,8 @@ import { API_URL, showStatus, arrayBufferToBase64, base64ToArrayBuffer, friendly
 import { generateEncryptionKeyPair, exportPublicKey, storePrivateKey, PRF_SALT, deriveWrappingKey, wrapPrivateKey } from './crypto.js';
 import { loadTheme } from './theme-manager.js';
 
+const DEBUG = import.meta.env.VITE_DEBUG === 'true';
+
 // Get invite token from URL if present
 const urlParams = new URLSearchParams(window.location.search);
 const inviteToken = urlParams.get('invite');
@@ -47,6 +49,47 @@ function validateUsername(username) {
         if (lower.includes(word)) return `Username cannot contain '${word}'`;
     }
     return null;
+}
+
+// ---------------------------------------------------------------------------
+// Crypto debug panel (only active when VITE_DEBUG=true)
+// ---------------------------------------------------------------------------
+
+function showDebugPanel(info) {
+    const panel = document.getElementById('crypto-debug-panel');
+    const tbody = document.querySelector('#crypto-debug-table tbody');
+    if (!panel || !tbody) return;
+
+    tbody.innerHTML = '';
+    for (const [label, value] of Object.entries(info)) {
+        const tr = document.createElement('tr');
+        const th = document.createElement('td');
+        th.textContent = label;
+        th.style.fontWeight = '600';
+        const td = document.createElement('td');
+        if (typeof value === 'object' && value !== null) {
+            const pre = document.createElement('pre');
+            pre.textContent = JSON.stringify(value, null, 2);
+            td.appendChild(pre);
+        } else {
+            td.textContent = String(value);
+        }
+        tr.appendChild(th);
+        tr.appendChild(td);
+        tbody.appendChild(tr);
+    }
+
+    panel.hidden = false;
+}
+
+function enableDebugContinue() {
+    const btn = document.getElementById('debug-continue-button');
+    if (btn) {
+        btn.hidden = false;
+        btn.addEventListener('click', () => {
+            window.location.href = '/app.html';
+        });
+    }
 }
 
 async function register() {
@@ -117,8 +160,19 @@ async function register() {
             }
         });
 
-        const prfSupported = credential.getClientExtensionResults()?.prf?.enabled === true;
+        const clientExtensions = credential.getClientExtensionResults();
+        const prfSupported = clientExtensions?.prf?.enabled === true;
         console.log('[E2E] PRF supported by authenticator:', prfSupported);
+
+        // Collect debug info as we go
+        const debugInfo = DEBUG ? {
+            'WebAuthn Credential ID': arrayBufferToBase64(credential.rawId),
+            'Authenticator Attachment': credential.authenticatorAttachment ?? 'unknown',
+            'Client Extensions': clientExtensions,
+            'PRF Supported': prfSupported,
+            'RP ID': beginData.rp.id,
+            'RP Name': beginData.rp.name,
+        } : null;
 
         const completeBody = {
             username: username,
@@ -149,6 +203,13 @@ async function register() {
                 const keyPair = await generateEncryptionKeyPair();
                 const publicKeyJwk = await exportPublicKey(keyPair);
                 await storePrivateKey(username, keyPair.privateKey);
+
+                if (debugInfo) {
+                    debugInfo['RSA Key Algorithm'] = keyPair.publicKey.algorithm;
+                    debugInfo['RSA Key Usages'] = keyPair.publicKey.usages;
+                    debugInfo['RSA Key Extractable'] = keyPair.publicKey.extractable;
+                    debugInfo['Public Key (JWK)'] = publicKeyJwk;
+                }
 
                 // We need a session token to upload the key. Log in first,
                 // then upload. For auto-approved users we can do a quick login.
@@ -183,18 +244,31 @@ async function register() {
                     const encKeyBody = { public_key: JSON.stringify(publicKeyJwk) };
 
                     // If PRF available, wrap the private key for cross-browser recovery
+                    const loginExtensions = loginAssertion.getClientExtensionResults();
                     if (prfSupported) {
-                        const prfResult = loginAssertion.getClientExtensionResults()?.prf?.results?.first;
+                        const prfResult = loginExtensions?.prf?.results?.first;
                         if (prfResult) {
                             try {
                                 const wrappingKey = await deriveWrappingKey(prfResult);
                                 const privateKeyJwk = await crypto.subtle.exportKey('jwk', keyPair.privateKey);
                                 encKeyBody.encrypted_private_key = await wrapPrivateKey(wrappingKey, privateKeyJwk);
                                 console.log('[E2E] Private key wrapped with PRF for cross-browser recovery');
+                                if (debugInfo) {
+                                    debugInfo['PRF Output Size (bytes)'] = prfResult.byteLength;
+                                    debugInfo['Private Key Wrapped'] = true;
+                                    debugInfo['Wrapped Key Size (chars)'] = encKeyBody.encrypted_private_key.length;
+                                }
                             } catch (prfErr) {
                                 console.warn('[E2E] PRF wrapping failed, private key stays local-only:', prfErr);
+                                if (debugInfo) {
+                                    debugInfo['PRF Wrapping Error'] = prfErr.message;
+                                    debugInfo['Private Key Wrapped'] = false;
+                                }
                             }
                         }
+                    }
+                    if (debugInfo) {
+                        debugInfo['Login Extensions'] = loginExtensions;
                     }
 
                     await fetch(`${API_URL}/auth/encryption-key`, {
@@ -216,16 +290,30 @@ async function register() {
                 // Non-fatal: user can still chat, keys will be generated on next login
             }
 
-            showStatus('register-status',
-                `<div class="approval-code">
-                    <h3>✅ Registration Complete!</h3>
-                    <p>Your account has been approved. Redirecting to chat...</p>
-                </div>`,
-                'success'
-            );
-            setTimeout(() => {
-                window.location.href = '/app.html';
-            }, 2000);
+            if (DEBUG && debugInfo) {
+                debugInfo['Registration Status'] = 'approved';
+                debugInfo['Encryption Key Uploaded'] = !!localStorage.getItem('session_token');
+                showDebugPanel(debugInfo);
+                enableDebugContinue();
+                showStatus('register-status',
+                    `<div class="approval-code">
+                        <h3>✅ Registration Complete!</h3>
+                        <p>Debug mode — review crypto details below.</p>
+                    </div>`,
+                    'success'
+                );
+            } else {
+                showStatus('register-status',
+                    `<div class="approval-code">
+                        <h3>✅ Registration Complete!</h3>
+                        <p>Your account has been approved. Redirecting to chat...</p>
+                    </div>`,
+                    'success'
+                );
+                setTimeout(() => {
+                    window.location.href = '/app.html';
+                }, 2000);
+            }
         } else {
             showStatus('register-status',
                 `<div class="approval-code">

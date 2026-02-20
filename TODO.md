@@ -2,7 +2,8 @@
 
 A manual todo list of features I think of:
 
-- [ ] Notifications in the UI for new messages, pending approvals, etc.
+- [x] Notifications in the UI for new messages, pending approvals, etc.
+    - [ ] In mobile too
 - [ ] Auth states for rooms - open(requestable, listable), invite-only, private(no invites)
 - [x] Add option for dark mode
 - [x] Presence and typing indicators
@@ -20,5 +21,6 @@ A manual todo list of features I think of:
 - [ ] Message quoting and replying
 - [ ] Message pinning and starring
 - [ ] Message search and filtering
-- [ ] Server name and icon, customization
-- [ ] Slight hover effect on messages in rooms.
+- [x] Server name and icon, customization
+- [x] Slight hover effect on messages in rooms.
+- [ ] User groups

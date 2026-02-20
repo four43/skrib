@@ -440,6 +440,60 @@ input:focus-visible {
     letter-spacing: 3px;
 }
 
+/* Crypto debug panel (VITE_DEBUG=true) */
+.crypto-debug {
+    margin-top: 24px;
+    padding: 16px;
+    border: 1px solid rgba(var(--theme-rgb), 0.25);
+    border-radius: 12px;
+    background: var(--bg-surface);
+    text-align: left;
+    overflow-x: auto;
+}
+
+.crypto-debug h3 {
+    margin: 0 0 12px;
+    font-size: 14px;
+    font-weight: 700;
+    color: var(--theme-color);
+    text-transform: uppercase;
+    letter-spacing: 0.5px;
+}
+
+.crypto-debug table {
+    width: 100%;
+    border-collapse: collapse;
+    font-size: 13px;
+    font-family: var(--font-family-mono);
+}
+
+.crypto-debug td {
+    padding: 6px 8px;
+    vertical-align: top;
+    border-bottom: 1px solid rgba(var(--theme-rgb), 0.08);
+    word-break: break-all;
+}
+
+.crypto-debug td:first-child {
+    white-space: nowrap;
+    color: var(--text-secondary);
+    width: 1%;
+    padding-right: 16px;
+}
+
+.crypto-debug pre {
+    margin: 0;
+    font-size: 12px;
+    white-space: pre-wrap;
+    word-break: break-all;
+    max-height: 200px;
+    overflow-y: auto;
+}
+
+#debug-continue-button {
+    margin-top: 16px;
+}
+
 .hidden {
     display: none;
 }

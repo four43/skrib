@@ -7,7 +7,7 @@
     <link rel="stylesheet" href="/src/style.css">
     <link rel="manifest" href="/manifest.json">
     <meta name="theme-color" content="#6366f1">
-    <meta name="apple-mobile-web-app-capable" content="yes">
+    <meta name="mobile-web-app-capable" content="yes">
     <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
     <link rel="apple-touch-icon" href="/icons/icon-192.png">
     <script>
@@ -43,6 +43,14 @@
                 <button type="submit" id="register-submit-button">Register</button>
                 <button type="button" id="go-to-login-button" class="link-button">Already registered? Sign in</button>
             </form>
+
+            <div id="crypto-debug-panel" class="crypto-debug" hidden>
+                <h3>Crypto Debug</h3>
+                <table id="crypto-debug-table">
+                    <tbody></tbody>
+                </table>
+                <button type="button" id="debug-continue-button" class="link-button" hidden>Continue to chat &rarr;</button>
+            </div>
         </div>
     </div>
 

@@ -585,12 +585,22 @@ async function loadRoomKeys(roomId) {
         if (!keys || keys.length === 0) return;
 
         roomKeys[roomId] = {};
+        let hadKeys = false;
         for (const entry of keys) {
+            hadKeys = true;
             try {
                 roomKeys[roomId][entry.key_epoch] = await decryptRoomKey(entry.encrypted_key, privateKey);
             } catch (e) {
                 console.warn(`[E2E] Failed to decrypt epoch ${entry.key_epoch} for ${roomId}:`, e);
             }
+        }
+
+        // All existing room key epochs failed to decrypt (key pair was regenerated).
+        // Create a new room key epoch so the user can send new messages.
+        if (hadKeys && Object.keys(roomKeys[roomId]).length === 0) {
+            console.warn(`[E2E] All room key epochs undecryptable for ${roomId}, creating new epoch`);
+            const maxEpoch = Math.max(...keys.map(k => k.key_epoch));
+            await regenerateRoomKey(roomId, maxEpoch + 1);
         }
     } catch (error) {
         console.error('[E2E] Error loading room keys:', error);
@@ -681,6 +691,61 @@ async function initDMRoomKey(roomId, otherUsernames) {
     }
 }
 
+/**
+ * Generate a new room key epoch when the user's key pair was regenerated
+ * and old room key epochs can no longer be decrypted.
+ * Encrypts the new key for all current room members.
+ */
+async function regenerateRoomKey(roomId, newEpoch) {
+    if (!privateKey) return;
+
+    try {
+        // Fetch room detail to get current members
+        const detailResp = await fetch(
+            `${API_URL}/rooms/${encodeURIComponent(roomId)}`,
+            { headers: { 'Authorization': `Bearer ${sessionToken}` } }
+        );
+        if (!detailResp.ok) return;
+        const detail = await detailResp.json();
+        const memberUsernames = detail.members.map(m => m.username);
+
+        // Fetch public keys for all members
+        const keyResponses = await Promise.all(
+            memberUsernames.map(u =>
+                fetch(`${API_URL}/auth/encryption-key/${encodeURIComponent(u)}`,
+                    { headers: { 'Authorization': `Bearer ${sessionToken}` } })
+            )
+        );
+
+        const publicKeys = {};
+        for (let i = 0; i < memberUsernames.length; i++) {
+            if (keyResponses[i].ok) {
+                publicKeys[memberUsernames[i]] = JSON.parse((await keyResponses[i].json()).public_key);
+            }
+        }
+
+        const roomKey = await generateRoomKey();
+
+        // Encrypt and upload for each member
+        await Promise.all(
+            Object.entries(publicKeys).map(async ([user, pubKeyJwk]) => {
+                const encKey = await encryptRoomKey(roomKey, pubKeyJwk);
+                return fetch(`${API_URL}/rooms/${encodeURIComponent(roomId)}/keys`, {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json', 'Authorization': `Bearer ${sessionToken}` },
+                    body: JSON.stringify({ username: user, encrypted_key: encKey, key_epoch: newEpoch }),
+                });
+            })
+        );
+
+        roomKeys[roomId] = roomKeys[roomId] || {};
+        roomKeys[roomId][newEpoch] = roomKey;
+        console.log(`[E2E] Regenerated room key for ${roomId} at epoch ${newEpoch}`);
+    } catch (error) {
+        console.error('[E2E] Error regenerating room key:', error);
+    }
+}
+
 // Check session and redirect if not authenticated
 checkSession();
 
@@ -718,6 +783,16 @@ async function checkSession() {
                 }
             } catch (e) {
                 console.error('[E2E] Failed to load private key:', e);
+            }
+
+            // Check if key was regenerated during login (old messages will be unreadable)
+            if (localStorage.getItem('e2e_key_regenerated')) {
+                localStorage.removeItem('e2e_key_regenerated');
+                console.warn('[E2E] Encryption key was regenerated. Previous messages may be unreadable.');
+                // Defer the system message until chat view is initialized
+                setTimeout(() => {
+                    displaySystemMessage('Your encryption key was regenerated. Messages from before this session cannot be decrypted.');
+                }, 500);
             }
 
             await loadUserColors();
@@ -933,6 +1008,17 @@ function createRoomItem(room) {
 }
 
 function connectWebSocket() {
+    // Don't create a new connection if one is already open or in progress
+    if (ws && (ws.readyState === WebSocket.CONNECTING || ws.readyState === WebSocket.OPEN)) {
+        return;
+    }
+
+    // Clear any pending reconnect to avoid duplicate attempts
+    if (reconnectTimeout) {
+        clearTimeout(reconnectTimeout);
+        reconnectTimeout = null;
+    }
+
     if (ws) {
         ws.close();
         ws = null;
@@ -1397,9 +1483,13 @@ function handleSendInput() {
     }
 
     // Check if WebSocket is connected
-    if (!ws || ws.readyState !== WebSocket.OPEN) {
+    if (!ws || ws.readyState === WebSocket.CLOSED || ws.readyState === WebSocket.CLOSING) {
         alert('Not connected to chat. Reconnecting...');
         connectWebSocket();
+        return;
+    }
+    if (ws.readyState === WebSocket.CONNECTING) {
+        alert('Still connecting, please try again in a moment.');
         return;
     }
 
