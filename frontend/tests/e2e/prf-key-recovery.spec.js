@@ -47,20 +47,30 @@ async function addStandardAuthenticator(page) {
     return { client, authenticatorId };
 }
 
-/** Register a user and wait for redirect to app.html. */
-async function registerUser(page, username) {
+/** Register a user with recovery passphrase and wait for redirect to app.html. */
+async function registerUser(page, username, passphrase = 'TestPass123!') {
     await page.goto('/register.html');
     await page.waitForLoadState('networkidle');
     await page.locator('#register-username').pressSequentially(username, { delay: 30 });
+    await page.locator('#recovery-passphrase').fill(passphrase);
+    await page.locator('#recovery-passphrase-confirm').fill(passphrase);
     await page.locator('#register-submit-button').click();
     await page.waitForURL(/.*app\.html/, { timeout: 20000 });
 }
 
-/** Login and wait for redirect to app.html. */
+/** Login and wait for redirect to app.html. Skips passphrase recovery if prompted. */
 async function loginUser(page) {
     await page.goto('/login.html');
     await page.waitForLoadState('networkidle');
     await page.locator('#login-button').click();
+    // If passphrase recovery prompt appears, skip it
+    const skipBtn = page.locator('#recovery-skip-button');
+    try {
+        await skipBtn.waitFor({ state: 'visible', timeout: 3000 });
+        await skipBtn.click();
+    } catch {
+        // No recovery prompt (e.g. PRF recovered the key already) — proceed normally
+    }
     await page.waitForURL(/.*app\.html/, { timeout: 20000 });
 }
 
@@ -210,8 +220,8 @@ test.describe('PRF Key Recovery', () => {
         // Login in context B (no local key, no PRF, server has key)
         await loginUser(pageB);
 
-        // Should warn about lost key
-        expect(consoleMessages.some((m) => m.includes('[E2E] Private key lost'))).toBeTruthy();
+        // Should warn about no recovery method (user skipped passphrase)
+        expect(consoleMessages.some((m) => m.includes('[E2E] No recovery method succeeded'))).toBeTruthy();
 
         // Cleanup
         await clientA.send('WebAuthn.removeVirtualAuthenticator', { authenticatorId: authIdA });

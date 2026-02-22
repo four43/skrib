@@ -50,6 +50,8 @@ export const test = base.extend({
     await input.pressSequentially(username, { delay: 30 });
     await expect(input).not.toHaveClass(/invalid/);
 
+    await page.locator('#recovery-passphrase').fill('TestPass123!');
+    await page.locator('#recovery-passphrase-confirm').fill('TestPass123!');
     await page.locator('#register-submit-button').click();
 
     // First user is auto-approved (open registration mode) -> redirects to chat

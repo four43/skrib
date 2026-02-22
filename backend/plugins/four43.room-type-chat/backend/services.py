@@ -3,7 +3,7 @@
 Uses a plugin-scoped database provider instead of the core database.
 The provider is set by the plugin during initialization.
 """
-from datetime import datetime
+from datetime import datetime, timezone
 from typing import Dict, List, Optional
 
 
@@ -30,7 +30,7 @@ class ChatRoom:
         key_epoch: Optional[int] = None
     ) -> Dict:
         """Add a message to the room."""
-        timestamp = datetime.now().isoformat()
+        timestamp = datetime.now(timezone.utc).isoformat()
 
         with _get_db() as conn:
             cursor = conn.execute('''
@@ -69,7 +69,7 @@ class ChatRoom:
             if row['username'] != username:
                 raise PermissionError("Can only edit your own messages")
 
-            edited_at = datetime.now().isoformat()
+            edited_at = datetime.now(timezone.utc).isoformat()
             conn.execute('''
                 UPDATE messages
                 SET content = ?, content_type = ?, key_epoch = ?, edited_at = ?

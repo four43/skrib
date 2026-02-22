@@ -22,6 +22,8 @@ async function registerSecondUser(page) {
     await page.waitForLoadState('networkidle');
     await page.locator('#register-username').pressSequentially(user2name, { delay: 30 });
     await expect(page.locator('#register-username')).not.toHaveClass(/invalid/);
+    await page.locator('#recovery-passphrase').fill('TestPass123!');
+    await page.locator('#recovery-passphrase-confirm').fill('TestPass123!');
     await page.locator('#register-submit-button').click();
     await page.waitForURL(/.*app\.html/, { timeout: 20000 });
 

@@ -125,6 +125,7 @@ html[data-theme-dark] .chat-area {
 }
 
 html[data-theme-dark] input[type="text"],
+html[data-theme-dark] input[type="password"],
 html[data-theme-dark] .preview-input {
     background: rgba(15, 23, 42, 0.5);
     color: var(--text-primary);
@@ -221,6 +222,13 @@ body {
     font-size: 28px;
 }
 
+.auth-box h2 {
+    margin-bottom: 8px;
+    color: var(--text-primary);
+    font-weight: 700;
+    font-size: 22px;
+}
+
 .auth-box p {
     color: var(--text-tertiary);
     margin-bottom: 32px;
@@ -262,7 +270,8 @@ label {
     font-size: 14px;
 }
 
-input[type="text"] {
+input[type="text"],
+input[type="password"] {
     width: 100%;
     padding: 12px 14px;
     border: 1px solid rgba(var(--theme-rgb), 0.2);
@@ -273,23 +282,27 @@ input[type="text"] {
     transition: border-color 0.2s ease, box-shadow 0.2s ease, background 0.2s ease;
 }
 
-input[type="text"]:focus {
+input[type="text"]:focus,
+input[type="password"]:focus {
     outline: none;
     border-color: var(--theme-color);
     box-shadow: 0 0 0 3px rgba(var(--theme-rgb), 0.12);
     background: rgba(255, 255, 255, 0.9);
 }
 
-input[type="text"].invalid {
+input[type="text"].invalid,
+input[type="password"].invalid {
     border-color: var(--color-error);
 }
 
-input[type="text"].invalid:focus {
+input[type="text"].invalid:focus,
+input[type="password"].invalid:focus {
     border-color: var(--color-error);
     box-shadow: 0 0 0 3px rgba(239, 68, 68, 0.15);
 }
 
-input[type="text"]::placeholder {
+input[type="text"]::placeholder,
+input[type="password"]::placeholder {
     color: var(--text-muted);
 }
 
@@ -675,7 +688,7 @@ input:focus-visible {
     line-height: 28px;
     text-align: center;
     background: none;
-    color: white;
+    color: var(--sidebar-text);
     border: none;
     border-radius: 0;
     cursor: pointer;
@@ -2032,6 +2045,11 @@ input:focus-visible {
         -webkit-backdrop-filter: blur(var(--blur-xl));
         transition: left 0.3s ease;
         box-shadow: 4px 0 20px rgba(var(--theme-rgb), 0.08);
+        overscroll-behavior-x: none;
+    }
+
+    .sidebar.swiping {
+        transition: none;
     }
 
     .sidebar.show {
@@ -2053,6 +2071,11 @@ input:focus-visible {
 
     .sidebar-overlay.show {
         display: block;
+    }
+
+    .sidebar-overlay.swiping {
+        display: block;
+        transition: none;
     }
 
     .room-settings-btn {
@@ -2312,8 +2335,10 @@ input:focus-visible {
 }
 
 .form-hint-small {
+    display: block;
     color: var(--text-muted);
     font-size: 12px;
+    margin-top: 6px;
 }
 
 .admin-page-header-content {

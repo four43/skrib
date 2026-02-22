@@ -34,6 +34,21 @@
                     <button id="go-to-register-button">👤 Register</button>
                 </div>
             </div>
+
+            <form id="passphrase-recovery" class="hidden" novalidate>
+                <h2>Key Recovery</h2>
+                <p>Your encryption key wasn't found locally. Enter your password to restore it.</p>
+                <input type="hidden" id="recovery-username" name="username" autocomplete="username">
+                <div class="form-group">
+                    <label for="login-recovery-passphrase">Password</label>
+                    <input type="password" id="login-recovery-passphrase" name="password"
+                           placeholder="Enter your recovery password"
+                           autocomplete="current-password">
+                </div>
+                <div id="recovery-status"></div>
+                <button type="submit" id="recovery-submit-button">Recover Key</button>
+                <button type="button" id="recovery-skip-button" class="link-button">Skip (generate new key)</button>
+            </form>
         </div>
     </div>
 

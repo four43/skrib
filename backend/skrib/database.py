@@ -73,6 +73,12 @@ def init_db():
         except Exception:
             pass
 
+        # Add passphrase_encrypted_private_key column for passphrase-wrapped E2E key backup
+        try:
+            conn.execute('ALTER TABLE users ADD COLUMN passphrase_encrypted_private_key TEXT')
+        except Exception:
+            pass
+
         # Add avatar_data column for generated identicon PNG
         try:
             conn.execute('ALTER TABLE users ADD COLUMN avatar_data BLOB')

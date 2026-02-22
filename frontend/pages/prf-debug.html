@@ -1,0 +1,360 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>PRF Debug - Skrib</title>
+    <style>
+        * { box-sizing: border-box; margin: 0; padding: 0; }
+        body { font-family: system-ui, sans-serif; max-width: 720px; margin: 0 auto; padding: 1rem; background: #1a1a2e; color: #e0e0e0; }
+        h1 { margin-bottom: 0.5rem; }
+        .subtitle { color: #888; margin-bottom: 1.5rem; }
+        .card { background: #16213e; border: 1px solid #333; border-radius: 8px; padding: 1rem; margin-bottom: 1rem; }
+        .card h2 { font-size: 1rem; margin-bottom: 0.75rem; color: #8be9fd; }
+        button { background: #6366f1; color: white; border: none; padding: 0.6rem 1.2rem; border-radius: 6px; cursor: pointer; font-size: 0.9rem; }
+        button:hover { background: #4f46e5; }
+        button:disabled { opacity: 0.5; cursor: not-allowed; }
+        .log { font-family: 'SF Mono', 'Fira Code', monospace; font-size: 0.8rem; white-space: pre-wrap; word-break: break-all; background: #0a0a1a; border-radius: 4px; padding: 0.75rem; margin-top: 0.5rem; max-height: 400px; overflow-y: auto; line-height: 1.5; }
+        .ok { color: #50fa7b; }
+        .warn { color: #f1fa8c; }
+        .err { color: #ff5555; }
+        .info { color: #8be9fd; }
+        .dim { color: #666; }
+        .row { display: flex; gap: 0.5rem; flex-wrap: wrap; align-items: center; }
+        hr { border: none; border-top: 1px solid #333; margin: 0.75rem 0; }
+        .tag { display: inline-block; padding: 0.15rem 0.5rem; border-radius: 4px; font-size: 0.75rem; font-weight: 600; }
+        .tag-yes { background: #50fa7b22; color: #50fa7b; }
+        .tag-no { background: #ff555522; color: #ff5555; }
+        .tag-unknown { background: #f1fa8c22; color: #f1fa8c; }
+    </style>
+</head>
+<body>
+    <h1>WebAuthn PRF Debugger</h1>
+    <p class="subtitle">Test PRF extension support for your browser + authenticator combo</p>
+
+    <div class="card">
+        <h2>1. Environment</h2>
+        <div id="env-info" class="log"></div>
+    </div>
+
+    <div class="card">
+        <h2>2. Create a test credential (with PRF)</h2>
+        <p style="color:#888; font-size:0.85rem; margin-bottom:0.75rem;">Creates a throwaway credential to test PRF. Uses <code>prf-debug.localhost</code> as RP ID so it won't interfere with your real passkeys.</p>
+        <div class="row">
+            <button id="btn-register">Create Credential</button>
+            <span id="reg-status"></span>
+        </div>
+        <div id="reg-log" class="log" hidden></div>
+    </div>
+
+    <div class="card">
+        <h2>3. Authenticate &amp; evaluate PRF</h2>
+        <p style="color:#888; font-size:0.85rem; margin-bottom:0.75rem;">Uses the credential from step 2 to request <code>prf.eval</code> and checks if a result is returned.</p>
+        <div class="row">
+            <button id="btn-auth" disabled>Authenticate + PRF Eval</button>
+            <span id="auth-status"></span>
+        </div>
+        <div id="auth-log" class="log" hidden></div>
+    </div>
+
+    <div class="card">
+        <h2>4. PRF Key Derivation Test</h2>
+        <p style="color:#888; font-size:0.85rem; margin-bottom:0.75rem;">If PRF eval succeeded, derives an AES-256-GCM wrapping key via HKDF and tests encrypt/decrypt round-trip.</p>
+        <div class="row">
+            <button id="btn-derive" disabled>Derive Key &amp; Test</button>
+            <span id="derive-status"></span>
+        </div>
+        <div id="derive-log" class="log" hidden></div>
+    </div>
+
+    <script type="module">
+        // --- Helpers ---
+        function buf2hex(buf) {
+            return [...new Uint8Array(buf)].map(b => b.toString(16).padStart(2, '0')).join('');
+        }
+        function buf2b64(buf) {
+            return btoa(String.fromCharCode(...new Uint8Array(buf)));
+        }
+        function log(el, msg, cls = '') {
+            el.hidden = false;
+            const span = document.createElement('span');
+            span.className = cls;
+            span.textContent = msg + '\n';
+            el.appendChild(span);
+            el.scrollTop = el.scrollHeight;
+        }
+
+        // --- State ---
+        let credentialId = null;
+        let lastPrfResult = null;
+
+        const PRF_SALT = new TextEncoder().encode('skrib-e2e-key-wrapping');
+
+        // --- Step 1: Environment ---
+        const envEl = document.getElementById('env-info');
+        log(envEl, `User Agent: ${navigator.userAgent}`, 'dim');
+        log(envEl, `Protocol: ${location.protocol}`, location.protocol === 'https:' ? 'ok' : 'warn');
+        log(envEl, `Hostname: ${location.hostname}`);
+
+        if (window.PublicKeyCredential) {
+            log(envEl, 'PublicKeyCredential API: available', 'ok');
+
+            if (PublicKeyCredential.isUserVerifyingPlatformAuthenticatorAvailable) {
+                PublicKeyCredential.isUserVerifyingPlatformAuthenticatorAvailable().then(avail => {
+                    log(envEl, `Platform authenticator: ${avail ? 'available' : 'not available'}`, avail ? 'ok' : 'warn');
+                });
+            }
+
+            if (PublicKeyCredential.isConditionalMediationAvailable) {
+                PublicKeyCredential.isConditionalMediationAvailable().then(avail => {
+                    log(envEl, `Conditional mediation: ${avail ? 'available' : 'not available'}`, avail ? 'ok' : 'info');
+                });
+            }
+        } else {
+            log(envEl, 'PublicKeyCredential API: NOT available', 'err');
+        }
+
+        // --- Step 2: Register ---
+        const btnReg = document.getElementById('btn-register');
+        const regLog = document.getElementById('reg-log');
+        const regStatus = document.getElementById('reg-status');
+        const btnAuth = document.getElementById('btn-auth');
+        const btnDerive = document.getElementById('btn-derive');
+
+        btnReg.addEventListener('click', async () => {
+            btnReg.disabled = true;
+            regStatus.textContent = '';
+            regLog.innerHTML = '';
+
+            const userId = crypto.getRandomValues(new Uint8Array(16));
+            const challenge = crypto.getRandomValues(new Uint8Array(32));
+            const rpId = location.hostname;
+
+            const createOptions = {
+                publicKey: {
+                    rp: { name: 'PRF Debug', id: rpId },
+                    user: {
+                        id: userId,
+                        name: 'prf-debug-user',
+                        displayName: 'PRF Debug User',
+                    },
+                    challenge,
+                    pubKeyCredParams: [
+                        { alg: -7, type: 'public-key' },   // ES256
+                        { alg: -257, type: 'public-key' },  // RS256
+                    ],
+                    authenticatorSelection: {
+                        residentKey: 'preferred',
+                        userVerification: 'preferred',
+                    },
+                    extensions: {
+                        prf: {},
+                    },
+                    timeout: 120000,
+                },
+            };
+
+            log(regLog, 'Creating credential with extensions: { prf: {} }', 'info');
+            log(regLog, `RP ID: ${rpId}`, 'dim');
+
+            try {
+                const cred = await navigator.credentials.create(createOptions);
+                credentialId = cred.rawId;
+
+                log(regLog, `Credential created!`, 'ok');
+                log(regLog, `  ID: ${buf2hex(cred.rawId).slice(0, 40)}...`, 'dim');
+                log(regLog, `  Type: ${cred.type}`, 'dim');
+
+                const ext = cred.getClientExtensionResults();
+                log(regLog, `\nClient extension results:`, 'info');
+                log(regLog, JSON.stringify(ext, null, 2));
+
+                const prfEnabled = ext?.prf?.enabled;
+                if (prfEnabled === true) {
+                    log(regLog, `\nPRF enabled: true`, 'ok');
+                    regStatus.innerHTML = '<span class="tag tag-yes">PRF SUPPORTED</span>';
+                } else if (prfEnabled === false) {
+                    log(regLog, `\nPRF enabled: false`, 'err');
+                    log(regLog, 'Your authenticator does not support the PRF extension.', 'err');
+                    regStatus.innerHTML = '<span class="tag tag-no">PRF NOT SUPPORTED</span>';
+                } else {
+                    log(regLog, `\nprf.enabled not present in response`, 'warn');
+                    log(regLog, 'Browser may not support PRF, or authenticator returned no PRF data.', 'warn');
+                    regStatus.innerHTML = '<span class="tag tag-unknown">PRF UNKNOWN</span>';
+                }
+
+                // Also check hmac-secret (older name)
+                if (ext?.hmacCreateSecret !== undefined) {
+                    log(regLog, `\nhmac-secret (legacy): ${ext.hmacCreateSecret}`, 'info');
+                }
+
+                btnAuth.disabled = false;
+
+            } catch (err) {
+                log(regLog, `Error: ${err.name}: ${err.message}`, 'err');
+                if (err.name === 'NotAllowedError') {
+                    log(regLog, 'User cancelled or the operation timed out.', 'warn');
+                }
+                regStatus.innerHTML = '<span class="tag tag-no">FAILED</span>';
+                btnReg.disabled = false;
+            }
+        });
+
+        // --- Step 3: Authenticate + PRF eval ---
+        const authLog = document.getElementById('auth-log');
+        const authStatus = document.getElementById('auth-status');
+
+        btnAuth.addEventListener('click', async () => {
+            btnAuth.disabled = true;
+            authStatus.textContent = '';
+            authLog.innerHTML = '';
+
+            const challenge = crypto.getRandomValues(new Uint8Array(32));
+
+            const salt1 = PRF_SALT;
+            const salt2 = new TextEncoder().encode('skrib-secondary-test');
+
+            const getOptions = {
+                publicKey: {
+                    challenge,
+                    allowCredentials: [{
+                        id: credentialId,
+                        type: 'public-key',
+                    }],
+                    userVerification: 'preferred',
+                    extensions: {
+                        prf: {
+                            eval: {
+                                first: salt1,
+                                second: salt2,
+                            },
+                        },
+                    },
+                    timeout: 120000,
+                },
+            };
+
+            log(authLog, 'Requesting assertion with PRF eval...', 'info');
+            log(authLog, `  Salt 1: ${buf2hex(salt1)}`, 'dim');
+            log(authLog, `  Salt 2: ${buf2hex(salt2)}`, 'dim');
+
+            try {
+                const assertion = await navigator.credentials.get(getOptions);
+
+                log(authLog, 'Assertion received!', 'ok');
+
+                const ext = assertion.getClientExtensionResults();
+                log(authLog, `\nClient extension results:`, 'info');
+                log(authLog, JSON.stringify(ext, (key, val) => {
+                    if (val instanceof ArrayBuffer) return `[ArrayBuffer ${val.byteLength} bytes: ${buf2hex(val).slice(0, 32)}...]`;
+                    return val;
+                }, 2));
+
+                const prfResults = ext?.prf?.results;
+                if (prfResults) {
+                    const first = prfResults.first;
+                    const second = prfResults.second;
+
+                    if (first) {
+                        lastPrfResult = first;
+                        log(authLog, `\nPRF result (first):`, 'ok');
+                        log(authLog, `  Length: ${first.byteLength} bytes`, 'dim');
+                        log(authLog, `  Hex: ${buf2hex(first)}`, 'dim');
+                        log(authLog, `  Base64: ${buf2b64(first)}`, 'dim');
+                    } else {
+                        log(authLog, `PRF first result: missing`, 'err');
+                    }
+
+                    if (second) {
+                        log(authLog, `\nPRF result (second):`, 'ok');
+                        log(authLog, `  Length: ${second.byteLength} bytes`, 'dim');
+                        log(authLog, `  Hex: ${buf2hex(second)}`, 'dim');
+                    } else {
+                        log(authLog, `PRF second result: not returned (optional)`, 'warn');
+                    }
+
+                    if (first && second) {
+                        const same = buf2hex(first) === buf2hex(second);
+                        log(authLog, `\nSalt independence: ${same ? 'FAIL (same output!)' : 'OK (different outputs)'}`, same ? 'err' : 'ok');
+                    }
+
+                    authStatus.innerHTML = first
+                        ? '<span class="tag tag-yes">PRF EVAL OK</span>'
+                        : '<span class="tag tag-no">NO PRF OUTPUT</span>';
+
+                    if (first) btnDerive.disabled = false;
+                } else {
+                    log(authLog, `\nNo prf.results in extension output`, 'err');
+                    log(authLog, 'The authenticator did not return PRF evaluation results.', 'err');
+                    authStatus.innerHTML = '<span class="tag tag-no">NO PRF RESULTS</span>';
+                }
+
+            } catch (err) {
+                log(authLog, `Error: ${err.name}: ${err.message}`, 'err');
+                authStatus.innerHTML = '<span class="tag tag-no">FAILED</span>';
+                btnAuth.disabled = false;
+            }
+        });
+
+        // --- Step 4: Key derivation test ---
+        const deriveLog = document.getElementById('derive-log');
+        const deriveStatus = document.getElementById('derive-status');
+
+        btnDerive.addEventListener('click', async () => {
+            btnDerive.disabled = true;
+            deriveStatus.textContent = '';
+            deriveLog.innerHTML = '';
+
+            try {
+                log(deriveLog, 'Importing PRF output as HKDF key material...', 'info');
+                const keyMaterial = await crypto.subtle.importKey(
+                    'raw', lastPrfResult, 'HKDF', false, ['deriveKey'],
+                );
+                log(deriveLog, 'HKDF key material imported', 'ok');
+
+                log(deriveLog, 'Deriving AES-256-GCM wrapping key...', 'info');
+                const wrappingKey = await crypto.subtle.deriveKey(
+                    { name: 'HKDF', salt: PRF_SALT, info: new TextEncoder().encode('skrib-wrap'), hash: 'SHA-256' },
+                    keyMaterial,
+                    { name: 'AES-GCM', length: 256 },
+                    false,
+                    ['encrypt', 'decrypt'],
+                );
+                log(deriveLog, 'AES-256-GCM wrapping key derived', 'ok');
+
+                // Round-trip test
+                log(deriveLog, '\nRound-trip encrypt/decrypt test...', 'info');
+                const testData = new TextEncoder().encode('{"kty":"RSA","test":"prf-debug-round-trip"}');
+                const iv = crypto.getRandomValues(new Uint8Array(12));
+
+                const ciphertext = await crypto.subtle.encrypt(
+                    { name: 'AES-GCM', iv }, wrappingKey, testData,
+                );
+                log(deriveLog, `  Encrypted: ${ciphertext.byteLength} bytes`, 'dim');
+
+                const plaintext = await crypto.subtle.decrypt(
+                    { name: 'AES-GCM', iv }, wrappingKey, ciphertext,
+                );
+                const decoded = new TextDecoder().decode(plaintext);
+                log(deriveLog, `  Decrypted: ${decoded}`, 'dim');
+
+                const match = decoded === new TextDecoder().decode(testData);
+                log(deriveLog, `\nRound-trip: ${match ? 'PASS' : 'FAIL'}`, match ? 'ok' : 'err');
+
+                if (match) {
+                    log(deriveLog, '\nEverything works! PRF can be used to derive wrapping keys.', 'ok');
+                    deriveStatus.innerHTML = '<span class="tag tag-yes">ALL GOOD</span>';
+                } else {
+                    deriveStatus.innerHTML = '<span class="tag tag-no">ROUND-TRIP FAILED</span>';
+                }
+
+            } catch (err) {
+                log(deriveLog, `Error: ${err.name}: ${err.message}`, 'err');
+                log(deriveLog, err.stack, 'dim');
+                deriveStatus.innerHTML = '<span class="tag tag-no">FAILED</span>';
+                btnDerive.disabled = false;
+            }
+        });
+    </script>
+</body>
+</html>

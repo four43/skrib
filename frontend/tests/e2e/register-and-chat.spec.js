@@ -13,6 +13,8 @@ test.describe('User Registration', () => {
     await page.waitForLoadState('networkidle');
 
     await page.locator('#register-username').pressSequentially(username, { delay: 30 });
+    await page.locator('#recovery-passphrase').fill('TestPass123!');
+    await page.locator('#recovery-passphrase-confirm').fill('TestPass123!');
     await page.locator('#register-submit-button').click();
 
     await page.waitForURL(/.*app\.html/, { timeout: 20000 });
@@ -33,6 +35,8 @@ test.describe('User Registration', () => {
     await page.goto('/register.html');
     await page.waitForLoadState('networkidle');
     await page.locator('#register-username').pressSequentially(username, { delay: 30 });
+    await page.locator('#recovery-passphrase').fill('TestPass123!');
+    await page.locator('#recovery-passphrase-confirm').fill('TestPass123!');
     await page.locator('#register-submit-button').click();
     await page.waitForURL(/.*app\.html/, { timeout: 20000 });
 
@@ -61,6 +65,8 @@ test.describe('Auth Flows', () => {
     await page.goto('/register.html');
     await page.waitForLoadState('networkidle');
     await page.locator('#register-username').pressSequentially(username, { delay: 30 });
+    await page.locator('#recovery-passphrase').fill('TestPass123!');
+    await page.locator('#recovery-passphrase-confirm').fill('TestPass123!');
     await page.locator('#register-submit-button').click();
     await page.waitForURL(/.*app\.html/, { timeout: 20000 });
 

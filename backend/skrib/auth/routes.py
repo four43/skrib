@@ -151,18 +151,21 @@ async def store_encryption_key(
     request: StoreEncryptionKeyRequest,
     username: str = Depends(require_auth),
 ):
-    """Store the user's encryption public key (JWK) and optional PRF-wrapped private key."""
+    """Store the user's encryption public key (JWK) and optional wrapped private key backups."""
     with get_db() as conn:
+        fields = ['encryption_public_key = ?']
+        params = [request.public_key]
         if request.encrypted_private_key is not None:
-            conn.execute(
-                'UPDATE users SET encryption_public_key = ?, encrypted_private_key = ? WHERE username = ?',
-                (request.public_key, request.encrypted_private_key, username),
-            )
-        else:
-            conn.execute(
-                'UPDATE users SET encryption_public_key = ? WHERE username = ?',
-                (request.public_key, username),
-            )
+            fields.append('encrypted_private_key = ?')
+            params.append(request.encrypted_private_key)
+        if request.passphrase_encrypted_private_key is not None:
+            fields.append('passphrase_encrypted_private_key = ?')
+            params.append(request.passphrase_encrypted_private_key)
+        params.append(username)
+        conn.execute(
+            f'UPDATE users SET {", ".join(fields)} WHERE username = ?',
+            params,
+        )
         conn.commit()
     return {"status": "ok"}
 
@@ -172,10 +175,10 @@ async def get_encryption_key(
     target_username: str,
     _: str = Depends(require_auth),
 ):
-    """Get a user's encryption public key and optional PRF-wrapped private key."""
+    """Get a user's encryption public key and optional wrapped private key backups."""
     with get_db() as conn:
         cursor = conn.execute(
-            'SELECT encryption_public_key, encrypted_private_key FROM users WHERE username = ? AND status = ?',
+            'SELECT encryption_public_key, encrypted_private_key, passphrase_encrypted_private_key FROM users WHERE username = ? AND status = ?',
             (target_username, 'active'),
         )
         row = cursor.fetchone()
@@ -185,4 +188,5 @@ async def get_encryption_key(
         username=target_username,
         public_key=row['encryption_public_key'],
         encrypted_private_key=row['encrypted_private_key'],
+        passphrase_encrypted_private_key=row['passphrase_encrypted_private_key'],
     )

@@ -3,7 +3,7 @@
 Uses a plugin-scoped database provider instead of the core database.
 The provider is set by the plugin during initialization.
 """
-from datetime import datetime
+from datetime import datetime, timezone
 from typing import Dict, List, Optional
 
 
@@ -24,7 +24,7 @@ class TodoList:
 
     def add_item(self, username: str, title: str, description: str = '') -> Dict:
         """Add a todo item to the room."""
-        timestamp = datetime.now().isoformat()
+        timestamp = datetime.now(timezone.utc).isoformat()
 
         with _get_db() as conn:
             cursor = conn.execute('''
@@ -61,7 +61,7 @@ class TodoList:
             new_title = title if title is not None else row['title']
             new_description = description if description is not None else row['description']
             new_done = done if done is not None else bool(row['done'])
-            updated_at = datetime.now().isoformat()
+            updated_at = datetime.now(timezone.utc).isoformat()
 
             conn.execute('''
                 UPDATE todo_items

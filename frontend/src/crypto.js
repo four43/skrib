@@ -89,13 +89,19 @@ export async function importPublicKey(jwk) {
 /** Store the private key in IndexedDB. */
 export async function storePrivateKey(username, privateKey) {
     const jwk = await crypto.subtle.exportKey('jwk', privateKey);
+    console.log('[E2E] storePrivateKey: writing to IndexedDB, key id:', `private:${username}`);
     await idbPut(`private:${username}`, jwk);
+    console.log('[E2E] storePrivateKey: write complete');
 }
 
 /** Load the private key from IndexedDB (returns CryptoKey or null). */
 export async function loadPrivateKey(username) {
     const jwk = await idbGet(`private:${username}`);
-    if (!jwk) return null;
+    if (!jwk) {
+        console.log('[E2E] loadPrivateKey: no JWK found for key id:', `private:${username}`);
+        return null;
+    }
+    console.log('[E2E] loadPrivateKey: JWK found, importing CryptoKey for:', username);
     return await crypto.subtle.importKey(
         'jwk',
         jwk,
@@ -257,6 +263,116 @@ export async function wrapPrivateKey(wrappingKey, privateKeyJwk) {
 /** Unwrap (decrypt) a private key blob back to a JWK object. */
 export async function unwrapPrivateKey(wrappingKey, blob) {
     const { iv, ct } = JSON.parse(blob);
+    const decrypted = await crypto.subtle.decrypt(
+        { name: 'AES-GCM', iv: new Uint8Array(base64ToArrayBuffer(iv)) },
+        wrappingKey,
+        base64ToArrayBuffer(ct),
+    );
+    return JSON.parse(new TextDecoder().decode(decrypted));
+}
+
+// ---------------------------------------------------------------------------
+// Passphrase-based key wrapping (domain-independent recovery)
+// ---------------------------------------------------------------------------
+
+const PASSPHRASE_PBKDF2_ITERATIONS = 600_000;
+
+/**
+ * Validate a recovery passphrase for strength.
+ * Returns null if valid, or an error message string.
+ */
+export function validatePassphrase(passphrase) {
+    if (!passphrase || passphrase.length < 32) {
+        return 'Passphrase must be at least 32 characters';
+    }
+    if (!/[a-z]/.test(passphrase)) {
+        return 'Password must contain a lowercase letter';
+    }
+    if (!/[A-Z]/.test(passphrase)) {
+        return 'Password must contain an uppercase letter';
+    }
+    if (!/[0-9]/.test(passphrase)) {
+        return 'Password must contain a number';
+    }
+    if (!/[^a-zA-Z0-9]/.test(passphrase)) {
+        return 'Password must contain a special character';
+    }
+    return null;
+}
+
+/**
+ * Derive an AES-256-GCM wrapping key from a passphrase and salt via PBKDF2.
+ * @param {string} passphrase - User-provided passphrase
+ * @param {Uint8Array} salt - Random salt (16 bytes recommended)
+ * @returns {Promise<CryptoKey>}
+ */
+export async function derivePassphraseWrappingKey(passphrase, salt) {
+    const keyMaterial = await crypto.subtle.importKey(
+        'raw',
+        new TextEncoder().encode(passphrase),
+        'PBKDF2',
+        false,
+        ['deriveKey'],
+    );
+    return await crypto.subtle.deriveKey(
+        {
+            name: 'PBKDF2',
+            salt,
+            iterations: PASSPHRASE_PBKDF2_ITERATIONS,
+            hash: 'SHA-256',
+        },
+        keyMaterial,
+        { name: 'AES-GCM', length: 256 },
+        false,
+        ['encrypt', 'decrypt'],
+    );
+}
+
+/**
+ * Wrap a private key JWK with a passphrase. Returns a JSON blob string
+ * containing salt, iv, ciphertext, and iteration count.
+ */
+export async function passphraseWrapPrivateKey(passphrase, privateKeyJwk) {
+    const salt = crypto.getRandomValues(new Uint8Array(16));
+    const wrappingKey = await derivePassphraseWrappingKey(passphrase, salt);
+    const iv = crypto.getRandomValues(new Uint8Array(12));
+    const encoded = new TextEncoder().encode(JSON.stringify(privateKeyJwk));
+    const ct = await crypto.subtle.encrypt({ name: 'AES-GCM', iv }, wrappingKey, encoded);
+    return JSON.stringify({
+        v: 1,
+        salt: arrayBufferToBase64(salt.buffer),
+        iv: arrayBufferToBase64(iv.buffer),
+        ct: arrayBufferToBase64(ct),
+        iterations: PASSPHRASE_PBKDF2_ITERATIONS,
+    });
+}
+
+/**
+ * Unwrap a private key JWK from a passphrase-wrapped blob.
+ * Throws on wrong passphrase (AES-GCM authentication will fail).
+ */
+export async function passphraseUnwrapPrivateKey(passphrase, blob) {
+    const { salt, iv, ct, iterations } = JSON.parse(blob);
+    const saltBytes = new Uint8Array(base64ToArrayBuffer(salt));
+    const keyMaterial = await crypto.subtle.importKey(
+        'raw',
+        new TextEncoder().encode(passphrase),
+        'PBKDF2',
+        false,
+        ['deriveKey'],
+    );
+    const wrappingKey = await crypto.subtle.deriveKey(
+        {
+            name: 'PBKDF2',
+            salt: saltBytes,
+            iterations: iterations || PASSPHRASE_PBKDF2_ITERATIONS,
+            hash: 'SHA-256',
+        },
+        keyMaterial,
+        { name: 'AES-GCM', length: 256 },
+        false,
+        ['decrypt'],
+    );
     const decrypted = await crypto.subtle.decrypt(
         { name: 'AES-GCM', iv: new Uint8Array(base64ToArrayBuffer(iv)) },
         wrappingKey,

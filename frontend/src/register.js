@@ -1,8 +1,12 @@
 import { API_URL, showStatus, arrayBufferToBase64, base64ToArrayBuffer, friendlyError } from './utils.js';
-import { generateEncryptionKeyPair, exportPublicKey, storePrivateKey, PRF_SALT, deriveWrappingKey, wrapPrivateKey } from './crypto.js';
+import { generateEncryptionKeyPair, exportPublicKey, storePrivateKey, PRF_SALT, deriveWrappingKey, wrapPrivateKey, validatePassphrase, passphraseWrapPrivateKey } from './crypto.js';
 import { loadTheme } from './theme-manager.js';
 
 const DEBUG = import.meta.env.VITE_DEBUG === 'true';
+
+// After registration succeeds, allow native form submit so password managers
+// (Bitwarden, 1Password, etc.) detect the submission and offer to save credentials.
+let registrationComplete = false;
 
 // Get invite token from URL if present
 const urlParams = new URLSearchParams(window.location.search);
@@ -30,7 +34,7 @@ async function checkRegistrationAccess() {
 }
 
 function disableRegistration() {
-    const registerBtn = document.querySelector('#registerForm button[type="submit"]');
+    const registerBtn = document.querySelector('#register-form button[type="submit"]');
     const usernameInput = document.getElementById('register-username');
     if (registerBtn) registerBtn.disabled = true;
     if (usernameInput) usernameInput.disabled = true;
@@ -41,8 +45,8 @@ const RESERVED_WORDS = ['admin', 'skrib', 'system'];
 
 function validateUsername(username) {
     if (!username) return 'Please enter a username';
-    if (username.length < 4) return 'Username must be at least 4 characters';
-    if (username.length > 15) return 'Username must be 15 characters or fewer';
+    if (username.length < 3) return 'Username must be at least 3 characters';
+    if (username.length > 16) return 'Username must be 16 characters or fewer';
     if (!USERNAME_RE.test(username)) return 'Username can only contain letters, numbers, and underscores';
     const lower = username.toLowerCase();
     for (const word of RESERVED_WORDS) {
@@ -87,30 +91,52 @@ function enableDebugContinue() {
     if (btn) {
         btn.hidden = false;
         btn.addEventListener('click', () => {
-            window.location.href = '/app.html';
+            registrationComplete = true;
+            const form = document.getElementById('register-form');
+            form.action = '/app.html';
+            form.method = 'POST';
+            form.requestSubmit();
         });
     }
 }
 
 async function register() {
-    const input = document.getElementById('register-username');
+    const usernameInput = document.getElementById('register-username');
+    const passphraseInput = document.getElementById('recovery-passphrase');
+    const confirmInput = document.getElementById('recovery-passphrase-confirm');
+    const submitBtn = document.getElementById('register-submit-button');
 
     // Let the browser show its native constraint popups first
-    if (!input.checkValidity()) {
-        input.reportValidity();
+    if (!usernameInput.checkValidity()) {
+        usernameInput.reportValidity();
         return;
     }
 
-    const username = input.value.trim();
+    const username = usernameInput.value.trim();
+    const passphrase = passphraseInput.value;
+    const passphraseConfirm = confirmInput.value;
 
-    // JS validation catches reserved words that HTML5 pattern can't express
+    // Validate username
     const usernameError = validateUsername(username);
     if (usernameError) {
-        input.setCustomValidity(usernameError);
-        input.reportValidity();
-        input.setCustomValidity(''); // reset so native checks work next time
+        usernameInput.setCustomValidity(usernameError);
+        usernameInput.reportValidity();
+        usernameInput.setCustomValidity(''); // reset so native checks work next time
         return;
     }
+
+    // Validate passphrase
+    const passphraseError = validatePassphrase(passphrase);
+    if (passphraseError) {
+        showStatus('passphrase-status', `❌ ${passphraseError}`, 'error');
+        return;
+    }
+    if (passphrase !== passphraseConfirm) {
+        showStatus('passphrase-status', '❌ Passwords do not match', 'error');
+        return;
+    }
+
+    submitBtn.disabled = true;
 
     try {
         showStatus('register-status', 'Starting registration...', 'info');
@@ -124,6 +150,7 @@ async function register() {
 
         if (beginData.detail) {
             showStatus('register-status', `❌ ${beginData.detail}`, 'error');
+            submitBtn.disabled = false;
             return;
         }
 
@@ -196,123 +223,15 @@ async function register() {
 
         if (completeData.detail) {
             showStatus('register-status', `❌ ${completeData.detail}`, 'error');
+            submitBtn.disabled = false;
         } else if (completeData.status === 'approved') {
-            // Generate E2E encryption key pair and upload public key
+            showStatus('passphrase-status', '🔑 Generating encryption keys...', 'info');
             try {
-                showStatus('register-status', '🔑 Generating encryption keys...', 'info');
-                const keyPair = await generateEncryptionKeyPair();
-                const publicKeyJwk = await exportPublicKey(keyPair);
-                await storePrivateKey(username, keyPair.privateKey);
-
-                if (debugInfo) {
-                    debugInfo['RSA Key Algorithm'] = keyPair.publicKey.algorithm;
-                    debugInfo['RSA Key Usages'] = keyPair.publicKey.usages;
-                    debugInfo['RSA Key Extractable'] = keyPair.publicKey.extractable;
-                    debugInfo['Public Key (JWK)'] = publicKeyJwk;
-                }
-
-                // We need a session token to upload the key. Log in first,
-                // then upload. For auto-approved users we can do a quick login.
-                const loginBegin = await fetch(`${API_URL}/auth/login/begin`);
-                const loginBeginData = await loginBegin.json();
-                const loginChallenge = base64ToArrayBuffer(loginBeginData.challenge);
-                const loginGetOptions = {
-                    publicKey: {
-                        challenge: loginChallenge,
-                        rpId: loginBeginData.rpId,
-                        timeout: 60000,
-                        userVerification: "preferred",
-                    }
-                };
-                if (prfSupported) {
-                    loginGetOptions.publicKey.extensions = {
-                        prf: { eval: { first: PRF_SALT } },
-                    };
-                }
-                const loginAssertion = await navigator.credentials.get(loginGetOptions);
-                const loginResp = await fetch(`${API_URL}/auth/login/complete`, {
-                    method: 'POST',
-                    headers: { 'Content-Type': 'application/json' },
-                    body: JSON.stringify({
-                        credentialId: arrayBufferToBase64(loginAssertion.rawId),
-                        challenge: loginBeginData.challenge,
-                    })
-                });
-                const loginData = await loginResp.json();
-
-                if (loginData.session_token) {
-                    const encKeyBody = { public_key: JSON.stringify(publicKeyJwk) };
-
-                    // If PRF available, wrap the private key for cross-browser recovery
-                    const loginExtensions = loginAssertion.getClientExtensionResults();
-                    if (prfSupported) {
-                        const prfResult = loginExtensions?.prf?.results?.first;
-                        if (prfResult) {
-                            try {
-                                const wrappingKey = await deriveWrappingKey(prfResult);
-                                const privateKeyJwk = await crypto.subtle.exportKey('jwk', keyPair.privateKey);
-                                encKeyBody.encrypted_private_key = await wrapPrivateKey(wrappingKey, privateKeyJwk);
-                                console.log('[E2E] Private key wrapped with PRF for cross-browser recovery');
-                                if (debugInfo) {
-                                    debugInfo['PRF Output Size (bytes)'] = prfResult.byteLength;
-                                    debugInfo['Private Key Wrapped'] = true;
-                                    debugInfo['Wrapped Key Size (chars)'] = encKeyBody.encrypted_private_key.length;
-                                }
-                            } catch (prfErr) {
-                                console.warn('[E2E] PRF wrapping failed, private key stays local-only:', prfErr);
-                                if (debugInfo) {
-                                    debugInfo['PRF Wrapping Error'] = prfErr.message;
-                                    debugInfo['Private Key Wrapped'] = false;
-                                }
-                            }
-                        }
-                    }
-                    if (debugInfo) {
-                        debugInfo['Login Extensions'] = loginExtensions;
-                    }
-
-                    await fetch(`${API_URL}/auth/encryption-key`, {
-                        method: 'POST',
-                        headers: {
-                            'Content-Type': 'application/json',
-                            'Authorization': `Bearer ${loginData.session_token}`,
-                        },
-                        body: JSON.stringify(encKeyBody),
-                    });
-
-                    // Store session so login page redirects straight to chat
-                    localStorage.setItem('session_token', loginData.session_token);
-                    localStorage.setItem('username', loginData.username);
-                    localStorage.setItem('role', loginData.role);
-                }
+                await generateAndUploadKeys(username, passphrase, prfSupported, debugInfo);
             } catch (keyError) {
                 console.error('Failed to generate encryption keys:', keyError);
-                // Non-fatal: user can still chat, keys will be generated on next login
-            }
-
-            if (DEBUG && debugInfo) {
-                debugInfo['Registration Status'] = 'approved';
-                debugInfo['Encryption Key Uploaded'] = !!localStorage.getItem('session_token');
-                showDebugPanel(debugInfo);
-                enableDebugContinue();
-                showStatus('register-status',
-                    `<div class="approval-code">
-                        <h3>✅ Registration Complete!</h3>
-                        <p>Debug mode — review crypto details below.</p>
-                    </div>`,
-                    'success'
-                );
-            } else {
-                showStatus('register-status',
-                    `<div class="approval-code">
-                        <h3>✅ Registration Complete!</h3>
-                        <p>Your account has been approved. Redirecting to chat...</p>
-                    </div>`,
-                    'success'
-                );
-                setTimeout(() => {
-                    window.location.href = '/app.html';
-                }, 2000);
+                showStatus('passphrase-status', '❌ Key generation failed. You can set this up later.', 'error');
+                setTimeout(() => { window.location.href = '/app.html'; }, 3000);
             }
         } else {
             showStatus('register-status',
@@ -329,6 +248,123 @@ async function register() {
     } catch (error) {
         console.error(error);
         showStatus('register-status', `❌ ${friendlyError(error)}`, 'error');
+        submitBtn.disabled = false;
+    }
+}
+
+async function generateAndUploadKeys(username, passphrase, prfSupported, debugInfo) {
+    const keyPair = await generateEncryptionKeyPair();
+    const publicKeyJwk = await exportPublicKey(keyPair);
+    await storePrivateKey(username, keyPair.privateKey);
+
+    if (debugInfo) {
+        debugInfo['RSA Key Algorithm'] = keyPair.publicKey.algorithm;
+        debugInfo['RSA Key Usages'] = keyPair.publicKey.usages;
+        debugInfo['RSA Key Extractable'] = keyPair.publicKey.extractable;
+        debugInfo['Public Key (JWK)'] = publicKeyJwk;
+    }
+
+    // We need a session token to upload the key. Log in first.
+    const loginBegin = await fetch(`${API_URL}/auth/login/begin`);
+    const loginBeginData = await loginBegin.json();
+    const loginChallenge = base64ToArrayBuffer(loginBeginData.challenge);
+    const loginGetOptions = {
+        publicKey: {
+            challenge: loginChallenge,
+            rpId: loginBeginData.rpId,
+            timeout: 60000,
+            userVerification: "preferred",
+        }
+    };
+    if (prfSupported) {
+        loginGetOptions.publicKey.extensions = {
+            prf: { eval: { first: PRF_SALT } },
+        };
+    }
+    const loginAssertion = await navigator.credentials.get(loginGetOptions);
+    const loginResp = await fetch(`${API_URL}/auth/login/complete`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+            credentialId: arrayBufferToBase64(loginAssertion.rawId),
+            challenge: loginBeginData.challenge,
+        })
+    });
+    const loginData = await loginResp.json();
+
+    if (loginData.session_token) {
+        const encKeyBody = { public_key: JSON.stringify(publicKeyJwk) };
+
+        // Passphrase-wrap the private key (always — this is the primary recovery method)
+        const privateKeyJwk = await crypto.subtle.exportKey('jwk', keyPair.privateKey);
+        encKeyBody.passphrase_encrypted_private_key = await passphraseWrapPrivateKey(passphrase, privateKeyJwk);
+        console.log('[E2E] Private key wrapped with passphrase for recovery');
+
+        // Also PRF-wrap if available
+        const loginExtensions = loginAssertion.getClientExtensionResults();
+        if (prfSupported) {
+            const prfResult = loginExtensions?.prf?.results?.first;
+            if (prfResult) {
+                try {
+                    const wrappingKey = await deriveWrappingKey(prfResult);
+                    encKeyBody.encrypted_private_key = await wrapPrivateKey(wrappingKey, privateKeyJwk);
+                    console.log('[E2E] Private key also wrapped with PRF');
+                    if (debugInfo) {
+                        debugInfo['PRF Output Size (bytes)'] = prfResult.byteLength;
+                        debugInfo['Private Key PRF Wrapped'] = true;
+                    }
+                } catch (prfErr) {
+                    console.warn('[E2E] PRF wrapping failed:', prfErr);
+                }
+            }
+        }
+        if (debugInfo) {
+            debugInfo['Login Extensions'] = loginExtensions;
+            debugInfo['Passphrase Wrapped'] = true;
+        }
+
+        await fetch(`${API_URL}/auth/encryption-key`, {
+            method: 'POST',
+            headers: {
+                'Content-Type': 'application/json',
+                'Authorization': `Bearer ${loginData.session_token}`,
+            },
+            body: JSON.stringify(encKeyBody),
+        });
+
+        localStorage.setItem('session_token', loginData.session_token);
+        localStorage.setItem('username', loginData.username);
+        localStorage.setItem('role', loginData.role);
+    }
+
+    if (DEBUG && debugInfo) {
+        debugInfo['Registration Status'] = 'approved';
+        debugInfo['Encryption Key Uploaded'] = !!localStorage.getItem('session_token');
+        showDebugPanel(debugInfo);
+        enableDebugContinue();
+        showStatus('passphrase-status',
+            `<div class="approval-code">
+                <h3>✅ Registration Complete!</h3>
+                <p>Debug mode — review crypto details below.</p>
+            </div>`,
+            'success'
+        );
+    } else {
+        showStatus('passphrase-status',
+            `<div class="approval-code">
+                <h3>✅ Registration Complete!</h3>
+                <p>Your encryption key has been saved. Redirecting to chat...</p>
+            </div>`,
+            'success'
+        );
+        setTimeout(() => {
+            // Submit form natively to trigger password manager save prompt
+            registrationComplete = true;
+            const form = document.getElementById('register-form');
+            form.action = '/app.html';
+            form.method = 'POST';
+            form.requestSubmit();
+        }, 2000);
     }
 }
 
@@ -340,19 +376,35 @@ function goToLogin() {
 window.register = register;
 window.goToLogin = goToLogin;
 
-// Real-time validation: red outline on invalid input
+// Real-time validation
 document.addEventListener('DOMContentLoaded', () => {
-    const input = document.getElementById('register-username');
-    if (input) {
-        input.addEventListener('input', () => {
-            const val = input.value;
+    const usernameInput = document.getElementById('register-username');
+    if (usernameInput) {
+        usernameInput.addEventListener('input', () => {
+            const val = usernameInput.value;
             // Empty is neutral (not red), only flag once the user has typed something
             if (!val) {
-                input.classList.remove('invalid');
+                usernameInput.classList.remove('invalid');
                 return;
             }
             const error = validateUsername(val);
-            input.classList.toggle('invalid', error !== null);
+            usernameInput.classList.toggle('invalid', error !== null);
+        });
+    }
+
+    // Real-time passphrase validation hint
+    const passphraseInput = document.getElementById('recovery-passphrase');
+    if (passphraseInput) {
+        passphraseInput.addEventListener('input', () => {
+            const err = validatePassphrase(passphraseInput.value);
+            const hint = document.getElementById('passphrase-hint');
+            if (passphraseInput.value && err) {
+                hint.textContent = err;
+                hint.style.color = 'var(--color-error)';
+            } else {
+                hint.textContent = 'At least 32 characters with uppercase, lowercase, number, and special character';
+                hint.style.color = '';
+            }
         });
     }
 
@@ -360,6 +412,7 @@ document.addEventListener('DOMContentLoaded', () => {
     const form = document.getElementById('register-form');
     if (form) {
         form.addEventListener('submit', (e) => {
+            if (registrationComplete) return; // native submit for password manager save
             e.preventDefault();
             register();
         });

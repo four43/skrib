@@ -1,5 +1,5 @@
 import { API_URL, showStatus, arrayBufferToBase64, base64ToArrayBuffer, friendlyError } from './utils.js';
-import { loadPrivateKey, loadPrivateKeyJwk, generateEncryptionKeyPair, exportPublicKey, storePrivateKey, exportStoredPublicKey, PRF_SALT, deriveWrappingKey, wrapPrivateKey, unwrapPrivateKey } from './crypto.js';
+import { loadPrivateKey, loadPrivateKeyJwk, generateEncryptionKeyPair, exportPublicKey, storePrivateKey, exportStoredPublicKey, PRF_SALT, deriveWrappingKey, wrapPrivateKey, unwrapPrivateKey, passphraseUnwrapPrivateKey } from './crypto.js';
 import { loadTheme } from './theme-manager.js';
 
 // Load default theme (no authentication on login page)
@@ -124,26 +124,31 @@ async function login() {
                     }
                 } else {
                     // No local private key — check server state
+                    console.log('[E2E] No local private key found, checking server for recovery options...');
                     const ekResp = await fetch(
                         `${API_URL}/auth/encryption-key/${encodeURIComponent(completeData.username)}`,
                         { headers: { 'Authorization': `Bearer ${completeData.session_token}` } }
                     );
 
-                    if (ekResp.ok && prfResult) {
-                        // Branch 2: No local key, PRF available, server has key data
-                        const ekData = await ekResp.json();
-                        if (ekData.encrypted_private_key) {
-                            // Recover private key from PRF-wrapped blob
+                    const ekData = ekResp.ok ? await ekResp.json() : null;
+                    console.log('[E2E] Server encryption key state:', {
+                        hasPublicKey: !!ekData?.public_key,
+                        hasPrfWrappedKey: !!ekData?.encrypted_private_key,
+                        hasPassphraseWrappedKey: !!ekData?.passphrase_encrypted_private_key,
+                    });
+                    let recovered = false;
+
+                    // Try PRF recovery first
+                    if (ekData?.encrypted_private_key && prfResult) {
+                        try {
                             const wrappingKey = await deriveWrappingKey(prfResult);
                             const privateKeyJwk = await unwrapPrivateKey(wrappingKey, ekData.encrypted_private_key);
-                            // Import and store locally
                             const importedKey = await crypto.subtle.importKey(
                                 'jwk', privateKeyJwk,
                                 { name: 'RSA-OAEP', hash: 'SHA-256' },
                                 true, ['decrypt'],
                             );
                             await storePrivateKey(completeData.username, importedKey);
-                            // Re-upload public key to ensure consistency
                             const publicKeyJwk = {
                                 kty: privateKeyJwk.kty, n: privateKeyJwk.n, e: privateKeyJwk.e,
                                 alg: privateKeyJwk.alg, ext: true, key_ops: ['encrypt'],
@@ -154,30 +159,26 @@ async function login() {
                                 body: JSON.stringify({ public_key: JSON.stringify(publicKeyJwk) }),
                             });
                             console.log('[E2E] Private key recovered from server via PRF');
-                        } else {
-                            // PRF available but no backup on server — generate fresh pair with backup
-                            console.warn('[E2E] No PRF backup on server. Generating fresh key pair.');
-                            const keyPair = await generateEncryptionKeyPair();
-                            const publicKeyJwk = await exportPublicKey(keyPair);
-                            await storePrivateKey(completeData.username, keyPair.privateKey);
-
-                            const encKeyBody = { public_key: JSON.stringify(publicKeyJwk) };
-                            try {
-                                const wrappingKey = await deriveWrappingKey(prfResult);
-                                const privJwk = await crypto.subtle.exportKey('jwk', keyPair.privateKey);
-                                encKeyBody.encrypted_private_key = await wrapPrivateKey(wrappingKey, privJwk);
-                            } catch (prfErr) {
-                                console.warn('[E2E] PRF wrapping failed:', prfErr);
-                            }
-                            await fetch(`${API_URL}/auth/encryption-key`, {
-                                method: 'POST',
-                                headers: authHeaders,
-                                body: JSON.stringify(encKeyBody),
-                            });
-                            localStorage.setItem('e2e_key_regenerated', 'true');
+                            recovered = true;
+                        } catch (prfErr) {
+                            console.warn('[E2E] PRF recovery failed:', prfErr);
                         }
-                    } else if (ekResp.status === 404) {
-                        // Branch 3: No local key, server has nothing — generate fresh pair
+                    }
+
+                    // Try passphrase recovery
+                    if (!recovered && ekData?.passphrase_encrypted_private_key) {
+                        console.log('[E2E] Passphrase-wrapped key available, showing recovery UI...');
+                        recovered = await showPassphraseRecovery(
+                            ekData.passphrase_encrypted_private_key,
+                            completeData.username,
+                            authHeaders,
+                        );
+                        console.log('[E2E] Passphrase recovery result:', recovered);
+                    }
+
+                    // No recovery possible — generate fresh pair
+                    if (!recovered) {
+                        console.warn('[E2E] No recovery method succeeded. Generating fresh key pair.');
                         const keyPair = await generateEncryptionKeyPair();
                         const publicKeyJwk = await exportPublicKey(keyPair);
                         await storePrivateKey(completeData.username, keyPair.privateKey);
@@ -188,44 +189,131 @@ async function login() {
                                 const wrappingKey = await deriveWrappingKey(prfResult);
                                 const privJwk = await crypto.subtle.exportKey('jwk', keyPair.privateKey);
                                 encKeyBody.encrypted_private_key = await wrapPrivateKey(wrappingKey, privJwk);
-                                console.log('[E2E] Fresh key pair generated with PRF backup');
                             } catch (prfErr) {
                                 console.warn('[E2E] PRF wrapping failed:', prfErr);
                             }
                         }
-
                         await fetch(`${API_URL}/auth/encryption-key`, {
                             method: 'POST',
                             headers: authHeaders,
                             body: JSON.stringify(encKeyBody),
                         });
-                    } else if (ekResp.ok) {
-                        // Branch 4: No local key, no PRF — generate fresh pair (old messages unreadable)
-                        console.warn('[E2E] Private key lost. No PRF for recovery. Generating fresh key pair.');
-                        const keyPair = await generateEncryptionKeyPair();
-                        const publicKeyJwk = await exportPublicKey(keyPair);
-                        await storePrivateKey(completeData.username, keyPair.privateKey);
-
-                        await fetch(`${API_URL}/auth/encryption-key`, {
-                            method: 'POST',
-                            headers: authHeaders,
-                            body: JSON.stringify({ public_key: JSON.stringify(publicKeyJwk) }),
-                        });
                         localStorage.setItem('e2e_key_regenerated', 'true');
                     }
                 }
             } catch (keyError) {
-                console.error('Failed to load/generate encryption keys:', keyError);
+                console.error('[E2E] Failed to load/generate encryption keys:', keyError);
             }
 
-            // Redirect to chat
-            window.location.href = '/app.html';
+            // Verify key state before redirect
+            try {
+                const verifyKey = await loadPrivateKey(completeData.username);
+                console.log('[E2E] Pre-redirect key verification:', {
+                    username: completeData.username,
+                    keyInIndexedDB: !!verifyKey,
+                });
+            } catch (verifyErr) {
+                console.error('[E2E] Pre-redirect key verification failed:', verifyErr);
+            }
+
+            // Redirect to chat — submit recovery form if shown (triggers password manager save)
+            const recoveryForm = document.getElementById('passphrase-recovery');
+            if (recoveryForm && !recoveryForm.classList.contains('hidden')) {
+                recoveryForm.action = '/app.html';
+                recoveryForm.method = 'POST';
+                recoveryForm.submit();
+            } else {
+                window.location.href = '/app.html';
+            }
         }
 
     } catch (error) {
         console.error(error);
         showStatus('auth-status', `❌ ${friendlyError(error)}`, 'error');
     }
+}
+
+/**
+ * Show the passphrase recovery UI and wait for the user to enter their passphrase
+ * or skip. Returns true if recovery succeeded, false if skipped/failed.
+ */
+function showPassphraseRecovery(encryptedBlob, username, authHeaders) {
+    return new Promise((resolve) => {
+        // Hide login form, show recovery UI
+        document.getElementById('login-form').classList.add('hidden');
+        const recoveryDiv = document.getElementById('passphrase-recovery');
+        recoveryDiv.classList.remove('hidden');
+
+        // Populate hidden username so password managers can match the credential
+        const usernameField = document.getElementById('recovery-username');
+        if (usernameField) usernameField.value = username;
+
+        const input = document.getElementById('login-recovery-passphrase');
+        const submitBtn = document.getElementById('recovery-submit-button');
+        const skipBtn = document.getElementById('recovery-skip-button');
+
+        input.focus();
+
+        async function attemptRecovery() {
+            const passphrase = input.value;
+            if (!passphrase) {
+                showStatus('recovery-status', '❌ Please enter your password', 'error');
+                return;
+            }
+
+            submitBtn.disabled = true;
+            showStatus('recovery-status', 'Recovering encryption key...', 'info');
+
+            try {
+                console.log('[E2E] Attempting passphrase unwrap for user:', username);
+                const privateKeyJwk = await passphraseUnwrapPrivateKey(passphrase, encryptedBlob);
+                console.log('[E2E] Passphrase unwrap succeeded, key modulus prefix:', privateKeyJwk.n?.slice(0, 20));
+                const importedKey = await crypto.subtle.importKey(
+                    'jwk', privateKeyJwk,
+                    { name: 'RSA-OAEP', hash: 'SHA-256' },
+                    true, ['decrypt'],
+                );
+                console.log('[E2E] CryptoKey imported, storing in IndexedDB for user:', username);
+                await storePrivateKey(username, importedKey);
+
+                // Verify the key was actually stored
+                const verifyKey = await loadPrivateKey(username);
+                console.log('[E2E] IndexedDB store verification:', !!verifyKey);
+                if (!verifyKey) {
+                    console.error('[E2E] CRITICAL: Key was stored but could not be read back!');
+                }
+
+                // Re-upload public key to ensure consistency
+                const publicKeyJwk = {
+                    kty: privateKeyJwk.kty, n: privateKeyJwk.n, e: privateKeyJwk.e,
+                    alg: privateKeyJwk.alg, ext: true, key_ops: ['encrypt'],
+                };
+                await fetch(`${API_URL}/auth/encryption-key`, {
+                    method: 'POST',
+                    headers: authHeaders,
+                    body: JSON.stringify({ public_key: JSON.stringify(publicKeyJwk) }),
+                });
+
+                console.log('[E2E] Private key recovered from server via passphrase');
+                resolve(true);
+            } catch (err) {
+                console.warn('[E2E] Passphrase recovery failed:', err);
+                showStatus('recovery-status', '❌ Wrong password. Please try again.', 'error');
+                submitBtn.disabled = false;
+                input.value = '';
+                input.focus();
+            }
+        }
+
+        recoveryDiv.addEventListener('submit', (e) => {
+            e.preventDefault();
+            attemptRecovery();
+        });
+        skipBtn.addEventListener('click', () => {
+            console.log('[E2E] User skipped passphrase recovery');
+            resolve(false);
+        });
+    });
 }
 
 async function checkRegistrationMode() {

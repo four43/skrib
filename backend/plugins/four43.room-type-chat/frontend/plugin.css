@@ -116,9 +116,11 @@
     align-items: center;
 }
 
-/* Desktop: show on mouse hover (only when not already tap-activated) */
-.message:hover .message-hover-bar:not(.active) {
-    display: flex;
+/* Desktop: show on mouse hover (only for devices with a real pointer) */
+@media (hover: hover) and (pointer: fine) {
+    .message:hover .message-hover-bar:not(.active) {
+        display: flex;
+    }
 }
 
 /* Tap/click activated */

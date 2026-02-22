@@ -572,17 +572,30 @@ registerCommand('topic', async (args) => {
 
 /** Fetch and decrypt all room keys for the current user in a given room. */
 async function loadRoomKeys(roomId) {
-    if (!privateKey) return;
+    if (!privateKey) {
+        console.warn('[E2E] loadRoomKeys skipped — no privateKey available for room:', roomId);
+        return;
+    }
 
     try {
+        console.log('[E2E] Loading room keys for:', roomId);
         const resp = await fetch(
             `${API_URL}/rooms/${encodeURIComponent(roomId)}/keys`,
             { headers: { 'Authorization': `Bearer ${sessionToken}` } }
         );
-        if (!resp.ok) return;
+        if (!resp.ok) {
+            console.warn('[E2E] Room keys fetch failed:', resp.status, 'for room:', roomId);
+            return;
+        }
 
         const { keys } = await resp.json();
-        if (!keys || keys.length === 0) return;
+        if (!keys || keys.length === 0) {
+            console.log('[E2E] No room keys returned from server for:', roomId);
+            return;
+        }
+
+        console.log('[E2E] Server returned', keys.length, 'key epoch(s) for room:', roomId,
+            'epochs:', keys.map(k => k.key_epoch));
 
         roomKeys[roomId] = {};
         let hadKeys = false;
@@ -590,14 +603,18 @@ async function loadRoomKeys(roomId) {
             hadKeys = true;
             try {
                 roomKeys[roomId][entry.key_epoch] = await decryptRoomKey(entry.encrypted_key, privateKey);
+                console.log(`[E2E] Decrypted epoch ${entry.key_epoch} for ${roomId}`);
             } catch (e) {
                 console.warn(`[E2E] Failed to decrypt epoch ${entry.key_epoch} for ${roomId}:`, e);
             }
         }
 
+        const decryptedCount = Object.keys(roomKeys[roomId]).length;
+        console.log(`[E2E] Room ${roomId}: ${decryptedCount}/${keys.length} epochs decrypted`);
+
         // All existing room key epochs failed to decrypt (key pair was regenerated).
         // Create a new room key epoch so the user can send new messages.
-        if (hadKeys && Object.keys(roomKeys[roomId]).length === 0) {
+        if (hadKeys && decryptedCount === 0) {
             console.warn(`[E2E] All room key epochs undecryptable for ${roomId}, creating new epoch`);
             const maxEpoch = Math.max(...keys.map(k => k.key_epoch));
             await regenerateRoomKey(roomId, maxEpoch + 1);
@@ -777,9 +794,17 @@ async function checkSession() {
 
             // Load E2E encryption private key from IndexedDB
             try {
+                console.log('[E2E] Loading private key from IndexedDB for user:', username);
                 privateKey = await loadPrivateKey(username);
-                if (!privateKey) {
-                    console.warn('[E2E] No private key found in IndexedDB');
+                if (privateKey) {
+                    console.log('[E2E] Private key loaded successfully');
+                } else {
+                    console.warn('[E2E] No private key found in IndexedDB for user:', username);
+                    // Diagnostic: check if IndexedDB has any keys at all
+                    try {
+                        const dbs = await indexedDB.databases();
+                        console.warn('[E2E] IndexedDB databases present:', dbs.map(d => d.name));
+                    } catch (_) { /* databases() not supported in all browsers */ }
                 }
             } catch (e) {
                 console.error('[E2E] Failed to load private key:', e);
@@ -853,10 +878,20 @@ async function initializeChatView() {
     await loadPlugins();  // Load plugins before connecting WebSocket
     connectWebSocket();
 
-    // Navigate to room from hash if present
+    // Navigate to a room: hash > last visited > first available
     const roomFromHash = getRoomFromHash();
     if (roomFromHash) {
         selectRoom(roomFromHash);
+    } else {
+        const lastRoom = getUiPref('lastRoom');
+        if (lastRoom && roomMeta[lastRoom]) {
+            selectRoom(lastRoom);
+        } else {
+            const firstRoom = Object.keys(roomMeta)[0];
+            if (firstRoom) {
+                selectRoom(firstRoom);
+            }
+        }
     }
 
     // Listen for hash changes (back/forward navigation, clicking room links)
@@ -1303,6 +1338,7 @@ async function selectRoom(roomId) {
 
     // Switching to a different room
     currentRoom = roomId;
+    setUiPref('lastRoom', roomId);
 
     // Update URL hash
     window.location.hash = `#/r/${encodeURIComponent(roomId)}`;
@@ -1365,6 +1401,99 @@ function hideSidebar() {
 
     sidebar.classList.remove('show');
     overlay.classList.remove('show');
+}
+
+function setupSidebarSwipe() {
+    if (window.innerWidth > 768) return;
+
+    const sidebar = document.querySelector('.sidebar');
+    const overlay = document.querySelector('.sidebar-overlay');
+    const EDGE_ZONE = 30; // px from left edge to start swipe-open
+    const THRESHOLD = 60; // px of travel to commit open/close
+    let touch = null; // { startX, startY, sidebarOpen }
+
+    document.addEventListener('touchstart', (e) => {
+        const x = e.touches[0].clientX;
+        const sidebarOpen = sidebar.classList.contains('show');
+
+        // Swipe-open: must start near left edge when sidebar is hidden
+        // Swipe-close: can start anywhere when sidebar is visible
+        if (!sidebarOpen && x > EDGE_ZONE) return;
+
+        touch = {
+            startX: x,
+            startY: e.touches[0].clientY,
+            sidebarOpen,
+            sidebarWidth: sidebar.offsetWidth,
+            moved: false,
+        };
+    }, { passive: true });
+
+    document.addEventListener('touchmove', (e) => {
+        if (!touch) return;
+
+        const dx = e.touches[0].clientX - touch.startX;
+        const dy = e.touches[0].clientY - touch.startY;
+
+        // On first significant movement, decide if this is a horizontal swipe
+        if (!touch.moved) {
+            if (Math.abs(dy) > Math.abs(dx) && Math.abs(dy) > 10) {
+                // Vertical scroll — bail out
+                touch = null;
+                return;
+            }
+            if (Math.abs(dx) > 10) {
+                touch.moved = true;
+                sidebar.classList.add('swiping');
+                overlay.classList.add('swiping');
+            }
+            return;
+        }
+
+        touch.lastDx = dx;
+        const w = touch.sidebarWidth;
+        let progress; // 0 = fully hidden, 1 = fully shown
+        if (touch.sidebarOpen) {
+            progress = Math.max(0, Math.min(1, 1 + dx / w));
+        } else {
+            progress = Math.max(0, Math.min(1, dx / w));
+        }
+
+        sidebar.style.left = `${-(1 - progress) * 100}%`;
+        overlay.style.opacity = progress;
+    }, { passive: true });
+
+    const endSwipe = () => {
+        if (!touch || !touch.moved) {
+            touch = null;
+            return;
+        }
+
+        sidebar.classList.remove('swiping');
+        overlay.classList.remove('swiping');
+        sidebar.style.left = '';
+        overlay.style.opacity = '';
+
+        const dx = touch.lastDx || 0;
+
+        if (touch.sidebarOpen) {
+            // Was open — close if swiped left enough
+            if (dx < -THRESHOLD) {
+                hideSidebar();
+            }
+        } else {
+            // Was closed — open if swiped right enough
+            if (dx > THRESHOLD) {
+                sidebar.classList.add('show');
+                overlay.classList.add('show');
+            }
+        }
+
+        touch = null;
+    };
+
+    document.addEventListener('touchend', endSwipe);
+    document.addEventListener('touchcancel', endSwipe);
 }
 
 // ---------------------------------------------------------------------------
@@ -1718,6 +1847,9 @@ document.addEventListener('DOMContentLoaded', () => {
     if (sidebarOverlay) {
         sidebarOverlay.addEventListener('click', toggleSidebar);
     }
+
+    // Swipe to open/close sidebar (mobile)
+    setupSidebarSwipe();
 
     // Add channel button
     const addChannelBtn = document.getElementById('add-channel-btn');

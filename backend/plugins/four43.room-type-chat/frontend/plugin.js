@@ -225,7 +225,8 @@ const RoomTypeChatPlugin = (function() {
                 ? msg.key_epoch
                 : ctx.getMessageEpoch(msg.content);
             const roomKeys = ctx.roomKeys();
-            const epochs = roomKeys[ctx.currentRoom()];
+            const currentRoomId = ctx.currentRoom();
+            const epochs = roomKeys[currentRoomId];
             const key = epochs && epochs[epoch];
             if (key) {
                 try {
@@ -235,13 +236,19 @@ const RoomTypeChatPlugin = (function() {
                     plaintext = '[encrypted message \u2014 cannot decrypt]';
                 }
             } else {
+                console.warn('[E2E] No key for message decryption:',
+                    'room:', currentRoomId,
+                    'needed epoch:', epoch,
+                    'available epochs:', epochs ? Object.keys(epochs) : 'none',
+                    'rooms with keys:', Object.keys(roomKeys));
                 plaintext = '[encrypted message \u2014 no key for this room]';
             }
         } else if (contentType === 'text' && ctx.isEncryptedMessage(msg.content)) {
             // Backward compatibility: old messages with ENC: prefix but content_type='text'
             const epoch = ctx.getMessageEpoch(msg.content);
             const roomKeys = ctx.roomKeys();
-            const epochs = roomKeys[ctx.currentRoom()];
+            const currentRoomId = ctx.currentRoom();
+            const epochs = roomKeys[currentRoomId];
             const key = epochs && epochs[epoch];
             if (key) {
                 try {
@@ -251,6 +258,10 @@ const RoomTypeChatPlugin = (function() {
                     plaintext = '[encrypted message \u2014 cannot decrypt]';
                 }
             } else {
+                console.warn('[E2E] No key for legacy message decryption:',
+                    'room:', currentRoomId,
+                    'needed epoch:', epoch,
+                    'available epochs:', epochs ? Object.keys(epochs) : 'none');
                 plaintext = '[encrypted message \u2014 no key for this room]';
             }
         }
@@ -378,15 +389,52 @@ const RoomTypeChatPlugin = (function() {
 
         messageDiv.appendChild(hoverBar);
 
-        // Mobile: tap message to toggle hover bar
-        messageDiv.addEventListener('click', (e) => {
+        // Mobile: long press to show hover bar (avoids accidental triggers)
+        let pressTimer = null;
+        let touchMoved = false;
+        let touchHandled = false;
+
+        messageDiv.addEventListener('touchstart', (e) => {
             if (e.target.closest('.message-hover-bar') ||
                 e.target.closest('.message-more-menu') ||
                 e.target.closest('.four43-reaction-btn') ||
                 e.target.closest('.message-edit-input')) {
                 return;
             }
-            // Dismiss other hover bars
+            touchMoved = false;
+            touchHandled = false;
+            pressTimer = setTimeout(() => {
+                if (!touchMoved) {
+                    touchHandled = true;
+                    document.querySelectorAll('.message-hover-bar.active').forEach(bar => {
+                        if (bar !== hoverBar) bar.classList.remove('active');
+                    });
+                    dismissMoreMenu();
+                    hoverBar.classList.add('active');
+                }
+            }, 400);
+        }, { passive: true });
+
+        messageDiv.addEventListener('touchmove', () => {
+            touchMoved = true;
+            clearTimeout(pressTimer);
+        }, { passive: true });
+
+        messageDiv.addEventListener('touchend', () => {
+            clearTimeout(pressTimer);
+            // Keep flag set briefly to suppress the synthetic click
+            setTimeout(() => { touchHandled = false; }, 300);
+        }, { passive: true });
+
+        // Desktop: click to show hover bar
+        messageDiv.addEventListener('click', (e) => {
+            if (touchHandled) return;
+            if (e.target.closest('.message-hover-bar') ||
+                e.target.closest('.message-more-menu') ||
+                e.target.closest('.four43-reaction-btn') ||
+                e.target.closest('.message-edit-input')) {
+                return;
+            }
             document.querySelectorAll('.message-hover-bar.active').forEach(bar => {
                 if (bar !== hoverBar) bar.classList.remove('active');
             });

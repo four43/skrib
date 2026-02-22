@@ -30,20 +30,30 @@ async function addStandardAuthenticator(page) {
     return { client, authenticatorId };
 }
 
-/** Register a user and wait for redirect to app.html. */
-async function registerUser(page, username) {
+/** Register a user with recovery passphrase and wait for redirect to app.html. */
+async function registerUser(page, username, passphrase = 'TestPass123!') {
     await page.goto('/register.html');
     await page.waitForLoadState('networkidle');
     await page.locator('#register-username').pressSequentially(username, { delay: 30 });
+    await page.locator('#recovery-passphrase').fill(passphrase);
+    await page.locator('#recovery-passphrase-confirm').fill(passphrase);
     await page.locator('#register-submit-button').click();
     await page.waitForURL(/.*app\.html/, { timeout: 20000 });
 }
 
-/** Login and wait for redirect to app.html. */
+/** Login and wait for redirect to app.html. Skips passphrase recovery if prompted. */
 async function loginUser(page) {
     await page.goto('/login.html');
     await page.waitForLoadState('networkidle');
     await page.locator('#login-button').click();
+    // If passphrase recovery prompt appears, skip it to test key regeneration path
+    const skipBtn = page.locator('#recovery-skip-button');
+    try {
+        await skipBtn.waitFor({ state: 'visible', timeout: 3000 });
+        await skipBtn.click();
+    } catch {
+        // No recovery prompt — proceed normally
+    }
     await page.waitForURL(/.*app\.html/, { timeout: 20000 });
 }
 
@@ -113,9 +123,9 @@ test.describe('Key Loss and Recovery', () => {
         await loginUser(page);
         await expect(page.locator('#chat-view')).toBeVisible({ timeout: 5000 });
 
-        // Should have generated a fresh key pair (Branch 4)
+        // Should have generated a fresh key pair (skipped passphrase recovery)
         expect(consoleMessages.some((m) =>
-            m.includes('[E2E] Private key lost. No PRF for recovery. Generating fresh key pair.')
+            m.includes('[E2E] No recovery method succeeded. Generating fresh key pair.')
         )).toBeTruthy();
 
         // Private key should be back in IndexedDB (new key)
