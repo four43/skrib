@@ -29,7 +29,7 @@ class RoomTypeTodoPlugin(Plugin):
 
     @property
     def name(self) -> str:
-        return "four43.room-type-todo"
+        return "Room: Todo List"
 
     @property
     def version(self) -> str:

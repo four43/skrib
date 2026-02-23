@@ -37,7 +37,7 @@ class RoomTypeChatPlugin(Plugin):
 
     @property
     def name(self) -> str:
-        return "four43.room-type-chat"
+        return "Room: Chat"
 
     @property
     def version(self) -> str:

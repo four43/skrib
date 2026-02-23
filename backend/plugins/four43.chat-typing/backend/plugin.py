@@ -21,7 +21,7 @@ class ChatTypingPlugin(Plugin):
 
     @property
     def name(self) -> str:
-        return "four43.chat-typing"
+        return "Typing Indicators"
 
     @property
     def version(self) -> str:

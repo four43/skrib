@@ -28,7 +28,7 @@ class MessageReactionsPlugin(Plugin):
 
     @property
     def name(self) -> str:
-        return "four43.message-reactions"
+        return "Message Reactions"
 
     @property
     def version(self) -> str:
