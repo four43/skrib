@@ -13,6 +13,7 @@ dependencies = [
     "fastapi",
     "uvicorn[standard]",
     "pydantic",
+    "python-multipart",
     "requests",
     "pywebpush",
     "py-vapid",

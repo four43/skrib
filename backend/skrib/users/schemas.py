@@ -21,7 +21,7 @@ class UpdatePreferencesRequest(BaseModel):
 
 
 class UpdatePreferencesResponse(BaseModel):
-    status: str
+    pass
 
 
 class PendingUser(BaseModel):
@@ -75,10 +75,6 @@ class UserUpdateRequest(BaseModel):
     color_scheme: Optional[str] = None
     nickname: Optional[str] = None
     role: Optional[str] = None  # Admin only
-
-
-class UsersListResponse(BaseModel):
-    users: List[UserInfo]
 
 
 # Legacy schemas - deprecated

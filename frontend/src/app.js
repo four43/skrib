@@ -122,6 +122,15 @@ window.registerRoomTypeHandler = function(config) {
         roomTypeHandlers[roomType] = config;
         console.log(`[Plugins] Registered room type handler for: ${roomType}`);
     }
+
+    // When a pluginId is provided, register a plugin namespace handler so
+    // messages arriving as "pluginId:action" are dispatched to onRoomAction.
+    if (config.pluginId && config.onRoomAction) {
+        pluginHandlers[config.pluginId] = (action, data) => {
+            config.onRoomAction(action, data);
+        };
+        console.log(`[Plugins] Registered plugin namespace handler for: ${config.pluginId}`);
+    }
 };
 
 function getRoomTypeHandler(roomId) {
@@ -588,7 +597,7 @@ async function loadRoomKeys(roomId) {
             return;
         }
 
-        const { keys } = await resp.json();
+        const keys = await resp.json();
         if (!keys || keys.length === 0) {
             console.log('[E2E] No room keys returned from server for:', roomId);
             return;
@@ -982,12 +991,12 @@ async function loadRooms() {
 
         // Update room metadata cache
         roomMeta = {};
-        data.rooms.forEach(room => {
+        data.forEach(room => {
             roomMeta[room.room_id] = room;
         });
 
-        const channels = data.rooms.filter(r => !r.is_dm);
-        const dms = data.rooms.filter(r => r.is_dm);
+        const channels = data.filter(r => !r.is_dm);
+        const dms = data.filter(r => r.is_dm);
 
         channels.forEach(room => {
             channelList.appendChild(createRoomItem(room));
@@ -1195,17 +1204,9 @@ function handleRoomMessage(action, data) {
             console.error(`[WS] Room error (${data.room_id}):`, data.message);
             break;
 
-        default: {
-            // Delegate to room type handler (message, new_message, etc.)
-            const roomId = data.room_id;
-            const handler = roomId ? getRoomTypeHandler(roomId) : null;
-            if (handler && handler.onRoomAction) {
-                handler.onRoomAction(action, data);
-            } else {
-                console.warn('[WS] Unknown room action:', action);
-            }
+        default:
+            console.warn('[WS] Unknown room action:', action);
             break;
-        }
     }
 }
 
@@ -1742,7 +1743,7 @@ async function loadDMUserList() {
         const data = await response.json();
 
         const userList = document.getElementById('dm-user-list');
-        const otherUsers = data.users.map(u => u.username).filter(u => u !== currentUsername);
+        const otherUsers = data.map(u => u.username).filter(u => u !== currentUsername);
 
         if (otherUsers.length === 0) {
             userList.innerHTML = '<p style="color: #999;">No other users to message</p>';

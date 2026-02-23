@@ -36,7 +36,7 @@ Plugins that aren't "room type" plugins should use their own namespace (`{plugin
 ### 6. Duplicated permission logic
 
 The todo plugin reimplements `_can_edit()` with its own room role + global role checks instead of using a shared helper from `rooms/services.py`.
-For
+
 ### 7. Plugin route prefix patterns
 
 - Chat plugin defines absolute paths: `/rooms/{room_id}/messages`

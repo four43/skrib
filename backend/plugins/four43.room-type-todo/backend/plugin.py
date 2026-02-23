@@ -2,7 +2,7 @@
 from typing import Optional
 
 from skrib.plugins.base import Plugin
-from skrib.rooms.services import get_room_members
+from skrib.permissions import can_edit_resource
 
 from . import services as services_module
 from .routes import router
@@ -29,7 +29,7 @@ class RoomTypeTodoPlugin(Plugin):
 
     @property
     def name(self) -> str:
-        return "room-type-todo"
+        return "four43.room-type-todo"
 
     @property
     def version(self) -> str:
@@ -79,20 +79,11 @@ class RoomTypeTodoPlugin(Plugin):
             description = msg.get("description", "").strip()
 
             if not title:
-                await ws.send_json({
-                    "type": "room:error",
-                    "room_id": room_id,
-                    "message": "Title is required",
-                })
+                await bus.send_error(ws, "Title is required", room_id=room_id)
                 return
 
             item = todo.add_item(username, title, description)
-
-            await bus.broadcast_to_room(room_id, {
-                "type": "room:todo_added",
-                "room_id": room_id,
-                "data": item,
-            })
+            await bus.broadcast_to_room(room_id, "todo_added", data=item)
 
         elif action == "todo_update":
             item_id = msg.get("item_id")
@@ -102,81 +93,32 @@ class RoomTypeTodoPlugin(Plugin):
 
             existing = todo.get_item(item_id)
             if not existing:
-                await ws.send_json({
-                    "type": "room:error",
-                    "room_id": room_id,
-                    "message": "Item not found",
-                })
+                await bus.send_error(ws, "Item not found", room_id=room_id)
                 return
 
             # Permission check: anyone can toggle done, but only creator/ops/admins can edit text
             if title is not None or description is not None:
-                if not self._can_edit(room_id, username, existing['username']):
-                    await ws.send_json({
-                        "type": "room:error",
-                        "room_id": room_id,
-                        "message": "Only the creator, room ops, or admins can edit this item",
-                    })
+                if not can_edit_resource(room_id, username, existing['username']):
+                    await bus.send_error(ws, "Only the creator, room ops, or admins can edit this item", room_id=room_id)
                     return
 
             updated = todo.update_item(item_id, title=title, description=description, done=done)
-
-            await bus.broadcast_to_room(room_id, {
-                "type": "room:todo_updated",
-                "room_id": room_id,
-                "data": updated,
-            })
+            await bus.broadcast_to_room(room_id, "todo_updated", data=updated)
 
         elif action == "todo_delete":
             item_id = msg.get("item_id")
             existing = todo.get_item(item_id)
 
             if not existing:
-                await ws.send_json({
-                    "type": "room:error",
-                    "room_id": room_id,
-                    "message": "Item not found",
-                })
+                await bus.send_error(ws, "Item not found", room_id=room_id)
                 return
 
-            if not self._can_edit(room_id, username, existing['username']):
-                await ws.send_json({
-                    "type": "room:error",
-                    "room_id": room_id,
-                    "message": "Only the creator, room ops, or admins can delete this item",
-                })
+            if not can_edit_resource(room_id, username, existing['username']):
+                await bus.send_error(ws, "Only the creator, room ops, or admins can delete this item", room_id=room_id)
                 return
 
             todo.delete_item(item_id)
-
-            await bus.broadcast_to_room(room_id, {
-                "type": "room:todo_deleted",
-                "room_id": room_id,
-                "data": {"id": item_id},
-            })
+            await bus.broadcast_to_room(room_id, "todo_deleted", data={"id": item_id})
 
         else:
-            await ws.send_json({
-                "type": "room:error",
-                "room_id": room_id or "",
-                "message": f"Unknown todo action: {action}",
-            })
-
-    def _can_edit(self, room_id: str, username: str, item_username: str) -> bool:
-        """Check if user can edit/delete an item."""
-        if username == item_username:
-            return True
-
-        from skrib.rooms.services import get_room_role
-        role = get_room_role(room_id, username)
-        if role in ('owner', 'op'):
-            return True
-
-        from skrib.database import get_db
-        with get_db() as conn:
-            cursor = conn.execute('SELECT role FROM users WHERE username = ?', (username,))
-            row = cursor.fetchone()
-            if row and row['role'] in ('admin', 'moderator'):
-                return True
-
-        return False
+            await bus.send_error(ws, f"Unknown todo action: {action}", room_id=room_id or "")

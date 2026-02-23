@@ -9,7 +9,7 @@ from pydantic import BaseModel
 from .avatar import get_or_generate_avatar
 from .schemas import (
     UpdatePendingUserRequest,
-    UsersListResponse,
+    UserInfo,
     UserProfile,
     UserUpdateRequest,
 )
@@ -29,14 +29,13 @@ router = APIRouter(prefix="/users", tags=["users"])
 
 # --- User management (admin/moderator) ---
 
-@router.get("", response_model=UsersListResponse)
+@router.get("", response_model=list[UserInfo])
 async def list_all_users(
     status: Optional[str] = None,
     _: str = Depends(require_auth)
 ):
     """Get list of all users, optionally filtered by status (e.g., ?status=pending)."""
-    users = get_all_users(status=status)
-    return UsersListResponse(users=users)
+    return get_all_users(status=status)
 
 
 @router.patch("/pending/{approval_code}")
@@ -53,7 +52,7 @@ async def update_pending_user(
         if not reject_user(approval_code):
             raise HTTPException(status_code=404, detail="Pending user not found")
 
-    return {"status": "ok", "approval_code": approval_code, "action": request.status}
+    return {"approval_code": approval_code, "action": request.status}
 
 
 @router.delete("/{username}")
@@ -64,7 +63,7 @@ async def delete_user(username: str, _: str = Depends(require_admin)):
             status_code=400,
             detail="Cannot delete user (not found or last admin)",
         )
-    return {"status": "ok"}
+    return {}
 
 
 # --- Avatar ---
@@ -173,7 +172,7 @@ async def update_user(
         if not set_user_role(target_username, updates.role):
             raise HTTPException(status_code=404, detail="User not found")
 
-    return {"status": "ok"}
+    return {}
 
 
 # --- Preferences ---

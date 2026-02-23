@@ -4,7 +4,7 @@
  * Covers: registration with/without PRF, cross-browser key recovery,
  * lost-key warning, and retroactive PRF backup upload.
  */
-import { test as base, expect } from '@playwright/test';
+import { test as base, expect } from './fixtures.js';
 
 /** Generate a unique username that fits the 15-char max. */
 function uniqueName(prefix) {
@@ -48,13 +48,15 @@ async function addStandardAuthenticator(page) {
 }
 
 /** Register a user with recovery passphrase and wait for redirect to app.html. */
-async function registerUser(page, username, passphrase = 'TestPass123!') {
+async function registerUser(page, username, passphrase = 'This-is-a-valid-test-passphrase-32!') {
     await page.goto('/register.html');
     await page.waitForLoadState('networkidle');
     await page.locator('#register-username').pressSequentially(username, { delay: 30 });
     await page.locator('#recovery-passphrase').fill(passphrase);
     await page.locator('#recovery-passphrase-confirm').fill(passphrase);
     await page.locator('#register-submit-button').click();
+    await page.waitForURL(/.*enroll-passkey\.html/, { timeout: 5000 });
+    await page.locator('#enroll-passkey-button').click();
     await page.waitForURL(/.*app\.html/, { timeout: 20000 });
 }
 
@@ -66,12 +68,12 @@ async function loginUser(page) {
     // If passphrase recovery prompt appears, skip it
     const skipBtn = page.locator('#recovery-skip-button');
     try {
-        await skipBtn.waitFor({ state: 'visible', timeout: 3000 });
+        await skipBtn.waitFor({ state: 'visible', timeout: 1000 });
         await skipBtn.click();
     } catch {
         // No recovery prompt (e.g. PRF recovered the key already) — proceed normally
     }
-    await page.waitForURL(/.*app\.html/, { timeout: 20000 });
+    await page.waitForURL(/.*app\.html/, { timeout: 1000 });
 }
 
 /** Fetch the encryption key data from the server API. */

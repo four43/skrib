@@ -13,10 +13,14 @@ test.describe('User Registration', () => {
     await page.waitForLoadState('networkidle');
 
     await page.locator('#register-username').pressSequentially(username, { delay: 30 });
-    await page.locator('#recovery-passphrase').fill('TestPass123!');
-    await page.locator('#recovery-passphrase-confirm').fill('TestPass123!');
+    await page.locator('#recovery-passphrase').fill('This-is-a-valid-test-passphrase-32!');
+    await page.locator('#recovery-passphrase-confirm').fill('This-is-a-valid-test-passphrase-32!');
     await page.locator('#register-submit-button').click();
 
+    // Form POST redirects to enroll-passkey page
+    await page.waitForURL(/.*enroll-passkey\.html/, { timeout: 5000 });
+    await expect(page.locator('#enroll-username')).not.toBeEmpty();
+    await page.locator('#enroll-passkey-button').click();
     await page.waitForURL(/.*app\.html/, { timeout: 20000 });
 
     // Session is stored
@@ -35,9 +39,12 @@ test.describe('User Registration', () => {
     await page.goto('/register.html');
     await page.waitForLoadState('networkidle');
     await page.locator('#register-username').pressSequentially(username, { delay: 30 });
-    await page.locator('#recovery-passphrase').fill('TestPass123!');
-    await page.locator('#recovery-passphrase-confirm').fill('TestPass123!');
+    await page.locator('#recovery-passphrase').fill('This-is-a-valid-test-passphrase-32!');
+    await page.locator('#recovery-passphrase-confirm').fill('This-is-a-valid-test-passphrase-32!');
     await page.locator('#register-submit-button').click();
+    await page.waitForURL(/.*enroll-passkey\.html/, { timeout: 5000 });
+    await expect(page.locator('#enroll-username')).not.toBeEmpty();
+    await page.locator('#enroll-passkey-button').click();
     await page.waitForURL(/.*app\.html/, { timeout: 20000 });
 
     // Clear session
@@ -50,7 +57,7 @@ test.describe('User Registration', () => {
     // Login
     await page.goto('/login.html');
     await page.locator('#login-button').click();
-    await page.waitForURL(/.*app\.html/, { timeout: 15000 });
+    await page.waitForURL(/.*app\.html/, { timeout: 5000 });
 
     const storedUsername = await page.evaluate(() => localStorage.getItem('username'));
     expect(storedUsername).toBe(username);
@@ -65,9 +72,12 @@ test.describe('Auth Flows', () => {
     await page.goto('/register.html');
     await page.waitForLoadState('networkidle');
     await page.locator('#register-username').pressSequentially(username, { delay: 30 });
-    await page.locator('#recovery-passphrase').fill('TestPass123!');
-    await page.locator('#recovery-passphrase-confirm').fill('TestPass123!');
+    await page.locator('#recovery-passphrase').fill('This-is-a-valid-test-passphrase-32!');
+    await page.locator('#recovery-passphrase-confirm').fill('This-is-a-valid-test-passphrase-32!');
     await page.locator('#register-submit-button').click();
+    await page.waitForURL(/.*enroll-passkey\.html/, { timeout: 5000 });
+    await expect(page.locator('#enroll-username')).not.toBeEmpty();
+    await page.locator('#enroll-passkey-button').click();
     await page.waitForURL(/.*app\.html/, { timeout: 20000 });
 
     // Clear session
@@ -80,10 +90,10 @@ test.describe('Auth Flows', () => {
     // Login
     await page.goto('/login.html');
     await page.locator('#login-button').click();
-    await page.waitForURL(/.*app\.html/, { timeout: 15000 });
+    await page.waitForURL(/.*app\.html/, { timeout: 1000 });
 
     // Verify chat UI loaded
-    await expect(page.locator('#chat-view')).toBeVisible({ timeout: 5000 });
+    await expect(page.locator('#chat-view')).toBeVisible({ timeout: 1000 });
     const storedUsername = await page.evaluate(() => localStorage.getItem('username'));
     expect(storedUsername).toBe(username);
   });

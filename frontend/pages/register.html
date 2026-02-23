@@ -20,8 +20,8 @@
     <!-- Register View -->
     <div id="auth-view" class="auth-container">
         <div class="auth-box">
-            <form id="register-form" novalidate>
-                <h1>📝 Register</h1>
+            <form id="register-form" action="/api/auth/register/step1" method="POST" novalidate>
+                <h1>Register</h1>
                 <p>Create a new account</p>
 
                 <div id="register-status"></div>
@@ -32,13 +32,13 @@
                            placeholder="e.g. cool_user42"
                            required minlength="4" maxlength="15"
                            pattern="[a-zA-Z0-9_]{4,15}"
-                           title="4–15 characters: letters, numbers, and underscores only"
+                           title="4-15 characters: letters, numbers, and underscores only"
                            autocapitalize="none"
                            autocomplete="username"
                            autocorrect="off"
                            spellcheck="false"
                            autofocus>
-                    <small class="form-hint-small">4–15 characters: letters, numbers, underscores only</small>
+                    <small class="form-hint-small">4-15 characters: letters, numbers, underscores only</small>
                 </div>
 
                 <div class="form-group">
@@ -51,24 +51,18 @@
                 </div>
                 <div class="form-group">
                     <label for="recovery-passphrase-confirm">Confirm Password</label>
-                    <input type="password" id="recovery-passphrase-confirm" name="password_confirm"
+                    <input type="password" id="recovery-passphrase-confirm"
                            placeholder="Re-enter password"
                            required
                            autocomplete="new-password">
                 </div>
 
+                <input type="hidden" name="invite" id="invite-token-field">
+
                 <div id="passphrase-status"></div>
                 <button type="submit" id="register-submit-button">Register</button>
                 <button type="button" id="go-to-login-button" class="link-button">Already registered? Sign in</button>
             </form>
-
-            <div id="crypto-debug-panel" class="crypto-debug" hidden>
-                <h3>Crypto Debug</h3>
-                <table id="crypto-debug-table">
-                    <tbody></tbody>
-                </table>
-                <button type="button" id="debug-continue-button" class="link-button" hidden>Continue to chat &rarr;</button>
-            </div>
         </div>
     </div>
 

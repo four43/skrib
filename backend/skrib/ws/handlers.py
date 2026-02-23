@@ -2,6 +2,7 @@
 from fastapi import WebSocket
 
 from ..plugins import registry
+from ..plugins.base import PluginBus
 from ..rooms.services import (
     room_exists,
     is_dm,
@@ -80,7 +81,8 @@ async def handle_room(bus, ws: WebSocket, username: str, msg: dict):
         room_type = get_room_type(room_id)
         plugin = registry.get_plugin_for_room_type(room_type)
         if plugin:
-            await plugin.handle_room_action(bus, ws, username, msg, action)
+            room_bus = PluginBus(bus, plugin.id)
+            await plugin.handle_room_action(room_bus, ws, username, msg, action)
         else:
             await ws.send_json({
                 "type": "room:error",

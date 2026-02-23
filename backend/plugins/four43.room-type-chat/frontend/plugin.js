@@ -23,6 +23,7 @@ const RoomTypeChatPlugin = (function() {
         console.log('[RoomTypeChat] Initializing...');
 
         ctx.registerRoomTypeHandler({
+            pluginId: PLUGIN_ID,
             roomTypes: ['chat'],
             onRoomSelected,
             onRoomLeft,
@@ -131,6 +132,11 @@ const RoomTypeChatPlugin = (function() {
                 if (data.room_id !== ctx.currentRoom()) {
                     showNotification(data);
                 }
+                break;
+
+            case 'update':
+                // Room list changed (e.g. sidebar badge refresh)
+                ctx.loadRooms();
                 break;
 
             case 'message_edited':
@@ -674,9 +680,9 @@ const RoomTypeChatPlugin = (function() {
             );
             const data = await response.json();
 
-            if (data.messages && data.messages.length > 0) {
-                console.log(`[RoomTypeChat] Loaded ${data.messages.length} messages from history`);
-                for (const msg of data.messages) {
+            if (data && data.length > 0) {
+                console.log(`[RoomTypeChat] Loaded ${data.length} messages from history`);
+                for (const msg of data) {
                     await displayMessage(msg);
                 }
             } else {

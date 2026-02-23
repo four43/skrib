@@ -4,9 +4,9 @@
  * Covers: registration stores passphrase-wrapped key, cross-domain key recovery
  * via passphrase, wrong passphrase handling, skip fallback, and message continuity.
  */
-import { test as base, expect } from '@playwright/test';
+import { test as base, expect } from './fixtures.js';
 
-const TEST_PASSPHRASE = 'TestPass123!';
+const TEST_PASSPHRASE = 'This-is-a-valid-test-passphrase-32!';
 
 /** Generate a unique username that fits the 15-char max. */
 function uniqueName(prefix) {
@@ -38,6 +38,8 @@ async function registerUser(page, username, passphrase = TEST_PASSPHRASE) {
     await page.locator('#recovery-passphrase').fill(passphrase);
     await page.locator('#recovery-passphrase-confirm').fill(passphrase);
     await page.locator('#register-submit-button').click();
+    await page.waitForURL(/.*enroll-passkey\.html/, { timeout: 5000 });
+    await page.locator('#enroll-passkey-button').click();
     await page.waitForURL(/.*app\.html/, { timeout: 20000 });
 }
 
@@ -268,29 +270,29 @@ test.describe('Passphrase Key Recovery', () => {
         const roomName = `room-${Math.random().toString(36).slice(2, 8)}`;
         await page.locator('#new-room-input').pressSequentially(roomName, { delay: 20 });
         await page.locator('#create-room-submit-btn').click();
-        await expect(page.locator('#chat-header-name')).not.toHaveText('[No room selected]', { timeout: 10000 });
+        await expect(page.locator('#chat-header-name')).not.toHaveText('[No room selected]', { timeout: 1000 });
 
         const originalMessage = `secret-${Math.random().toString(36).slice(2, 8)}`;
         await page.locator('#message-input').fill(originalMessage);
         await page.locator('#send-button').click();
-        await expect(page.locator('#messages')).toContainText(originalMessage, { timeout: 5000 });
+        await expect(page.locator('#messages')).toContainText(originalMessage, { timeout: 1000 });
 
         // Destroy local data
         await clearLocalData(page);
 
         // Login and recover via passphrase
         await loginWithPassphrase(page, TEST_PASSPHRASE);
-        await expect(page.locator('#chat-view')).toBeVisible({ timeout: 5000 });
+        await expect(page.locator('#chat-view')).toBeVisible({ timeout: 1000 });
 
         // Select the same room
         await page.locator(`.room-item:has-text("${roomName}")`).click();
-        await expect(page.locator('#chat-header-name')).toContainText(roomName, { timeout: 5000 });
+        await expect(page.locator('#chat-header-name')).toContainText(roomName, { timeout: 1000 });
 
         // Wait for messages and room keys to load
         await page.waitForTimeout(1000);
 
         // Old message should still be readable (same key recovered)
-        await expect(page.locator('#messages')).toContainText(originalMessage, { timeout: 5000 });
+        await expect(page.locator('#messages')).toContainText(originalMessage, { timeout: 1000 });
 
         // No system warning about key regeneration
         const systemMessages = await page.locator('.system-message').allTextContents();

@@ -26,6 +26,7 @@ const RoomTypeTodoPlugin = (function() {
         loadStylesheet();
 
         ctx.registerRoomTypeHandler({
+            pluginId: PLUGIN_ID,
             roomTypes: ['todo'],
             onRoomSelected,
             onRoomLeft,
@@ -110,8 +111,8 @@ const RoomTypeTodoPlugin = (function() {
             );
             const data = await response.json();
 
-            if (data.items) {
-                items = data.items;
+            if (data) {
+                items = data;
                 renderItems();
             }
         } catch (error) {

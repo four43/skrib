@@ -28,7 +28,6 @@ async def search_all_messages(
     )
 
     return SearchMessagesResponse(
-        status="ok",
         messages=messages,
         total=total
     )

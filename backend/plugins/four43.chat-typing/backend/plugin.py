@@ -27,8 +27,9 @@ class ChatTypingPlugin(Plugin):
     def version(self) -> str:
         return "1.0.0"
 
-    def register_ws_namespace(self, bus):
-        """Register the typing namespace handler."""
+    def get_ws_handler(self):
+        """Return handler for four43.chat-typing:* namespace."""
+        typing_state = self.typing_state
 
         async def handle_typing(bus, ws, username, msg):
             """Handle four43.chat-typing:* messages from clients."""
@@ -36,52 +37,38 @@ class ChatTypingPlugin(Plugin):
             room_id = msg.get("room_id")
 
             if not room_id:
-                await ws.send_json({
-                    "type": "four43.chat-typing:error",
-                    "message": "room_id required"
-                })
+                await bus.send_error(ws, "room_id required")
                 return
 
             if action == "start":
                 # User started typing
-                if room_id not in self.typing_state:
-                    self.typing_state[room_id] = {}
+                if room_id not in typing_state:
+                    typing_state[room_id] = {}
 
-                self.typing_state[room_id][username] = time.time()
+                typing_state[room_id][username] = time.time()
 
                 # Broadcast to other users in the room (excluding sender)
                 await bus.broadcast_to_room(
-                    room_id,
-                    {
-                        "type": "four43.chat-typing:user_typing",
-                        "room_id": room_id,
-                        "username": username,
-                        "is_typing": True
-                    },
-                    exclude_user=username
+                    room_id, "user_typing",
+                    username=username, is_typing=True,
+                    exclude_user=username,
                 )
 
             elif action == "stop":
                 # User stopped typing
-                if room_id in self.typing_state:
-                    self.typing_state[room_id].pop(username, None)
-                    if not self.typing_state[room_id]:
-                        del self.typing_state[room_id]
+                if room_id in typing_state:
+                    typing_state[room_id].pop(username, None)
+                    if not typing_state[room_id]:
+                        del typing_state[room_id]
 
                 # Broadcast to other users in the room
                 await bus.broadcast_to_room(
-                    room_id,
-                    {
-                        "type": "four43.chat-typing:user_typing",
-                        "room_id": room_id,
-                        "username": username,
-                        "is_typing": False
-                    },
-                    exclude_user=username
+                    room_id, "user_typing",
+                    username=username, is_typing=False,
+                    exclude_user=username,
                 )
 
-        # Register the namespace
-        bus.register_namespace("four43.chat-typing", handle_typing)
+        return handle_typing
 
     def get_frontend_assets(self) -> dict:
         """Return frontend assets."""

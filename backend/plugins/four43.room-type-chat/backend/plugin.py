@@ -2,7 +2,7 @@
 from typing import Optional
 
 from skrib.plugins.base import Plugin
-from skrib.database import get_db
+from skrib.permissions import get_global_role
 from skrib.rooms.services import (
     get_room_members,
     get_notify_level,
@@ -37,7 +37,7 @@ class RoomTypeChatPlugin(Plugin):
 
     @property
     def name(self) -> str:
-        return "room-type-chat"
+        return "four43.room-type-chat"
 
     @property
     def version(self) -> str:
@@ -67,7 +67,11 @@ class RoomTypeChatPlugin(Plugin):
         '''
 
     async def on_startup(self):
-        """Create indexes on plugin database."""
+        """Create indexes on plugin database and inject bus into routes."""
+        # Inject plugin_bus so HTTP routes can broadcast under this plugin's namespace
+        from . import routes as routes_module
+        routes_module.plugin_bus = self.bus
+
         with self.get_plugin_db() as conn:
             conn.execute('''
                 CREATE INDEX IF NOT EXISTS idx_messages_room_id
@@ -122,15 +126,6 @@ class RoomTypeChatPlugin(Plugin):
 
     # --- WebSocket handler ---
 
-    def _is_admin(self, username: str) -> bool:
-        """Check if a user has the admin role."""
-        with get_db() as conn:
-            cursor = conn.execute(
-                'SELECT role FROM users WHERE username = ?', (username,)
-            )
-            row = cursor.fetchone()
-            return row['role'] == 'admin' if row else False
-
     async def handle_room_action(self, bus, ws, username: str, msg: dict, action: str):
         """Handle room:message (and future chat actions) for chat rooms."""
         room_id = msg.get("room_id")
@@ -144,25 +139,19 @@ class RoomTypeChatPlugin(Plugin):
             message_data = room.add_message(username, content, content_type, key_epoch)
 
             # Broadcast to all sockets subscribed to this room
-            await bus.broadcast_to_room(room_id, {
-                "type": "room:message",
-                "room_id": room_id,
-                "data": message_data,
-            })
+            await bus.broadcast_to_room(room_id, "message", data=message_data)
 
             # Notify other members (user-scoped) for sidebar badges / notifications
             members = get_room_members(room_id)
             for member in members:
                 if member != username:
                     level = get_notify_level(room_id, member)
-                    event_type = "room:new_message" if level == "all" else "room:update"
+                    notify_action = "new_message" if level == "all" else "update"
                     unread_count = get_unread_count_for_room(room_id, member)
-                    await bus.notify_user(member, {
-                        "type": event_type,
-                        "room_id": room_id,
-                        "sender": username,
-                        "unread_count": unread_count,
-                    })
+                    await bus.notify_user(
+                        member, notify_action,
+                        room_id=room_id, sender=username, unread_count=unread_count,
+                    )
 
         elif action == "edit_message":
             message_id = msg.get("message_id")
@@ -173,40 +162,20 @@ class RoomTypeChatPlugin(Plugin):
             room = services_module.ChatRoom(room_id)
             try:
                 result = room.edit_message(message_id, username, content, content_type, key_epoch)
-                await bus.broadcast_to_room(room_id, {
-                    "type": "room:message_edited",
-                    "room_id": room_id,
-                    "data": result,
-                })
+                await bus.broadcast_to_room(room_id, "message_edited", data=result)
             except (ValueError, PermissionError) as e:
-                await ws.send_json({
-                    "type": "room:error",
-                    "room_id": room_id,
-                    "message": str(e),
-                })
+                await bus.send_error(ws, str(e), room_id=room_id)
 
         elif action == "delete_message":
             message_id = msg.get("message_id")
-            is_admin = self._is_admin(username)
+            is_admin = get_global_role(username) == 'admin'
 
             room = services_module.ChatRoom(room_id)
             try:
                 result = room.delete_message(message_id, username, is_admin=is_admin)
-                await bus.broadcast_to_room(room_id, {
-                    "type": "room:message_deleted",
-                    "room_id": room_id,
-                    "data": result,
-                })
+                await bus.broadcast_to_room(room_id, "message_deleted", data=result)
             except (ValueError, PermissionError) as e:
-                await ws.send_json({
-                    "type": "room:error",
-                    "room_id": room_id,
-                    "message": str(e),
-                })
+                await bus.send_error(ws, str(e), room_id=room_id)
 
         else:
-            await ws.send_json({
-                "type": "room:error",
-                "room_id": room_id or "",
-                "message": f"Unknown chat action: {action}",
-            })
+            await bus.send_error(ws, f"Unknown chat action: {action}", room_id=room_id or "")

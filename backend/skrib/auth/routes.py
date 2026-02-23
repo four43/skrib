@@ -1,6 +1,8 @@
 """Authentication API routes."""
-from fastapi import APIRouter, HTTPException, Depends, Query
+from fastapi import APIRouter, Form, HTTPException, Depends, Query
+from fastapi.responses import RedirectResponse
 from typing import Optional
+from urllib.parse import urlencode
 
 from .schemas import (
     RegistrationBeginResponse,
@@ -12,6 +14,7 @@ from .schemas import (
     SessionResponse,
     StoreEncryptionKeyRequest,
     EncryptionKeyResponse,
+    RegistrationTokenInfoResponse,
 )
 from .services import (
     generate_challenge,
@@ -23,12 +26,59 @@ from .services import (
     get_user_by_credential,
     create_session_token,
     validate_username,
+    is_username_taken,
+    create_registration_token,
+    get_registration_token_info,
 )
 from ..dependencies import get_username_from_token, require_auth
 from ..database import get_db
 from ..config import WEBAUTHN_RP_NAME, WEBAUTHN_RP_ID
 
 router = APIRouter(prefix="/auth", tags=["authentication"])
+
+
+@router.post("/register/step1")
+async def register_step1(
+    username: str = Form(...),
+    password: str = Form(...),
+    invite: Optional[str] = Form(None),
+):
+    """Step 1: Accept form POST with username + passphrase.
+
+    This is a traditional form POST so password managers (Bitwarden, 1Password)
+    detect the submission and offer to save the credentials.  On success we
+    redirect to the passkey-enrollment page.
+    """
+    if not is_registration_allowed(invite_token=invite):
+        mode = get_registration_mode()
+        if mode == 'closed':
+            raise HTTPException(status_code=403, detail="Registration is currently closed")
+        elif mode == 'invite_only':
+            raise HTTPException(status_code=403, detail="Registration requires a valid invite link")
+        else:
+            raise HTTPException(status_code=403, detail="Registration is not available")
+
+    username_error = validate_username(username)
+    if username_error:
+        raise HTTPException(status_code=400, detail=username_error)
+
+    if is_username_taken(username):
+        raise HTTPException(status_code=400, detail="Username is already taken")
+
+    token = create_registration_token(username)
+    params = {'token': token}
+    if invite:
+        params['invite'] = invite
+    return RedirectResponse(url=f"/enroll-passkey.html?{urlencode(params)}", status_code=303)
+
+
+@router.get("/register/token-info", response_model=RegistrationTokenInfoResponse)
+async def register_token_info(token: str = Query(...)):
+    """Return the username associated with a step-1 registration token."""
+    info = get_registration_token_info(token)
+    if not info:
+        raise HTTPException(status_code=404, detail="Invalid or expired registration token")
+    return RegistrationTokenInfoResponse(username=info['username'])
 
 
 @router.get("/register/begin", response_model=RegistrationBeginResponse)
@@ -121,7 +171,6 @@ async def complete_login(request: LoginCompleteRequest):
     session_token = create_session_token(user['username'])
 
     return LoginCompleteResponse(
-        status='ok',
         session_token=session_token,
         username=user['username'],
         role=user['role']
@@ -167,7 +216,7 @@ async def store_encryption_key(
             params,
         )
         conn.commit()
-    return {"status": "ok"}
+    return {}
 
 
 @router.get("/encryption-key/{target_username}", response_model=EncryptionKeyResponse)

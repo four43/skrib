@@ -14,6 +14,5 @@ class Message(BaseModel):
 
 
 class SearchMessagesResponse(BaseModel):
-    status: str
     messages: List[Message]
     total: int

@@ -45,6 +45,38 @@ def validate_username(username: str) -> Optional[str]:
     return None
 
 
+def is_username_taken(username: str) -> bool:
+    """Check if a username is already registered."""
+    with get_db() as conn:
+        cursor = conn.execute('SELECT 1 FROM users WHERE username = ?', (username,))
+        return cursor.fetchone() is not None
+
+
+def create_registration_token(username: str) -> str:
+    """Create a short-lived token that ties a validated username to step 2."""
+    token = secrets.token_urlsafe(32)
+    with get_db() as conn:
+        conn.execute('''
+            INSERT INTO challenges (challenge, type, username, timestamp)
+            VALUES (?, ?, ?, ?)
+        ''', (token, 'registration_step1', username, datetime.now().isoformat()))
+        conn.commit()
+    return token
+
+
+def get_registration_token_info(token: str) -> Optional[dict]:
+    """Look up a step-1 registration token. Returns {'username': ...} or None."""
+    with get_db() as conn:
+        cursor = conn.execute('''
+            SELECT username FROM challenges
+            WHERE challenge = ? AND type = 'registration_step1'
+        ''', (token,))
+        row = cursor.fetchone()
+        if row:
+            return {'username': row['username']}
+    return None
+
+
 def generate_challenge() -> str:
     """Generate a WebAuthn challenge."""
     return base64.urlsafe_b64encode(secrets.token_bytes(32)).decode('utf-8').rstrip('=')
@@ -138,17 +170,20 @@ def create_pending_user(username: str, credential_id: str, public_key: str,
 
     now = datetime.now().isoformat()
 
+    # Read user counts to pick a color (read-only, no write lock)
     with get_db() as conn:
-        # Check if this is the first user
         cursor = conn.execute("SELECT COUNT(*) as count FROM users WHERE status = 'active'")
         user_count = cursor.fetchone()['count']
 
-        # Pick a color from the palette based on total user count (round-robin)
         cursor = conn.execute("SELECT COUNT(*) as count FROM users")
         total_users = cursor.fetchone()['count']
-        color = USER_COLOR_PALETTE[total_users % len(USER_COLOR_PALETTE)]
-        avatar_data = generate_identicon(username, color)
 
+    # Generate identicon outside DB connection to avoid holding a write lock
+    color = USER_COLOR_PALETTE[total_users % len(USER_COLOR_PALETTE)]
+    avatar_data = generate_identicon(username, color)
+
+    # Short write-only transactions below
+    with get_db() as conn:
         if user_count == 0:
             # First user - auto-approve as admin
             conn.execute('''

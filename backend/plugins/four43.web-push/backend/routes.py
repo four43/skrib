@@ -31,11 +31,11 @@ async def subscribe(body: SubscribeRequest, username: str = Depends(require_auth
         raise HTTPException(status_code=400, detail="Missing p256dh or auth keys")
 
     services.save_subscription(username, body.endpoint, p256dh, auth)
-    return {"ok": True}
+    return {}
 
 
 @router.delete("/subscribe")
 async def unsubscribe(body: SubscribeRequest, username: str = Depends(require_auth)):
     """Remove a push subscription for the authenticated user."""
     services.remove_subscription(username, body.endpoint)
-    return {"ok": True}
+    return {}

@@ -19,40 +19,40 @@ def get_user_preferences(username: str) -> Optional[Dict]:
 
 def update_user_preferences(username: str, color: Optional[str] = None, theme_name: Optional[str] = None, color_scheme: Optional[str] = None, nickname: Optional[str] = None) -> bool:
     """Update user preferences on the users table."""
-    with get_db() as conn:
-        updates = []
-        params = []
-        if color is not None:
-            updates.append('color = ?')
-            params.append(color)
-        if theme_name is not None:
-            # Empty string means "use server default"
-            updates.append('theme_name = ?')
-            params.append(theme_name if theme_name != '' else None)
-        if color_scheme is not None:
-            # Validate value
-            updates.append('color_scheme = ?')
-            params.append(color_scheme if color_scheme in ('auto', 'light', 'dark') else None)
-        if nickname is not None:
-            # Empty string means "clear nickname, use username"
-            trimmed = nickname.strip()
-            updates.append('nickname = ?')
-            params.append(trimmed if trimmed and len(trimmed) <= 32 else None)
+    updates = []
+    params = []
+    if color is not None:
+        updates.append('color = ?')
+        params.append(color)
+    if theme_name is not None:
+        # Empty string means "use server default"
+        updates.append('theme_name = ?')
+        params.append(theme_name if theme_name != '' else None)
+    if color_scheme is not None:
+        # Validate value
+        updates.append('color_scheme = ?')
+        params.append(color_scheme if color_scheme in ('auto', 'light', 'dark') else None)
+    if nickname is not None:
+        # Empty string means "clear nickname, use username"
+        trimmed = nickname.strip()
+        updates.append('nickname = ?')
+        params.append(trimmed if trimmed and len(trimmed) <= 32 else None)
 
-        if color is not None:
-            # Regenerate identicon when color changes
-            avatar_data = generate_identicon(username, color)
-            updates.append('avatar_data = ?')
-            params.append(avatar_data)
+    if color is not None:
+        # Regenerate identicon outside DB connection to avoid holding a write lock
+        avatar_data = generate_identicon(username, color)
+        updates.append('avatar_data = ?')
+        params.append(avatar_data)
 
-        if updates:
-            params.append(username)
+    if updates:
+        params.append(username)
+        with get_db() as conn:
             conn.execute(
                 f'UPDATE users SET {", ".join(updates)} WHERE username = ?',
                 params
             )
             conn.commit()
-        return True
+    return True
 
 
 def get_all_user_preferences() -> Dict[str, Dict]:

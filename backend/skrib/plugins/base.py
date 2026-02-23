@@ -4,10 +4,48 @@ import sqlite3
 import threading
 from contextlib import contextmanager
 from pathlib import Path
-from typing import Optional, Any
+from typing import Optional, Any, Callable
 from abc import ABC, abstractmethod
 
 from ..config import DB_DIR
+
+
+class PluginBus:
+    """Scoped bus that auto-prepends the plugin namespace to message types.
+
+    Prevents plugins from accidentally sending messages outside their namespace.
+    All outgoing messages get type ``{namespace}:{action}`` automatically.
+    """
+
+    def __init__(self, bus, namespace: str):
+        self._bus = bus
+        self._namespace = namespace
+
+    async def broadcast_to_room(self, room_id: str, action: str, *, exclude_user: str = None, **fields):
+        """Broadcast ``{namespace}:{action}`` to all sockets in a room.
+
+        Extra keyword arguments are merged into the message dict.
+        """
+        message = {"type": f"{self._namespace}:{action}", "room_id": room_id, **fields}
+        await self._bus.broadcast_to_room(room_id, message, exclude_user=exclude_user)
+
+    async def notify_user(self, username: str, action: str, **fields):
+        """Send ``{namespace}:{action}`` to all of a user's sockets."""
+        message = {"type": f"{self._namespace}:{action}", **fields}
+        await self._bus.notify_user(username, message)
+
+    async def notify_all_users(self, action: str, **fields):
+        """Send ``{namespace}:{action}`` to every connected user."""
+        message = {"type": f"{self._namespace}:{action}", **fields}
+        await self._bus.notify_all_users(message)
+
+    async def send_error(self, ws, message: str, *, room_id: str = ""):
+        """Send a namespaced error to a single socket."""
+        await ws.send_json({
+            "type": f"{self._namespace}:error",
+            "room_id": room_id,
+            "message": message,
+        })
 
 # Plugin databases directory
 PLUGINS_DB_DIR = DB_DIR / "plugins"
@@ -37,6 +75,7 @@ class Plugin(ABC):
     """
 
     def __init__(self):
+        self.bus = None  # Set by core during startup to PluginBus(ws.bus, plugin.id)
         self.logger = logging.getLogger(f"plugin.{self.id}")
         if not self.logger.handlers:
             handler = logging.StreamHandler()
@@ -127,14 +166,21 @@ class Plugin(ABC):
         """
         pass
 
-    def register_ws_namespace(self, bus):
-        """Register WebSocket namespace handlers (e.g., 'whiteboard.*', 'typing.*').
+    def get_ws_handler(self) -> Optional[Callable]:
+        """Return async handler for this plugin's {plugin.id}:* namespace.
 
-        Plugins can:
-        - Register their own namespace for bidirectional communication
-        - Subscribe to events from other namespaces (listen-only)
+        Core registers it automatically under the plugin's ID namespace.
+        Only for feature plugins that need their own WS namespace.
 
-        Used by: Feature Plugins, Room Type Plugins, Event Listener Plugins
+        Returns:
+            Async handler function or None if plugin doesn't need a WS namespace
+        """
+        return None
+
+    def register_event_listeners(self, bus):
+        """Register event listeners via bus.on_event().
+
+        For cross-namespace observation (e.g., listening to room:message events).
 
         Args:
             bus: UnifiedConnectionManager instance
@@ -225,7 +271,7 @@ class Plugin(ABC):
         pass
 
     def on_user_joined_room(self, room_id: str, username: str):
-        """Hook called when a user joins a room (sends room.join).
+        """Hook called when a user joins a room (sends room:join).
 
         Args:
             room_id: The room identifier
@@ -236,7 +282,7 @@ class Plugin(ABC):
         pass
 
     def on_user_left_room(self, room_id: str, username: str):
-        """Hook called when a user leaves a room (sends room.leave or disconnects).
+        """Hook called when a user leaves a room (sends room:leave or disconnects).
 
         Args:
             room_id: The room identifier
@@ -248,25 +294,20 @@ class Plugin(ABC):
 
     # Room-type action handling
 
-    async def handle_room_action(self, bus, ws, username: str, msg: dict, action: str):
+    async def handle_room_action(self, bus: PluginBus, ws, username: str, msg: dict, action: str):
         """Handle a room-scoped WebSocket action for rooms of this type.
 
         Called by the core room handler for any action other than join/leave.
         Only called for rooms whose room_type is in this plugin's room_types.
 
         Args:
-            bus: UnifiedConnectionManager instance
+            bus: PluginBus scoped to the plugin's own namespace
             ws: The WebSocket connection
             username: Authenticated username
             msg: Full message dict (includes type, room_id, etc.)
             action: The action part after "room:" (e.g., "message")
         """
-        from fastapi import WebSocket as _WS
-        await ws.send_json({
-            "type": "room:error",
-            "room_id": msg.get("room_id", ""),
-            "message": f"Unsupported action: {action}",
-        })
+        await bus.send_error(ws, f"Unsupported action: {action}", room_id=msg.get("room_id", ""))
 
     # Message interception
 

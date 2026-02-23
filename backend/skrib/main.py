@@ -121,14 +121,25 @@ async def startup_event():
     print(f"Users: {user_count}, Pending: {pending_count}")
     print(f"Registration mode: {reg_mode}")
 
-    # Register plugin WebSocket namespaces
+    # Register plugin WebSocket namespaces (core controls the namespace name)
     from . import ws
+    from .plugins.base import PluginBus
     for plugin in registry.get_all_plugins():
         try:
-            plugin.register_ws_namespace(ws.bus)
-            print(f"[Plugins] Registered WebSocket namespace for: {plugin.id}")
+            # Give every plugin a scoped bus so it can send outgoing messages
+            # under its own namespace (e.g. "four43.room-type-chat:message")
+            plugin.bus = PluginBus(ws.bus, plugin.id)
+
+            ws_handler = plugin.get_ws_handler()
+            if ws_handler:
+                async def scoped_handler(bus, ws_conn, username, msg, _pb=plugin.bus, _h=ws_handler):
+                    await _h(_pb, ws_conn, username, msg)
+
+                ws.bus.register_namespace(plugin.id, scoped_handler)
+                print(f"[Plugins] Registered WebSocket namespace '{plugin.id}' for: {plugin.id}")
+            plugin.register_event_listeners(ws.bus)
         except Exception as e:
-            print(f"[Plugins] Failed to register WS namespace for {plugin.id}: {e}")
+            print(f"[Plugins] Failed to register WS for {plugin.id}: {e}")
 
     # Call on_startup for all plugins
     for plugin in registry.get_all_plugins():

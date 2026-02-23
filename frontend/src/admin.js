@@ -302,10 +302,10 @@ async function loadInviteTokens() {
         const data = await resp.json();
         const inviteList = document.getElementById('invite-list');
 
-        if (data.invites.length === 0) {
+        if (data.length === 0) {
             inviteList.innerHTML = '<p style="color: #999; font-size: 13px;">No invite links yet</p>';
         } else {
-            inviteList.innerHTML = data.invites.map(inv => {
+            inviteList.innerHTML = data.map(inv => {
                 const inviteUrl = `${window.location.origin}/register.html?invite=${inv.token}`;
                 const status = inv.used_by
                     ? `<span class="invite-used">Used by ${escapeHtml(inv.used_by)}</span>`
@@ -359,12 +359,12 @@ async function loadPendingUsers() {
         const pendingList = document.getElementById('pending-list');
         const pendingCount = document.getElementById('pending-count');
 
-        pendingCount.textContent = data.users.length;
+        pendingCount.textContent = data.length;
 
-        if (data.users.length === 0) {
+        if (data.length === 0) {
             pendingList.innerHTML = '<p style="color: #999;">No pending approvals</p>';
         } else {
-            pendingList.innerHTML = data.users.map(user => `
+            pendingList.innerHTML = data.map(user => `
                 <div class="pending-user">
                     <h4>&#x1F464; ${user.username}</h4>
                     <div class="code">Code: ${user.approval_code}</div>
@@ -432,13 +432,13 @@ async function loadAllUsers() {
         const usersList = document.getElementById('users-list');
         const userCount = document.getElementById('user-count');
 
-        userCount.textContent = data.users.length;
+        userCount.textContent = data.length;
 
-        if (data.users.length === 0) {
+        if (data.length === 0) {
             usersList.innerHTML = '<p style="color: #999;">No users</p>';
         } else {
             const isAdmin = currentRole === 'admin';
-            usersList.innerHTML = data.users.map(user => {
+            usersList.innerHTML = data.map(user => {
                 let actions = '';
                 if (isAdmin && user.username !== currentUsername) {
                     if (user.role === 'user') {
@@ -531,7 +531,7 @@ async function loadUserPreferences() {
         const data = await response.json();
         const preferencesList = document.getElementById('user-preferences-list');
 
-        const prefsPromises = data.users.map(async (user) => {
+        const prefsPromises = data.map(async (user) => {
             const prefsResponse = await fetch(`${API_URL}/users/${user.username}/preferences`, {
                 headers: { 'Authorization': `Bearer ${sessionToken}` }
             });

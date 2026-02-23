@@ -22,9 +22,11 @@ async function registerSecondUser(page) {
     await page.waitForLoadState('networkidle');
     await page.locator('#register-username').pressSequentially(user2name, { delay: 30 });
     await expect(page.locator('#register-username')).not.toHaveClass(/invalid/);
-    await page.locator('#recovery-passphrase').fill('TestPass123!');
-    await page.locator('#recovery-passphrase-confirm').fill('TestPass123!');
+    await page.locator('#recovery-passphrase').fill('This-is-a-valid-test-passphrase-32!');
+    await page.locator('#recovery-passphrase-confirm').fill('This-is-a-valid-test-passphrase-32!');
     await page.locator('#register-submit-button').click();
+    await page.waitForURL(/.*enroll-passkey\.html/, { timeout: 5000 });
+    await page.locator('#enroll-passkey-button').click();
     await page.waitForURL(/.*app\.html/, { timeout: 20000 });
 
     // Restore original user's session
@@ -45,13 +47,13 @@ test.describe('DM Chat Room Type', () => {
 
         // Open DM modal
         await page.locator('#add-dm-btn').click();
-        await expect(page.locator('#dm-modal')).toHaveClass(/open/, { timeout: 5000 });
+        await expect(page.locator('#dm-modal')).toHaveClass(/open/, { timeout: 1000 });
 
         // Select "chat" room type
         await page.locator('input[name="dm-room-type"][value="chat"]').check();
 
         // Wait for user list to load and select the other user
-        await expect(page.locator(`#dm-user-list input[value="${otherUser}"]`)).toBeVisible({ timeout: 5000 });
+        await expect(page.locator(`#dm-user-list input[value="${otherUser}"]`)).toBeVisible({ timeout: 1000 });
         await page.locator(`#dm-user-list input[value="${otherUser}"]`).check();
 
         // Start button should appear
@@ -61,10 +63,10 @@ test.describe('DM Chat Room Type', () => {
         await page.locator('#dm-start-btn').click();
 
         // Wait for DM to be selected -- header shows the other user's name
-        await expect(page.locator('#chat-header-name')).toContainText(otherUser, { timeout: 10000 });
+        await expect(page.locator('#chat-header-name')).toContainText(otherUser, { timeout: 1000 });
 
         // Chat plugin renders #message-input
-        await expect(page.locator('#message-input')).toBeVisible({ timeout: 5000 });
+        await expect(page.locator('#message-input')).toBeVisible({ timeout: 1000 });
     });
 });
 
@@ -74,13 +76,13 @@ test.describe('DM Todo Room Type', () => {
 
         // Open DM modal
         await page.locator('#add-dm-btn').click();
-        await expect(page.locator('#dm-modal')).toHaveClass(/open/, { timeout: 5000 });
+        await expect(page.locator('#dm-modal')).toHaveClass(/open/, { timeout: 1000 });
 
         // Select "todo" room type
         await page.locator('input[name="dm-room-type"][value="todo"]').check();
 
         // Wait for user list to load and select the other user
-        await expect(page.locator(`#dm-user-list input[value="${otherUser}"]`)).toBeVisible({ timeout: 5000 });
+        await expect(page.locator(`#dm-user-list input[value="${otherUser}"]`)).toBeVisible({ timeout: 1000 });
         await page.locator(`#dm-user-list input[value="${otherUser}"]`).check();
 
         // Start button should appear
@@ -90,9 +92,9 @@ test.describe('DM Todo Room Type', () => {
         await page.locator('#dm-start-btn').click();
 
         // Wait for DM to be selected -- header shows the other user's name
-        await expect(page.locator('#chat-header-name')).toContainText(otherUser, { timeout: 10000 });
+        await expect(page.locator('#chat-header-name')).toContainText(otherUser, { timeout: 1000 });
 
         // Todo plugin renders its own UI
-        await expect(page.locator('.todo-add-title')).toBeVisible({ timeout: 5000 });
+        await expect(page.locator('.todo-add-title')).toBeVisible({ timeout: 1000 });
     });
 });

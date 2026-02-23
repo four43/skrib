@@ -1,6 +1,6 @@
 """Pydantic schemas for server info."""
 from enum import Enum
-from typing import List, Optional
+from typing import Optional
 from pydantic import BaseModel
 
 
@@ -38,10 +38,6 @@ class InviteTokenResponse(BaseModel):
     created_at: str
     used_by: Optional[str] = None
     used_at: Optional[str] = None
-
-
-class InviteTokenListResponse(BaseModel):
-    invites: List[InviteTokenResponse]
 
 
 class CreateInviteResponse(BaseModel):

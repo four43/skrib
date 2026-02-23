@@ -177,7 +177,7 @@ backend/skrib/
 All WebSocket messages follow the format:
 ```json
 {
-  "type": "namespace.action",
+  "type": "namespace:action",
   "room_id": "...",     // Optional, depends on action
   "...": "..."          // Additional fields per action
 }
@@ -187,9 +187,9 @@ All WebSocket messages follow the format:
 
 The WebSocket bus uses **namespaces** to route messages. Core namespaces:
 
-- `system.*` - Connection-level events (authentication, ping/pong, errors)
-- `room.*` - Room-related events (join, leave, messages, topic)
-- **Plugin namespaces** - Plugins can register custom namespaces (e.g., `whiteboard.*`, `polls.*`)
+- `system:*` - Connection-level events (authentication, ping/pong, errors)
+- `room:*` - Room-related events (join, leave, messages, topic)
+- **Plugin namespaces** - Plugins can register custom namespaces (e.g., `whiteboard:*`, `polls:*`)
 
 ### Client → Server Events
 
@@ -197,7 +197,7 @@ The WebSocket bus uses **namespaces** to route messages. Core namespaces:
 
 ```javascript
 // Ping server
-{ "type": "system.ping" }
+{ "type": "system:ping" }
 ```
 
 #### Room Namespace (Client → Server)
@@ -205,19 +205,19 @@ The WebSocket bus uses **namespaces** to route messages. Core namespaces:
 ```javascript
 // Join a room (subscribe to room-scoped broadcasts)
 {
-  "type": "room.join",
+  "type": "room:join",
   "room_id": "general"
 }
 
 // Leave a room (unsubscribe from room-scoped broadcasts)
 {
-  "type": "room.leave",
+  "type": "room:leave",
   "room_id": "general"
 }
 
 // Send a message
 {
-  "type": "room.message",
+  "type": "room:message",
   "room_id": "general",
   "content": "Hello world",
   "content_type": "text",        // Optional: "text", "encrypted", "poll", etc.
@@ -230,7 +230,7 @@ The WebSocket bus uses **namespaces** to route messages. Core namespaces:
 ```javascript
 // Whiteboard plugin: send drawing data
 {
-  "type": "whiteboard.draw",
+  "type": "whiteboard:draw",
   "room_id": "design-room",
   "data": {
     "x": 100,
@@ -247,29 +247,29 @@ The WebSocket bus uses **namespaces** to route messages. Core namespaces:
 
 ```javascript
 // Connection established
-{ "type": "system.connected", "username": "alice" }
+{ "type": "system:connected", "username": "alice" }
 
 // Pong response
-{ "type": "system.pong" }
+{ "type": "system:pong" }
 
 // Error
-{ "type": "system.error", "message": "Invalid JSON" }
+{ "type": "system:error", "message": "Invalid JSON" }
 ```
 
 #### Room Namespace (Server → Client)
 
-**Room-scoped events** (sent only to sockets that sent `room.join`):
+**Room-scoped events** (sent only to sockets that sent `room:join`):
 
 ```javascript
 // Join confirmation
-{ "type": "room.joined", "room_id": "general" }
+{ "type": "room:joined", "room_id": "general" }
 
 // Leave confirmation
-{ "type": "room.left", "room_id": "general" }
+{ "type": "room:left", "room_id": "general" }
 
 // New message in the room
 {
-  "type": "room.message",
+  "type": "room:message",
   "room_id": "general",
   "data": {
     "id": 123,
@@ -283,7 +283,7 @@ The WebSocket bus uses **namespaces** to route messages. Core namespaces:
 
 // Topic changed
 {
-  "type": "room.topic",
+  "type": "room:topic",
   "room_id": "general",
   "topic": "New topic",
   "set_by": "alice"
@@ -291,7 +291,7 @@ The WebSocket bus uses **namespaces** to route messages. Core namespaces:
 
 // Error in room action
 {
-  "type": "room.error",
+  "type": "room:error",
   "room_id": "general",
   "message": "Not a member of this DM"
 }
@@ -302,7 +302,7 @@ The WebSocket bus uses **namespaces** to route messages. Core namespaces:
 ```javascript
 // Room list changed (new room, deleted room, membership change)
 {
-  "type": "room.update",
+  "type": "room:update",
   "room_id": "general",
   "room_type": "channel",
   "sender": "alice",
@@ -311,7 +311,7 @@ The WebSocket bus uses **namespaces** to route messages. Core namespaces:
 
 // New message notification (for users with notify_level='all')
 {
-  "type": "room.new_message",
+  "type": "room:new_message",
   "room_id": "general",
   "room_type": "channel",
   "sender": "bob",
@@ -324,7 +324,7 @@ The WebSocket bus uses **namespaces** to route messages. Core namespaces:
 ```javascript
 // Whiteboard plugin: broadcast drawing data
 {
-  "type": "whiteboard.draw",
+  "type": "whiteboard:draw",
   "room_id": "design-room",
   "data": { "x": 100, "y": 200, "color": "#ff0000" },
   "username": "alice"
@@ -332,7 +332,7 @@ The WebSocket bus uses **namespaces** to route messages. Core namespaces:
 
 // Whiteboard plugin: canvas cleared
 {
-  "type": "whiteboard.clear",
+  "type": "whiteboard:clear",
   "room_id": "design-room",
   "username": "bob"
 }
@@ -342,12 +342,12 @@ The WebSocket bus uses **namespaces** to route messages. Core namespaces:
 
 The WebSocket bus supports two broadcast scopes:
 
-1. **Room-scoped**: Only sent to sockets that explicitly joined the room via `room.join`
-   - Examples: `room.message`, `room.topic`, `whiteboard.draw`
+1. **Room-scoped**: Only sent to sockets that explicitly joined the room via `room:join`
+   - Examples: `room:message`, `room:topic`, `whiteboard:draw`
    - Use: Real-time collaboration within a specific room
 
 2. **User-scoped**: Sent to all of a user's connected tabs/devices
-   - Examples: `room.update`, `room.new_message`
+   - Examples: `room:update`, `room:new_message`
    - Use: Notifications, sidebar updates, global state sync
 
 ### Namespace Registration (Plugin Development)
@@ -357,12 +357,12 @@ Plugins register custom namespaces via:
 ```python
 def register_ws_namespace(self, bus: UnifiedConnectionManager):
     async def handle_my_namespace(bus, ws, username, msg):
-        action = msg["type"].split(".", 1)[1]
+        action = msg["type"].split(":", 1)[1]
         room_id = msg.get("room_id")
 
         if action == "custom_action":
             await bus.broadcast_to_room(room_id, {
-                "type": "myplugin.custom_action",
+                "type": "myplugin:custom_action",
                 "room_id": room_id,
                 "data": msg.get("data")
             })

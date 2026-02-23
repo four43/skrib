@@ -7,7 +7,7 @@
  * Uses a standard (non-PRF) authenticator to simulate the common case
  * where PRF-based recovery is not available.
  */
-import { test as base, expect } from '@playwright/test';
+import { test as base, expect } from './fixtures.js';
 
 function uniqueName(prefix) {
     return `${prefix}${Math.random().toString(36).slice(2, 9)}`;
@@ -31,13 +31,15 @@ async function addStandardAuthenticator(page) {
 }
 
 /** Register a user with recovery passphrase and wait for redirect to app.html. */
-async function registerUser(page, username, passphrase = 'TestPass123!') {
+async function registerUser(page, username, passphrase = 'This-is-a-valid-test-passphrase-32!') {
     await page.goto('/register.html');
     await page.waitForLoadState('networkidle');
     await page.locator('#register-username').pressSequentially(username, { delay: 30 });
     await page.locator('#recovery-passphrase').fill(passphrase);
     await page.locator('#recovery-passphrase-confirm').fill(passphrase);
     await page.locator('#register-submit-button').click();
+    await page.waitForURL(/.*enroll-passkey\.html/, { timeout: 5000 });
+    await page.locator('#enroll-passkey-button').click();
     await page.waitForURL(/.*app\.html/, { timeout: 20000 });
 }
 
@@ -49,12 +51,12 @@ async function loginUser(page) {
     // If passphrase recovery prompt appears, skip it to test key regeneration path
     const skipBtn = page.locator('#recovery-skip-button');
     try {
-        await skipBtn.waitFor({ state: 'visible', timeout: 3000 });
+        await skipBtn.waitFor({ state: 'visible', timeout: 1000 });
         await skipBtn.click();
     } catch {
         // No recovery prompt — proceed normally
     }
-    await page.waitForURL(/.*app\.html/, { timeout: 20000 });
+    await page.waitForURL(/.*app\.html/, { timeout: 1000 });
 }
 
 /** Create a room, wait for it to be selected, return the room name. */
@@ -64,7 +66,7 @@ async function createRoom(page) {
     await expect(page.locator('#create-room-modal')).toBeVisible();
     await page.locator('#new-room-input').pressSequentially(roomName, { delay: 20 });
     await page.locator('#create-room-submit-btn').click();
-    await expect(page.locator('#chat-header-name')).not.toHaveText('[No room selected]', { timeout: 10000 });
+    await expect(page.locator('#chat-header-name')).not.toHaveText('[No room selected]', { timeout: 1000 });
     return roomName;
 }
 
@@ -72,7 +74,7 @@ async function createRoom(page) {
 async function sendMessage(page, text) {
     await page.locator('#message-input').fill(text);
     await page.locator('#send-button').click();
-    await expect(page.locator('#messages')).toContainText(text, { timeout: 5000 });
+    await expect(page.locator('#messages')).toContainText(text, { timeout: 1000 });
 }
 
 /** Clear all browser-side encryption state (IndexedDB + localStorage session). */
@@ -121,7 +123,7 @@ test.describe('Key Loss and Recovery', () => {
 
         // Login again — wait for app to fully load
         await loginUser(page);
-        await expect(page.locator('#chat-view')).toBeVisible({ timeout: 5000 });
+        await expect(page.locator('#chat-view')).toBeVisible({ timeout: 1000 });
 
         // Should have generated a fresh key pair (skipped passphrase recovery)
         expect(consoleMessages.some((m) =>

@@ -14,17 +14,12 @@ class RoomInfo(BaseModel):
     is_dm: bool = False
 
 
-class RoomListResponse(BaseModel):
-    rooms: List[RoomInfo]
-
-
 class CreateRoomRequest(BaseModel):
     room_id: str
     room_type: str = 'chat'
 
 
 class CreateRoomResponse(BaseModel):
-    status: str
     room_id: str
 
 
@@ -34,7 +29,6 @@ class CreateDMRequest(BaseModel):
 
 
 class CreateDMResponse(BaseModel):
-    status: str
     room: RoomInfo
 
 
@@ -54,17 +48,10 @@ class SendMessageRequest(BaseModel):
 
 
 class SendMessageResponse(BaseModel):
-    status: str
     message: MessageResponse
 
 
-class MessagesResponse(BaseModel):
-    status: str
-    messages: List[MessageResponse]
-
-
 class DeleteRoomResponse(BaseModel):
-    status: str
     room_id: str
 
 
@@ -81,14 +68,12 @@ class AddMemberRequest(BaseModel):
 
 class AddMemberResponse(BaseModel):
     """Deprecated: endpoints now return plain dicts."""
-    status: str
     room_id: str
     username: str
 
 
 class RemoveMemberResponse(BaseModel):
     """Deprecated: endpoints now return plain dicts."""
-    status: str
     room_id: str
     username: str
 
@@ -102,10 +87,6 @@ class StoreRoomKeyRequest(BaseModel):
 class RoomKeyEntry(BaseModel):
     key_epoch: int
     encrypted_key: str
-
-
-class RoomKeysResponse(BaseModel):
-    keys: List[RoomKeyEntry]
 
 
 class MarkReadRequest(BaseModel):

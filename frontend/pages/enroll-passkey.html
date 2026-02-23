@@ -1,0 +1,35 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover">
+    <title>Enroll Passkey - Skrīb</title>
+    <link rel="stylesheet" href="/src/style.css">
+    <link rel="manifest" href="/manifest.json">
+    <meta name="theme-color" content="#6366f1">
+    <meta name="mobile-web-app-capable" content="yes">
+    <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+    <link rel="apple-touch-icon" href="/icons/icon-192.png">
+    <script>
+        (function(){var s=localStorage.getItem('skrib-color-scheme')||'auto';var d=s==='dark'||(s==='auto'&&matchMedia('(prefers-color-scheme:dark)').matches);if(d)document.documentElement.toggleAttribute('data-theme-dark',true);var t=localStorage.getItem('skrib-theme');if(t){var l=document.createElement('link');l.id='theme-stylesheet';l.rel='stylesheet';l.href='/api/themes/'+t;document.head.appendChild(l)}})();
+        if('serviceWorker' in navigator) navigator.serviceWorker.register('/sw.js');
+    </script>
+</head>
+<body>
+    <div id="auth-view" class="auth-container">
+        <div class="auth-box">
+            <div id="enroll-section">
+                <h1>Enroll Passkey</h1>
+                <p>Account: <strong id="enroll-username"></strong></p>
+                <p>Register a passkey to sign in securely without a password.</p>
+
+                <div id="enroll-status"></div>
+
+                <button type="button" id="enroll-passkey-button">Enroll Passkey</button>
+            </div>
+        </div>
+    </div>
+
+    <script type="module" src="/src/enroll-passkey.js"></script>
+</body>
+</html>

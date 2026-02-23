@@ -2,7 +2,6 @@
 from fastapi import APIRouter, HTTPException, Depends
 
 from .schemas import (
-    RoomListResponse,
     RoomInfo,
     CreateRoomRequest,
     CreateRoomResponse,
@@ -11,7 +10,7 @@ from .schemas import (
     DeleteRoomResponse,
     InviteRequest,
     StoreRoomKeyRequest,
-    RoomKeysResponse,
+    RoomKeyEntry,
     RoomDetailResponse,
     MemberInfo,
     RoomUpdateRequest,
@@ -21,11 +20,8 @@ from .services import (
     get_user_rooms,
     create_room,
     delete_room,
-    ensure_room_exists,
     room_exists,
     is_dm,
-    get_room_type,
-    get_room_members,
     get_room_role,
     create_or_get_dm,
     validate_channel_name,
@@ -40,16 +36,17 @@ from .services import (
 )
 from ..ws import bus
 from ..dependencies import require_auth
+from ..permissions import check_room_access as _check_room_access, get_global_role as _get_global_role, require_room_op_or_global_mod as _require_room_op_or_global_mod
 from ..plugins import registry
 
 router = APIRouter(prefix="/rooms", tags=["rooms"])
 
 
-@router.get("", response_model=RoomListResponse)
+@router.get("", response_model=list[RoomInfo])
 async def list_rooms(username: str = Depends(require_auth)):
     """Get list of rooms visible to the current user."""
     rooms = get_user_rooms(username)
-    return RoomListResponse(rooms=[RoomInfo(**r) for r in rooms])
+    return [RoomInfo(**r) for r in rooms]
 
 
 
@@ -81,7 +78,7 @@ async def create_new_room(
     # Notify creator — new channel appears in their room list
     await bus.notify_user(username, {"type": "room:update"})
 
-    return CreateRoomResponse(status="ok", room_id=request.room_id)
+    return CreateRoomResponse(room_id=request.room_id)
 
 
 @router.post("/dm", response_model=CreateDMResponse)
@@ -126,7 +123,7 @@ async def create_dm(
     for participant in [username] + targets:
         await bus.notify_user(participant, {"type": "room:update"})
 
-    return CreateDMResponse(status="ok", room=RoomInfo(**room))
+    return CreateDMResponse(room=RoomInfo(**room))
 
 
 @router.delete("/{room_id}", response_model=DeleteRoomResponse)
@@ -145,7 +142,7 @@ async def delete_room_endpoint(
     # Notify all subscribers — room removed from list
     await bus.notify_all_users({"type": "room:update"})
 
-    return DeleteRoomResponse(status="ok", room_id=room_id)
+    return DeleteRoomResponse(room_id=room_id)
 
 
 @router.post("/{room_id}/members")
@@ -174,7 +171,7 @@ async def add_member(
         "room_id": room_id,
     })
 
-    return {"status": "ok", "room_id": room_id, "username": request.username}
+    return {"room_id": room_id, "username": request.username}
 
 
 @router.delete("/{room_id}/members/{target_username}")
@@ -208,7 +205,7 @@ async def remove_member(
         "room_id": room_id,
     })
 
-    return {"status": "ok", "room_id": room_id, "username": target_username}
+    return {"room_id": room_id, "username": target_username}
 
 
 @router.patch("/{room_id}/members/{target_username}")
@@ -245,7 +242,7 @@ async def update_member(
             "room_id": room_id,
         })
 
-    return {"status": "ok"}
+    return {}
 
 
 @router.post("/{room_id}/keys")
@@ -257,18 +254,17 @@ async def store_room_key_endpoint(
     """Store an encrypted room key for a user."""
     _check_room_access(room_id, username)
     store_room_key(room_id, request.username, request.key_epoch, request.encrypted_key)
-    return {"status": "ok"}
+    return {}
 
 
-@router.get("/{room_id}/keys", response_model=RoomKeysResponse)
+@router.get("/{room_id}/keys", response_model=list[RoomKeyEntry])
 async def get_room_keys_endpoint(
     room_id: str,
     username: str = Depends(require_auth),
 ):
     """Get your encrypted room keys (all epochs)."""
     _check_room_access(room_id, username)
-    keys = get_room_keys(room_id, username)
-    return RoomKeysResponse(keys=keys)
+    return get_room_keys(room_id, username)
 
 
 
@@ -313,37 +309,6 @@ async def update_room(
             "set_by": username,
         })
 
-    return {"status": "ok"}
+    return {}
 
 
-def _check_room_access(room_id: str, username: str):
-    """Verify room exists and user has access."""
-    if not room_exists(room_id):
-        ensure_room_exists(room_id)
-
-    if is_dm(room_id):
-        members = get_room_members(room_id)
-        if username not in members:
-            raise HTTPException(status_code=403, detail="Not a member of this DM")
-
-
-def _get_global_role(username: str) -> str:
-    """Get a user's global role."""
-    from ..database import get_db
-    with get_db() as conn:
-        cursor = conn.execute(
-            'SELECT role FROM users WHERE username = ?', (username,)
-        )
-        row = cursor.fetchone()
-        return row['role'] if row else 'user'
-
-
-def _require_room_op_or_global_mod(room_id: str, username: str):
-    """Raise 403 unless the user is room owner/op or global admin/moderator."""
-    room_role = get_room_role(room_id, username)
-    if room_role in ('owner', 'op'):
-        return
-    global_role = _get_global_role(username)
-    if global_role in ('admin', 'moderator'):
-        return
-    raise HTTPException(status_code=403, detail="Room op or moderator required")

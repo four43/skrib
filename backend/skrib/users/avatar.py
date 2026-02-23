@@ -92,7 +92,7 @@ def generate_identicon(username: str, color: str) -> bytes:
                 draw.rectangle([x0, y0, x1, y1], fill=variants[shades[row][col]])
 
     buf = io.BytesIO()
-    img.save(buf, format='PNG', optimize=True)
+    img.save(buf, format='PNG')
     return buf.getvalue()
 
 
@@ -101,24 +101,28 @@ def get_or_generate_avatar(username: str) -> bytes | None:
 
     Returns PNG bytes, or None if the user doesn't exist.
     """
+    # Read-only query: no write lock needed
     with get_db() as conn:
         row = conn.execute(
             'SELECT avatar_data, color FROM users WHERE username = ?',
             (username,)
         ).fetchone()
 
-        if not row:
-            return None
+    if not row:
+        return None
 
-        if row['avatar_data']:
-            return bytes(row['avatar_data'])
+    if row['avatar_data']:
+        return bytes(row['avatar_data'])
 
-        # Generate on the fly for existing users who don't have one yet
-        color = row['color'] or '#1976d2'
-        avatar_data = generate_identicon(username, color)
+    # Generate identicon outside DB connection to avoid holding a write lock
+    color = row['color'] or '#1976d2'
+    avatar_data = generate_identicon(username, color)
+
+    # Short write-only transaction
+    with get_db() as conn:
         conn.execute(
             'UPDATE users SET avatar_data = ? WHERE username = ?',
             (avatar_data, username)
         )
         conn.commit()
-        return avatar_data
+    return avatar_data

@@ -49,7 +49,6 @@ class LoginCompleteRequest(BaseModel):
 
 
 class LoginCompleteResponse(BaseModel):
-    status: str
     session_token: str
     username: str
     role: str
@@ -72,3 +71,7 @@ class EncryptionKeyResponse(BaseModel):
     public_key: str
     encrypted_private_key: Optional[str] = None
     passphrase_encrypted_private_key: Optional[str] = None
+
+
+class RegistrationTokenInfoResponse(BaseModel):
+    username: str

@@ -2,13 +2,15 @@
 set -euo pipefail
 cd "$(dirname "$0")/.."
 
+# Build frontend so the backend can serve it from dist/
+npm run build
+
 echo "=== DOM tests ==="
 npx playwright test --project=dom
 
 echo ""
 echo "=== E2E tests ==="
-TEMP_DIR=$(mktemp -d /tmp/skrib-test-XXXXXX)
-trap 'echo "[e2e] Cleaning up $TEMP_DIR"; rm -rf "$TEMP_DIR"' EXIT
 
-echo "[e2e] Created temp data dir: $TEMP_DIR"
-SKRIB_TEST_DATA_DIR="$TEMP_DIR" npx playwright test --project=e2e
+# SKRIB_TEST_DATA_DIR just needs to be set (truthy) to enable the e2e project.
+# Each Playwright worker creates its own temp data dir via the _workerBackend fixture.
+SKRIB_TEST_DATA_DIR=1 npx playwright test --project=e2e

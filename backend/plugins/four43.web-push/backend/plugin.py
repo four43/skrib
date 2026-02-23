@@ -25,7 +25,7 @@ class WebPushPlugin(Plugin):
 
     @property
     def name(self) -> str:
-        return "web-push"
+        return "four43.web-push"
 
     @property
     def version(self) -> str:
@@ -70,16 +70,16 @@ class WebPushPlugin(Plugin):
     def register_routes(self, app):
         return router
 
-    def register_ws_namespace(self, bus):
-        """Listen for room:message events to trigger push notifications."""
-        bus.on_event("room:message", self._handle_room_message)
+    def register_event_listeners(self, bus):
+        """Listen for chat message events to trigger push notifications."""
+        bus.on_event("four43.room-type-chat:message", self._handle_room_message)
         self._bus = bus
 
     async def _handle_room_message(self, event_data: dict):
-        """Called when a room:message event is broadcast to a room.
+        """Called when a four43.room-type-chat:message event is broadcast to a room.
 
         event_data looks like:
-            {"type": "room:message", "room_id": "...", "data": {"username": "...", ...}}
+            {"type": "four43.room-type-chat:message", "room_id": "...", "data": {"username": "...", ...}}
 
         Fires once per message. We check all room members and send push
         notifications to those without active WebSocket connections.

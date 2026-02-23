@@ -4,7 +4,6 @@ from fastapi import APIRouter, Depends, HTTPException, Request
 from .schemas import (
     ServerInfoResponse,
     ServerUpdateRequest,
-    InviteTokenListResponse,
     InviteTokenResponse,
     CreateInviteResponse,
 )
@@ -60,13 +59,11 @@ async def create_invite(
     return CreateInviteResponse(token=token, invite_url=invite_url)
 
 
-@router.get("/invites", response_model=InviteTokenListResponse)
+@router.get("/invites", response_model=list[InviteTokenResponse])
 async def list_invites(_: str = Depends(require_admin)):
     """List all invite tokens (admin only)."""
     tokens = get_invite_tokens()
-    return InviteTokenListResponse(
-        invites=[InviteTokenResponse(**t) for t in tokens]
-    )
+    return [InviteTokenResponse(**t) for t in tokens]
 
 
 @router.delete("/invites/{token}")

@@ -59,7 +59,7 @@ async def remove_reaction(
         Success status
     """
     db.remove_reaction(request.message_id, username, request.emoji)
-    return {"success": True}
+    return {}
 
 
 @router.get("/message/{message_id}")

@@ -3,7 +3,7 @@ from skrib.plugins.base import Plugin
 
 from . import database as db_module
 from .routes import router
-from .ws_handlers import register_ws_handlers
+from .ws_handlers import handle_reaction
 
 
 class MessageReactionsPlugin(Plugin):
@@ -28,7 +28,7 @@ class MessageReactionsPlugin(Plugin):
 
     @property
     def name(self) -> str:
-        return "message-reactions"
+        return "four43.message-reactions"
 
     @property
     def version(self) -> str:
@@ -60,9 +60,9 @@ class MessageReactionsPlugin(Plugin):
         """Register REST API endpoints."""
         return router
 
-    def register_ws_namespace(self, bus):
-        """Register WebSocket namespace for real-time reactions."""
-        register_ws_handlers(bus)
+    def get_ws_handler(self):
+        """Return handler for four43.message-reactions:* namespace."""
+        return handle_reaction
 
     def get_frontend_assets(self) -> dict:
         """Return frontend JavaScript and CSS files."""

@@ -220,7 +220,7 @@ async function login() {
             const recoveryForm = document.getElementById('passphrase-recovery');
             if (recoveryForm && !recoveryForm.classList.contains('hidden')) {
                 recoveryForm.action = '/app.html';
-                recoveryForm.method = 'POST';
+                recoveryForm.method = 'GET';
                 recoveryForm.submit();
             } else {
                 window.location.href = '/app.html';
