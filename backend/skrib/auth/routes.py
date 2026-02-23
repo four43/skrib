@@ -40,14 +40,14 @@ router = APIRouter(prefix="/auth", tags=["authentication"])
 @router.post("/register/step1")
 async def register_step1(
     username: str = Form(...),
-    password: str = Form(...),
     invite: Optional[str] = Form(None),
 ):
-    """Step 1: Accept form POST with username + passphrase.
+    """Step 1: Accept form POST with username.
 
-    This is a traditional form POST so password managers (Bitwarden, 1Password)
-    detect the submission and offer to save the credentials.  On success we
-    redirect to the passkey-enrollment page.
+    The form also contains a password field (type=password, autocomplete=new-password)
+    so that password managers detect the submission and offer to save credentials.
+    That field intentionally has no name= attribute so the passphrase is never
+    transmitted to the server.
     """
     if not is_registration_allowed(invite_token=invite):
         mode = get_registration_mode()
