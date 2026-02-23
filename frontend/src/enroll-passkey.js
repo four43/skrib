@@ -135,6 +135,9 @@ async function enrollPasskey() {
                 </div>`,
                 'info'
             );
+            btn.textContent = 'Return to Login';
+            btn.disabled = false;
+            btn.onclick = () => { window.location.href = '/login.html'; };
         }
     } catch (error) {
         console.error(error);

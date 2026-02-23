@@ -82,6 +82,9 @@
                 <div class="members-panel-body">
                     <div id="members-panel-list" class="members-list"></div>
                 </div>
+                <div class="members-panel-footer">
+                    <button id="add-member-btn" onclick="openAddMemberModal()">+ Add User</button>
+                </div>
             </div>
         </div>
     </div>
@@ -158,8 +161,23 @@
                     <label>Room type</label>
                     <div id="dm-room-type-list" class="room-type-list"></div>
                 </div>
-                <div id="dm-user-list" class="dm-user-list"></div>
+                <div id="dm-user-list" class="user-select-list"></div>
                 <button id="dm-start-btn" class="hidden">Start Conversation</button>
+            </div>
+        </div>
+    </div>
+
+    <!-- Add Member Modal -->
+    <div id="add-member-modal" class="room-settings-modal">
+        <div class="room-settings-backdrop" onclick="closeAddMemberModal()"></div>
+        <div class="room-settings-content">
+            <div class="room-settings-header">
+                <h3>Add Users</h3>
+                <button class="close-btn" onclick="closeAddMemberModal()">&times;</button>
+            </div>
+            <div class="room-settings-body">
+                <div id="add-member-user-list" class="user-select-list"></div>
+                <button id="add-member-btn-confirm" class="hidden" onclick="addMembersFromModal()">Add Selected</button>
             </div>
         </div>
     </div>

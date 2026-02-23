@@ -2,13 +2,30 @@ import { showStatus } from './utils.js';
 import { validatePassphrase } from './crypto.js';
 import { loadTheme } from './theme-manager.js';
 
-// Get invite token from URL if present
+// Get params from URL
 const urlParams = new URLSearchParams(window.location.search);
 const inviteToken = urlParams.get('invite');
+const registrationError = urlParams.get('error');
+const returnedUsername = urlParams.get('username');
 
 // Load default theme (no authentication on register page)
 loadTheme();
 checkRegistrationAccess();
+
+// Show error from a failed registration attempt (server redirects back with ?error=...)
+if (registrationError) {
+    showStatus('register-status', registrationError, 'error');
+    // Restore the username they tried
+    if (returnedUsername) {
+        const input = document.getElementById('register-username');
+        if (input) input.value = returnedUsername;
+    }
+    // Clean up URL so refreshing doesn't re-show the error
+    const cleanUrl = new URL(window.location);
+    cleanUrl.searchParams.delete('error');
+    cleanUrl.searchParams.delete('username');
+    history.replaceState(null, '', cleanUrl);
+}
 
 // Populate the hidden invite field
 const inviteField = document.getElementById('invite-token-field');

@@ -2276,19 +2276,19 @@ input:focus-visible {
 }
 
 /* ═══════════════════════════════════════════
-   DM User List
+   User Select List (shared: DM modal, Add Member)
    ═══════════════════════════════════════════ */
 
-.dm-user-list {
+.user-select-list {
     max-height: 300px;
     overflow-y: auto;
 }
 
-.dm-user-item {
+.user-select-item {
     display: flex;
     align-items: center;
-    gap: 8px;
-    padding: 10px 14px;
+    gap: 10px;
+    padding: 8px 14px;
     cursor: pointer;
     border-radius: 8px;
     color: var(--text-secondary);
@@ -2296,13 +2296,62 @@ input:focus-visible {
     transition: all 0.15s ease;
 }
 
-.dm-user-item:hover {
+.user-select-item:hover {
     background: rgba(var(--theme-rgb), 0.08);
     color: var(--theme-color);
 }
 
-.dm-user-item+.dm-user-item {
+.user-select-item + .user-select-item {
     margin-top: 2px;
+}
+
+.user-select-info {
+    display: flex;
+    flex-direction: column;
+    gap: 1px;
+    min-width: 0;
+}
+
+.user-select-name {
+    font-size: 14px;
+    color: var(--text-primary);
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
+}
+
+.user-select-username {
+    font-size: 12px;
+    color: var(--text-muted);
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
+}
+
+/* ═══════════════════════════════════════════
+   Members Panel Footer
+   ═══════════════════════════════════════════ */
+
+.members-panel-footer {
+    padding: 8px;
+    border-top: 1px solid rgba(var(--theme-rgb), 0.08);
+    flex-shrink: 0;
+}
+
+.members-panel-footer button {
+    width: 100%;
+    padding: 8px;
+    font-size: 13px;
+    color: var(--theme-color);
+    background: rgba(var(--theme-rgb), 0.06);
+    border: 1px solid rgba(var(--theme-rgb), 0.12);
+    border-radius: 6px;
+    cursor: pointer;
+    transition: all 0.15s ease;
+}
+
+.members-panel-footer button:hover {
+    background: rgba(var(--theme-rgb), 0.12);
 }
 
 /* Additional classes for cleaned HTML */

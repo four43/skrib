@@ -809,11 +809,23 @@ async function checkSession() {
                     console.log('[E2E] Private key loaded successfully');
                 } else {
                     console.warn('[E2E] No private key found in IndexedDB for user:', username);
-                    // Diagnostic: check if IndexedDB has any keys at all
+                    // Check if server has a passphrase-wrapped key we can recover
                     try {
-                        const dbs = await indexedDB.databases();
-                        console.warn('[E2E] IndexedDB databases present:', dbs.map(d => d.name));
-                    } catch (_) { /* databases() not supported in all browsers */ }
+                        const ekResp = await fetch(
+                            `${API_URL}/auth/encryption-key/${encodeURIComponent(username)}`,
+                            { headers: { 'Authorization': `Bearer ${token}` } }
+                        );
+                        const ekData = ekResp.ok ? await ekResp.json() : null;
+                        if (ekData?.passphrase_encrypted_private_key || ekData?.encrypted_private_key) {
+                            // Key recovery is possible — send user through login flow
+                            console.log('[E2E] Server has recoverable key, redirecting to login for recovery...');
+                            localStorage.removeItem('session_token');
+                            localStorage.removeItem('username');
+                            localStorage.removeItem('role');
+                            window.location.href = '/login.html';
+                            return;
+                        }
+                    } catch (_) { /* best-effort check */ }
                 }
             } catch (e) {
                 console.error('[E2E] Failed to load private key:', e);
@@ -971,6 +983,66 @@ async function loadUserColors() {
 
 function getDisplayName(username) {
     return userNicknames[username] || username;
+}
+
+/**
+ * Render a checkbox list of users into a container element.
+ * @param {HTMLElement} container - The element to render into
+ * @param {Object} options
+ * @param {string[]} [options.excludeUsernames] - Usernames to exclude from the list
+ * @param {Function} [options.onChange] - Called when any checkbox changes
+ * @returns {Promise<void>}
+ */
+async function renderUserCheckboxList(container, { excludeUsernames = [], onChange } = {}) {
+    container.innerHTML = '<p style="color: var(--text-muted);">Loading users...</p>';
+    try {
+        const response = await fetch(`${API_URL}/users`, {
+            headers: { 'Authorization': `Bearer ${sessionToken}` }
+        });
+        const data = await response.json();
+
+        const users = data.filter(u => !excludeUsernames.includes(u.username));
+
+        if (users.length === 0) {
+            container.innerHTML = '<p style="color: var(--text-muted);">No users available</p>';
+            return;
+        }
+
+        container.innerHTML = '';
+        users.forEach(user => {
+            const label = document.createElement('label');
+            label.className = 'user-select-item';
+            const cb = document.createElement('input');
+            cb.type = 'checkbox';
+            cb.value = user.username;
+            if (onChange) cb.addEventListener('change', onChange);
+            label.appendChild(cb);
+
+            const info = document.createElement('span');
+            info.className = 'user-select-info';
+            const displayName = getDisplayName(user.username);
+            if (displayName !== user.username) {
+                const nameEl = document.createElement('span');
+                nameEl.className = 'user-select-name';
+                nameEl.textContent = displayName;
+                info.appendChild(nameEl);
+                const usernameEl = document.createElement('span');
+                usernameEl.className = 'user-select-username';
+                usernameEl.textContent = user.username;
+                info.appendChild(usernameEl);
+            } else {
+                const nameEl = document.createElement('span');
+                nameEl.className = 'user-select-name';
+                nameEl.textContent = user.username;
+                info.appendChild(nameEl);
+            }
+            label.appendChild(info);
+            container.appendChild(label);
+        });
+    } catch (error) {
+        console.error('Error loading user list:', error);
+        container.innerHTML = '<p style="color: var(--text-muted);">Failed to load users</p>';
+    }
 }
 
 // Expose for plugins
@@ -1718,10 +1790,13 @@ async function deleteRoomAction() {
 function openDMModal() {
     const modal = document.getElementById('dm-modal');
     const userList = document.getElementById('dm-user-list');
-    userList.innerHTML = '<p style="color: #999;">Loading users...</p>';
     renderRoomTypeList('dm-room-type-list', 'dm-room-type');
     modal.classList.add('open');
-    loadDMUserList();
+    document.getElementById('dm-start-btn').classList.add('hidden');
+    renderUserCheckboxList(userList, {
+        excludeUsernames: [currentUsername],
+        onChange: updateDMStartButton,
+    });
 }
 
 function closeDMModal() {
@@ -1731,47 +1806,13 @@ function closeDMModal() {
 
 function updateDMStartButton() {
     const btn = document.getElementById('dm-start-btn');
-    const checked = document.querySelectorAll('#dm-user-list input[type="checkbox"]:checked');
+    const checked = document.querySelectorAll('#dm-user-list .user-select-item input[type="checkbox"]:checked');
     btn.classList.toggle('hidden', checked.length === 0);
 }
 
-async function loadDMUserList() {
-    try {
-        const response = await fetch(`${API_URL}/users`, {
-            headers: { 'Authorization': `Bearer ${sessionToken}` }
-        });
-        const data = await response.json();
-
-        const userList = document.getElementById('dm-user-list');
-        const otherUsers = data.map(u => u.username).filter(u => u !== currentUsername);
-
-        if (otherUsers.length === 0) {
-            userList.innerHTML = '<p style="color: #999;">No other users to message</p>';
-            return;
-        }
-
-        userList.innerHTML = '';
-        otherUsers.forEach(username => {
-            const label = document.createElement('label');
-            label.className = 'dm-user-item';
-            const cb = document.createElement('input');
-            cb.type = 'checkbox';
-            cb.value = username;
-            cb.addEventListener('change', updateDMStartButton);
-            label.appendChild(cb);
-            label.appendChild(document.createTextNode(` ${username}`));
-            userList.appendChild(label);
-        });
-
-        document.getElementById('dm-start-btn').classList.add('hidden');
-    } catch (error) {
-        console.error('Error loading user list:', error);
-        document.getElementById('dm-user-list').innerHTML = '<p style="color: #999;">Failed to load users</p>';
-    }
-}
 
 async function startDMFromModal() {
-    const checked = document.querySelectorAll('#dm-user-list input[type="checkbox"]:checked');
+    const checked = document.querySelectorAll('#dm-user-list .user-select-item input[type="checkbox"]:checked');
     const targets = Array.from(checked).map(cb => cb.value);
     if (targets.length === 0) return;
     const roomType = document.querySelector('input[name="dm-room-type"]:checked')?.value || 'chat';
@@ -1813,6 +1854,72 @@ async function startDM(targetUsernames, roomType = 'chat') {
     }
 }
 
+// --- Add Member Modal ---
+
+function openAddMemberModal() {
+    if (!currentRoom) return;
+    const modal = document.getElementById('add-member-modal');
+    const userList = document.getElementById('add-member-user-list');
+    modal.classList.add('open');
+    document.getElementById('add-member-btn-confirm').classList.add('hidden');
+
+    // Get current members so we can exclude them
+    const meta = roomMeta[currentRoom];
+    const currentMembers = meta?.members?.map(m => m.username) || [];
+
+    renderUserCheckboxList(userList, {
+        excludeUsernames: currentMembers,
+        onChange: updateAddMemberButton,
+    });
+}
+
+function closeAddMemberModal() {
+    document.getElementById('add-member-modal').classList.remove('open');
+}
+
+function updateAddMemberButton() {
+    const btn = document.getElementById('add-member-btn-confirm');
+    const checked = document.querySelectorAll('#add-member-user-list .user-select-item input[type="checkbox"]:checked');
+    btn.classList.toggle('hidden', checked.length === 0);
+}
+
+async function addMembersFromModal() {
+    if (!currentRoom) return;
+    const checked = document.querySelectorAll('#add-member-user-list .user-select-item input[type="checkbox"]:checked');
+    const usernames = Array.from(checked).map(cb => cb.value);
+    if (usernames.length === 0) return;
+
+    const btn = document.getElementById('add-member-btn-confirm');
+    btn.disabled = true;
+    btn.textContent = 'Adding...';
+
+    try {
+        for (const username of usernames) {
+            const response = await fetch(`${API_URL}/rooms/${encodeURIComponent(currentRoom)}/members`, {
+                method: 'POST',
+                headers: {
+                    'Content-Type': 'application/json',
+                    'Authorization': `Bearer ${sessionToken}`
+                },
+                body: JSON.stringify({ username })
+            });
+            if (!response.ok) {
+                const data = await response.json();
+                console.error(`Failed to add ${username}:`, data.detail);
+            }
+        }
+        closeAddMemberModal();
+        // Refresh the members panel
+        openMembersPanel();
+    } catch (error) {
+        console.error('Error adding members:', error);
+        alert('Failed to add some users');
+    } finally {
+        btn.disabled = false;
+        btn.textContent = 'Add Selected';
+    }
+}
+
 // Expose functions to window for inline event handlers
 // Note: Settings functions moved to settings.js
 window.logout = logout;
@@ -1828,6 +1935,9 @@ window.toggleSidebar = toggleSidebar;
 window.closeRoomSettings = closeRoomSettings;
 window.deleteRoomAction = deleteRoomAction;
 window.updateNotifyLevel = updateNotifyLevel;
+window.openAddMemberModal = openAddMemberModal;
+window.closeAddMemberModal = closeAddMemberModal;
+window.addMembersFromModal = addMembersFromModal;
 window.toggleMembersPanel = toggleMembersPanel;
 window.closeMembersPanel = closeMembersPanel;
 

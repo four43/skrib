@@ -64,6 +64,40 @@ test.describe('User Registration', () => {
   });
 });
 
+test.describe('Registration Errors', () => {
+  test('shows error in form when username is already taken', async ({ authenticatedPage: page }) => {
+    const username = uniqueName('du');
+
+    // Register the first user
+    await page.goto('/register.html');
+    await page.waitForLoadState('networkidle');
+    await page.locator('#register-username').pressSequentially(username, { delay: 30 });
+    await page.locator('#recovery-passphrase').fill('This-is-a-valid-test-passphrase-32!');
+    await page.locator('#recovery-passphrase-confirm').fill('This-is-a-valid-test-passphrase-32!');
+    await page.locator('#register-submit-button').click();
+    await page.waitForURL(/.*enroll-passkey\.html/, { timeout: 5000 });
+    await page.locator('#enroll-passkey-button').click();
+    await page.waitForURL(/.*app\.html/, { timeout: 20000 });
+
+    // Try to register a second user with the same username
+    await page.goto('/register.html');
+    await page.waitForLoadState('networkidle');
+    await page.locator('#register-username').pressSequentially(username, { delay: 30 });
+    await page.locator('#recovery-passphrase').fill('This-is-a-valid-test-passphrase-32!');
+    await page.locator('#recovery-passphrase-confirm').fill('This-is-a-valid-test-passphrase-32!');
+    await page.locator('#register-submit-button').click();
+
+    // Should redirect back to register.html with error displayed
+    await page.waitForURL(/.*register\.html/, { timeout: 5000 });
+    const status = page.locator('#register-status');
+    await expect(status).toContainText('Username is already taken');
+    await expect(status).toHaveClass(/error/);
+
+    // Username field should be pre-filled so user doesn't have to retype
+    await expect(page.locator('#register-username')).toHaveValue(username);
+  });
+});
+
 test.describe('Auth Flows', () => {
   test('chat UI loads after login', async ({ authenticatedPage: page }) => {
     const username = uniqueName('cl');

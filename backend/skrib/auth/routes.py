@@ -49,21 +49,29 @@ async def register_step1(
     That field intentionally has no name= attribute so the passphrase is never
     transmitted to the server.
     """
+    def _register_error(msg: str, uname: str = "", inv: str = "") -> RedirectResponse:
+        params = {"error": msg}
+        if uname:
+            params["username"] = uname
+        if inv:
+            params["invite"] = inv
+        return RedirectResponse(url=f"/register.html?{urlencode(params)}", status_code=303)
+
     if not is_registration_allowed(invite_token=invite):
         mode = get_registration_mode()
         if mode == 'closed':
-            raise HTTPException(status_code=403, detail="Registration is currently closed")
+            return _register_error("Registration is currently closed")
         elif mode == 'invite_only':
-            raise HTTPException(status_code=403, detail="Registration requires a valid invite link")
+            return _register_error("Registration requires a valid invite link")
         else:
-            raise HTTPException(status_code=403, detail="Registration is not available")
+            return _register_error("Registration is not available")
 
     username_error = validate_username(username)
     if username_error:
-        raise HTTPException(status_code=400, detail=username_error)
+        return _register_error(username_error, username, invite or "")
 
     if is_username_taken(username):
-        raise HTTPException(status_code=400, detail="Username is already taken")
+        return _register_error("Username is already taken", username, invite or "")
 
     token = create_registration_token(username)
     params = {'token': token}
