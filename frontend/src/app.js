@@ -2297,6 +2297,8 @@ async function addMembersFromModal() {
     btn.disabled = true;
     btn.textContent = 'Adding...';
 
+    const currentEpochs = roomKeys[currentRoom];
+
     try {
         for (const username of usernames) {
             const response = await fetch(`${API_URL}/rooms/${encodeURIComponent(currentRoom)}/members`, {
@@ -2310,6 +2312,44 @@ async function addMembersFromModal() {
             if (!response.ok) {
                 const data = await response.json();
                 console.error(`Failed to add ${username}:`, data.detail);
+                continue;
+            }
+
+            // Share room encryption keys with the new member
+            if (privateKey && currentEpochs && Object.keys(currentEpochs).length > 0) {
+                try {
+                    const keyResp = await fetch(
+                        `${API_URL}/auth/encryption-key/${encodeURIComponent(username)}`,
+                        { headers: { 'Authorization': `Bearer ${sessionToken}` } }
+                    );
+                    if (keyResp.ok) {
+                        const { public_key: publicKeyJson } = await keyResp.json();
+                        const publicKeyJwk = JSON.parse(publicKeyJson);
+                        const epochs = Object.keys(currentEpochs).map(Number);
+                        for (const epoch of epochs) {
+                            const encKey = await encryptRoomKey(currentEpochs[epoch], publicKeyJwk);
+                            await fetch(
+                                `${API_URL}/rooms/${encodeURIComponent(currentRoom)}/keys`,
+                                {
+                                    method: 'POST',
+                                    headers: {
+                                        'Content-Type': 'application/json',
+                                        'Authorization': `Bearer ${sessionToken}`,
+                                    },
+                                    body: JSON.stringify({
+                                        username,
+                                        encrypted_key: encKey,
+                                        key_epoch: epoch,
+                                    }),
+                                }
+                            );
+                        }
+                    } else {
+                        console.warn(`${username} has no encryption key yet`);
+                    }
+                } catch (keyErr) {
+                    console.error(`Failed to share room keys with ${username}:`, keyErr);
+                }
             }
         }
         closeAddMemberModal();

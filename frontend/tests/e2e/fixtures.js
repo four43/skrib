@@ -145,6 +145,45 @@ export const test = base.extend({
         await admin.context.close();
         await user.context.close();
     },
+
+    // ---------- Three registered, approved, and logged-in users ----------
+    threeUsers: async ({ browser, baseURL }, use) => {
+        // Register User A (auto-approved admin) — lands on app.html
+        const admin = await registerNewUser(browser, baseURL);
+
+        // Register User B and User C (pending)
+        const userB = await registerNewUser(browser, baseURL);
+        const userC = await registerNewUser(browser, baseURL);
+
+        // Admin approves both
+        for (const u of [userB, userC]) {
+            const resp = await admin.page.request.patch(
+                `${baseURL}/api/users/pending/${encodeURIComponent(u.approvalCode)}`,
+                {
+                    headers: {
+                        'Content-Type': 'application/json',
+                        'Authorization': `Bearer ${admin.sessionToken}`,
+                    },
+                    data: { status: 'approved' },
+                }
+            );
+            expect(resp.ok()).toBeTruthy();
+        }
+
+        // Log User B and User C in via passkey
+        for (const u of [userB, userC]) {
+            await u.page.goto('/login.html');
+            await u.page.locator('#login-button').click();
+            await u.page.waitForURL('**/app.html**', { timeout: 15_000 });
+            u.sessionToken = await u.page.evaluate(() => localStorage.getItem('session_token'));
+        }
+
+        await use({ admin, userB, userC });
+
+        await admin.context.close();
+        await userB.context.close();
+        await userC.context.close();
+    },
 });
 
 export { expect } from '@playwright/test';

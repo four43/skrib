@@ -20,7 +20,7 @@ Shared test fixtures providing:
 - **`authenticatedPage`** — A Page with a CTAP2 virtual WebAuthn authenticator (discoverable credentials, auto-verified). Torn down after test.
 - **`registeredUser`** — Registers a fresh user via the full UI flow (register form, passkey enrollment). Returns `{ page, username }`.
 
-Also create a state where there are 2 successfully registered users in the system for tests.
+Also create a state where there are 3 successfully registered users in the system for tests.
 
 Each shared fixture must be able to create multiple users. The first user that's created is auto approved, but subsequent users will need to be approved, or the server must be switched to `open` registration mode for those tests.
 
@@ -60,4 +60,19 @@ Create a test for each of these scenarios:
   - User tries to log in with valid username but wrong passkey and gets error
   - Unauthenticated user tries to access app.html and is redirected to login page
 
+## core.spec.js
 
+This is for core functionality, once the user is logged in. This tests assumes a state of having at least 3 registered users (an admin, User A, and 2 other users, User B and User C) in the system, so it can test interactions between them. The tests in this file should be focused on core room management functionality. It leans on the chat plugin for testing, but the focus is on core room management and not plugin-specific behavior.
+
+- User A creates a room "test-room-a", user A is the only one in the room.
+  - User A can send a message "Hello World" to the room, the message is visible to User A.
+    - User A can invite User B to the room, a small invite message shows in the room
+      - User B has the room "test-room-a" in their room list, and can see User A's "Hello World" message
+    - User A can invite User B and User C to the room, using the Add User button and pop up. Those users can see the existing
+      messages in the room when they join.
+      - User B can send a message "Hi User A" and User A can see it
+      - User C can send a message "Hi User A and B" and User A and User B can see it
+  - User B creates a room "test-room-b", with no messages.
+    - They can invites User A, a message displaying that User A was invited appears in the room.
+      - User A can see the room in their room list, but doesn't see any messages until they click into the room.
+      - User A can click into the room and see no messages (since user B never sent any). User A can send a message "Hello User B" and User B can see it.
