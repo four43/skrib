@@ -30,24 +30,34 @@ Each shared fixture must be able to create multiple users. The first user that's
 
 Core registration, login, and chat functionality.
 
+Create a test for each of these scenarios:
+
 - Full registration flow - Login page renders with a Register button, register form has username, 2 new password/passphrase fields.
-  - User tries invalid user name with reserved words and gets error
-  - User tries too short username and gets error
-  - User tries too long username and gets error
-  - User tries mismatched passphrase and gets error
-  - User successfully tries valid username and passphrase and registers successfully, then is prompted to create a passkey credential
+  - User A tries invalid user name with reserved words and gets error
+  - User A tries too short username and gets error
+  - User A tries too long username and gets error
+  - User A tries mismatched passphrase and gets error
+  - User A successfully tries valid username and passphrase and registers successfully, then is prompted to create a passkey credential
     - Passkey registration fails, shows helpful error.
-    - User creates passkey credential and is logged in, sees chat UI
-      - User logs out and logs in again with passkey, sees chat UI
-      - For another, new user, start from login page
-        - tries to register with a username that already exists, duplicate username error
-        - successfully registers with a different username, creates passkey, sees pending registration page.
-          - Admin approves user, user can log in with passkey and sees chat UI
-          - Admin declines user, user cannot log in
+    - User A creates passkey credential and is logged in, sees chat UI, sends a message "Hello World" and sees it in the chat.
+      - User A logs out and logs in again with passkey, sees chat UI
+      - For another, new user, User B, start from login page
+        - User B tries to register with a username that already exists, duplicate username error
+        - User B successfully registers with a different username, creates passkey, sees pending registration page.
+          - Admin (User A) approves User B. User B can log in with passkey and sees chat UI
+            - User B logs out, clears all local storage (IndexDB and others), logs in again and is prompted with a recovery option
+              (since the passkey credential is gone but the server has it). User A successfully recovers by entering the correct
+              passphrase, sees User A's "Hello World" message
+        chat UI, and old messages are still there that says Hello World.
+          - Admin (User A) declines User B, User B cannot log in
+      - User A logs out, clears all local storage (IndexDB and others), logs in again and is prompted with a recovery option (since
+        the passkey credential is gone but the server has it). User A successfully recovers by entering the correct passphrase, sees
+        chat UI, and old messages are still there that says Hello World.
+      - User A logs out, clears all local storage, tries to log in again but enters wrong passphrase, gets error and stays on login
+        page.
+  - User tries to log in with invalid username and gets error
+  - User tries to log in with valid username but no passkey and gets error
+  - User tries to log in with valid username but wrong passkey and gets error
   - Unauthenticated user tries to access app.html and is redirected to login page
 
-Room stuff:
-
-- Send a message in a room
-- Create a new room and verify it appears in sidebar
 
