@@ -1,8 +1,8 @@
 /**
  * Shared test fixtures for E2E tests.
  *
- * - _workerBackend  (worker-scoped) — isolated uvicorn backend per Playwright worker
- * - baseURL         — points at the per-worker backend
+ * - _backend        (test-scoped) — fresh uvicorn backend + empty DB per test
+ * - baseURL         — points at the per-test backend
  * - authenticatedPage — Page with a CTAP2 virtual WebAuthn authenticator
  * - registeredUser  — registers a fresh user through the full UI flow
  * - twoUsers        — two registered users (first is admin, second is approved)
@@ -53,8 +53,8 @@ function generatePassphrase() {
  */
 export const test = base.extend({
 
-    // ---------- worker-scoped: one backend per Playwright worker ----------
-    _workerBackend: [async ({}, use, workerInfo) => {
+    // ---------- test-scoped: fresh backend + empty DB per test ----------
+    _backend: [async ({}, use, workerInfo) => {
         const port = 8800 + workerInfo.workerIndex;
         const dataDir = mkdtempSync(join(tmpdir(), 'skrib-e2e-'));
 
@@ -78,11 +78,11 @@ export const test = base.extend({
         proc.kill('SIGTERM');
         await new Promise(resolve => proc.on('exit', resolve));
         try { rmSync(dataDir, { recursive: true, force: true }); } catch {}
-    }, { scope: 'worker', auto: true }],
+    }, { scope: 'test', auto: true }],
 
-    // ---------- override baseURL to point at the per-worker backend ----------
-    baseURL: async ({ _workerBackend }, use) => {
-        await use(_workerBackend.baseURL);
+    // ---------- override baseURL to point at the per-test backend ----------
+    baseURL: async ({ _backend }, use) => {
+        await use(_backend.baseURL);
     },
 
     // ---------- Page with a virtual WebAuthn authenticator ----------

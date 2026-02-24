@@ -7,6 +7,7 @@ let currentRole = null;
 let currentRoomId = null;
 let currentRoom = null;
 let userRole = null; // User's role in this room
+let originalTopic = null; // Track original topic to detect changes
 
 // Check session and redirect if not authenticated
 checkSession();
@@ -102,6 +103,7 @@ async function initializeRoomSettings() {
         const topicInput = document.getElementById('room-topic');
         if (topicInput) {
             topicInput.value = currentRoom.topic || '';
+            originalTopic = topicInput.value;
         }
 
         // Display members (already included in room response)
@@ -140,8 +142,9 @@ function displayMembers(members) {
     const currentMember = members.find(m => m.username === currentUsername);
     userRole = currentMember ? currentMember.room_role : 'member';
 
-    // Update danger zone visibility now that we know the role
+    // Update UI based on permissions now that we know the role
     updateDangerZone();
+    updateTopicPermission();
 
     const membersList = document.getElementById('members-list');
     const memberCount = document.getElementById('member-count');
@@ -229,6 +232,9 @@ async function saveTopic() {
 
     const newTopic = topicInput.value.trim();
 
+    // Only save if the topic actually changed
+    if (newTopic === originalTopic) return;
+
     try {
         const response = await fetch(`${API_URL}/rooms/${encodeURIComponent(currentRoomId)}`, {
             method: 'PATCH',
@@ -240,15 +246,14 @@ async function saveTopic() {
         });
 
         if (response.ok) {
-            alert('Topic updated successfully!');
+            originalTopic = newTopic;
             currentRoom.topic = newTopic;
         } else {
             const error = await response.json();
-            alert(`Failed to update topic: ${error.detail || 'Unknown error'}`);
+            console.error('[HTTP] Failed to update topic:', error.detail || 'Unknown error');
         }
     } catch (error) {
         console.error('[HTTP] Error updating topic:', error);
-        alert('Failed to update topic');
     }
 }
 
@@ -341,26 +346,42 @@ function updateDangerZone() {
     }
 }
 
-function setupEventListeners() {
-    // Save topic button
-    const saveTopicBtn = document.getElementById('save-topic-btn');
-    if (saveTopicBtn) {
-        saveTopicBtn.addEventListener('click', saveTopic);
-    }
+function updateTopicPermission() {
+    const topicInput = document.getElementById('room-topic');
+    if (!topicInput) return;
 
+    const canEdit = currentRole === 'admin' ||
+                    userRole === 'owner' || userRole === 'op';
+
+    topicInput.disabled = !canEdit;
+}
+
+function setupEventListeners() {
     // Delete room button
     const deleteRoomBtn = document.getElementById('delete-room-btn');
     if (deleteRoomBtn) {
         deleteRoomBtn.addEventListener('click', deleteRoom);
     }
 
-    // Topic input - Enter key to save
+    // Topic input — auto-save on blur and Enter
     const topicInput = document.getElementById('room-topic');
     if (topicInput) {
+        topicInput.addEventListener('blur', () => saveTopic());
         topicInput.addEventListener('keypress', (e) => {
             if (e.key === 'Enter') {
-                saveTopic();
+                e.preventDefault();
+                topicInput.blur();
             }
+        });
+    }
+
+    // Auto-save topic before navigating away via back button
+    const backBtn = document.querySelector('.admin-back-btn');
+    if (backBtn) {
+        backBtn.addEventListener('click', async (e) => {
+            e.preventDefault();
+            await saveTopic();
+            window.location.href = backBtn.href;
         });
     }
 }

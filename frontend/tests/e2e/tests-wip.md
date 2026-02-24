@@ -1,13 +1,11 @@
 
+## WIP New tests
 
-## room-types.spec.js
+- Tests for Chat
+- Tests for Todo
+- Tests for Admin settings
+- Tests for user settings, themes, etc.
 
-Room type plugin functionality (chat and todo).
-
-- Create a chat room and send a message
-- Create a todo room and add an item
-
----
 
 ## room-selection-persistence.spec.js
 

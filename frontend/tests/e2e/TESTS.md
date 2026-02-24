@@ -76,3 +76,44 @@ This is for core functionality, once the user is logged in. This tests assumes a
     - They can invites User A, a message displaying that User A was invited appears in the room.
       - User A can see the room in their room list, but doesn't see any messages until they click into the room.
       - User A can click into the room and see no messages (since user B never sent any). User A can send a message "Hello User B" and User B can see it.
+- User A creates a room "topic-room" and invites User B.
+  - User A sets the topic to "Welcome to topic room" via /topic command. The topic appears in the room header for User A.
+    - User B sees the updated topic in their room header (real-time via WebSocket).
+    - User B (a regular member) tries to set the topic and gets a permission error.
+  - User A sets the topic to "Welcome to topic room" via room settings UI button and page. When navigating back to the room, the
+    changed topic is visible.
+    - User B sees the updated topic in their room header (real-time via WebSocket).
+    - User B (a regular member) navigates to the room settings UI via button, but the topic input is disabled and they cannot change
+      it.
+- User A creates a room "leave-room" and invites User B and User C.
+  - User B sends a message, then leaves the room via /leave command.
+    - "leave-room" disappears from User B's room list.
+    - User A and User C see a system message that User B left.
+    - User B can no longer access the room or send messages to it.
+- User A creates a room "kick-room" and invites User B and User C.
+  - User A kicks User B via /kick command.
+    - "kick-room" disappears from User B's room list.
+    - User A and User C see a system message that User B was kicked.
+    - User C (a regular member) tries to /kick User A and gets a permission error.
+- User A creates a room "delete-room" and invites User B.
+  - User A sends a message so the room has content.
+  - User A deletes the room.
+    - The room disappears from both User A's and User B's room lists.
+    - User B (non-owner) creates a room "nodelete-room" with User A — User A cannot delete it (only owner/admin).
+- User A creates a DM with User B.
+  - Both users can see the DM in their room list with the other user's name as the display name.
+  - User A sends a message "DM hello" and User B can see it.
+  - User B tries /leave on the DM and gets an error (cannot leave DMs).
+  - User A creates another DM with User B — it returns the same existing DM, not a duplicate.
+  - User A creates a group DM with User B and User C. All three see it in their room lists.
+- User A creates a room "unread-room" and invites User B.
+  - User B is viewing a different room. User A sends 3 messages.
+    - User B sees an unread count badge on "unread-room" in the room list.
+    - User B clicks into "unread-room" and the unread count clears.
+    - User A sends another message while User B is in the room — no unread badge (already viewing).
+- User A creates a room "realtime-room" and invites User B.
+  - User A and User B both have the room open. User A sends "live message".
+    - The message appears in User B's chat without refreshing the page (WebSocket delivery).
+  - User B sends "reply message" — it appears for User A in real-time as well.
+- User A is in "test-room-a", navigates to "test-room-b", then refreshes the page.
+  - After refresh, User A is still viewing "test-room-b" (room selection persists).
