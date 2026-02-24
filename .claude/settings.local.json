@@ -24,7 +24,11 @@
       "Bash(npx playwright test:*)",
       "mcp__playwright__browser_evaluate",
       "mcp__playwright__browser_hover",
-      "Bash(./util/test:*)"
+      "Bash(./util/test:*)",
+      "Bash(tail:*)",
+      "Bash(grep:*)",
+      "Bash(./frontend/util/test-e2e:*)",
+      "Bash(util/test-e2e:*)"
     ]
   }
 }

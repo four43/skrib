@@ -1,5 +1,6 @@
 import { API_URL, escapeHtml } from './utils.js';
 import { loadTheme } from './theme-manager.js';
+import Sortable from 'sortablejs';
 import {
     loadPrivateKey,
     generateRoomKey,
@@ -26,6 +27,12 @@ let serverColor = '#6366f1';  // Cached server color for theme reset
 let roomMeta = {};  // Cache of room_id -> { room_type, display_name, members }
 let privateKey = null;  // User's RSA-OAEP private key (loaded from IndexedDB)
 let roomKeys = {};  // room_id -> { epoch: CryptoKey }
+
+// Folder state
+let folderData = [];  // Array of folder objects from server
+let roomPositions = {};  // room_id -> { folder_id, position }
+const COLLAPSED_FOLDERS_KEY = 'skrib_collapsed_folders';
+let sortableInstances = [];  // Track SortableJS instances for cleanup
 
 // Local-only UI preferences (localStorage)
 const UI_PREFS_KEY = 'skrib_ui_prefs';
@@ -893,6 +900,8 @@ async function initializeChatView() {
     if (currentRole === 'admin' || currentRole === 'moderator') {
         // Show admin panel button
         document.getElementById('admin-panel-btn').classList.remove('hidden');
+        // Show folder management button
+        document.getElementById('add-folder-btn').classList.remove('hidden');
     }
 
     await loadRooms();
@@ -1051,15 +1060,16 @@ window.getDisplayName = getDisplayName;
 
 async function loadRooms() {
     try {
-        const response = await fetch(`${API_URL}/rooms`, {
-            headers: { 'Authorization': `Bearer ${sessionToken}` }
-        });
-        const data = await response.json();
-
-        const channelList = document.getElementById('channel-list');
-        const dmList = document.getElementById('dm-list');
-        channelList.innerHTML = '';
-        dmList.innerHTML = '';
+        const [roomsResponse, foldersResponse] = await Promise.all([
+            fetch(`${API_URL}/rooms`, {
+                headers: { 'Authorization': `Bearer ${sessionToken}` }
+            }),
+            fetch(`${API_URL}/room-folders`, {
+                headers: { 'Authorization': `Bearer ${sessionToken}` }
+            }),
+        ]);
+        const data = await roomsResponse.json();
+        const folderTree = await foldersResponse.json();
 
         // Update room metadata cache
         roomMeta = {};
@@ -1067,18 +1077,410 @@ async function loadRooms() {
             roomMeta[room.room_id] = room;
         });
 
+        // Store folder data
+        folderData = folderTree.folders || [];
+        roomPositions = {};
+        (folderTree.room_positions || []).forEach(rp => {
+            roomPositions[rp.room_id] = { folder_id: rp.folder_id, position: rp.position };
+        });
+
         const channels = data.filter(r => !r.is_dm);
         const dms = data.filter(r => r.is_dm);
 
-        channels.forEach(room => {
-            channelList.appendChild(createRoomItem(room));
-        });
+        renderFolderTree('channel-list', folderData, channels);
 
+        const dmList = document.getElementById('dm-list');
+        dmList.innerHTML = '';
         dms.forEach(room => {
             dmList.appendChild(createRoomItem(room));
         });
+
+        initDragAndDrop();
     } catch (error) {
         console.error('Error loading rooms:', error);
+    }
+}
+
+function getCollapsedFolders() {
+    try {
+        return JSON.parse(localStorage.getItem(COLLAPSED_FOLDERS_KEY) || '[]');
+    } catch { return []; }
+}
+
+function setCollapsedFolders(ids) {
+    localStorage.setItem(COLLAPSED_FOLDERS_KEY, JSON.stringify(ids));
+}
+
+function toggleFolder(folderId) {
+    const collapsed = getCollapsedFolders();
+    const idx = collapsed.indexOf(folderId);
+    if (idx >= 0) {
+        collapsed.splice(idx, 1);
+    } else {
+        collapsed.push(folderId);
+    }
+    setCollapsedFolders(collapsed);
+
+    const content = document.querySelector(`.folder-content[data-folder-id="${folderId}"]`);
+    const toggle = document.querySelector(`.folder-toggle[data-folder-id="${folderId}"]`);
+    const badge = document.querySelector(`.folder-badge[data-folder-id="${folderId}"]`);
+    if (content) content.classList.toggle('collapsed');
+    if (toggle) toggle.textContent = content?.classList.contains('collapsed') ? '\u25B6' : '\u25BC';
+    if (badge) updateFolderBadge(folderId);
+}
+
+function buildFolderTree(folders, channels) {
+    const folderMap = {};
+    folders.forEach(f => {
+        folderMap[f.folder_id] = { ...f, children: [], rooms: [] };
+    });
+
+    const rootFolders = [];
+    folders.forEach(f => {
+        if (f.parent_folder_id && folderMap[f.parent_folder_id]) {
+            folderMap[f.parent_folder_id].children.push(folderMap[f.folder_id]);
+        } else {
+            rootFolders.push(folderMap[f.folder_id]);
+        }
+    });
+
+    // Sort children by position
+    Object.values(folderMap).forEach(f => {
+        f.children.sort((a, b) => a.position - b.position);
+    });
+    rootFolders.sort((a, b) => a.position - b.position);
+
+    // Assign rooms to folders
+    const unfiled = [];
+    channels.forEach(room => {
+        const pos = roomPositions[room.room_id];
+        const fid = pos?.folder_id || room.folder_id;
+        if (fid && folderMap[fid]) {
+            folderMap[fid].rooms.push(room);
+        } else {
+            unfiled.push(room);
+        }
+    });
+
+    // Sort rooms within each folder by position
+    Object.values(folderMap).forEach(f => {
+        f.rooms.sort((a, b) => {
+            const posA = roomPositions[a.room_id]?.position ?? a.sort_position ?? 0;
+            const posB = roomPositions[b.room_id]?.position ?? b.sort_position ?? 0;
+            return posA - posB;
+        });
+    });
+    unfiled.sort((a, b) => {
+        const posA = roomPositions[a.room_id]?.position ?? a.sort_position ?? 0;
+        const posB = roomPositions[b.room_id]?.position ?? b.sort_position ?? 0;
+        return posA - posB;
+    });
+
+    return { rootFolders, unfiled, folderMap };
+}
+
+function renderFolderTree(containerId, folders, channels) {
+    const container = document.getElementById(containerId);
+    container.innerHTML = '';
+
+    const { rootFolders, unfiled } = buildFolderTree(folders, channels);
+
+    rootFolders.forEach(folder => {
+        container.appendChild(createFolderElement(folder));
+    });
+
+    // Render unfiled rooms at root level
+    unfiled.forEach(room => {
+        container.appendChild(createRoomItem(room));
+    });
+}
+
+function createFolderElement(folder) {
+    const collapsed = getCollapsedFolders();
+    const isCollapsed = collapsed.includes(folder.folder_id);
+    const isAdmin = currentRole === 'admin' || currentRole === 'moderator';
+
+    const wrapper = document.createElement('div');
+    wrapper.className = 'folder-item';
+    wrapper.dataset.folderId = folder.folder_id;
+
+    // Header
+    const header = document.createElement('div');
+    header.className = 'folder-header';
+
+    const toggle = document.createElement('span');
+    toggle.className = 'folder-toggle';
+    toggle.dataset.folderId = folder.folder_id;
+    toggle.textContent = isCollapsed ? '\u25B6' : '\u25BC';
+    toggle.onclick = (e) => { e.stopPropagation(); toggleFolder(folder.folder_id); };
+
+    const name = document.createElement('span');
+    name.className = 'folder-name';
+    name.textContent = folder.name;
+    name.onclick = () => toggleFolder(folder.folder_id);
+
+    // Unread badge for collapsed folder
+    const badge = document.createElement('span');
+    badge.className = 'folder-badge';
+    badge.dataset.folderId = folder.folder_id;
+    badge.style.display = 'none';
+
+    header.appendChild(toggle);
+    header.appendChild(name);
+    header.appendChild(badge);
+
+    if (isAdmin) {
+        const actions = document.createElement('span');
+        actions.className = 'folder-actions';
+
+        const renameBtn = document.createElement('button');
+        renameBtn.className = 'folder-action-btn';
+        renameBtn.textContent = '\u270E';
+        renameBtn.title = 'Rename folder';
+        renameBtn.onclick = (e) => { e.stopPropagation(); renameFolder(folder.folder_id, folder.name); };
+
+        const deleteBtn = document.createElement('button');
+        deleteBtn.className = 'folder-action-btn';
+        deleteBtn.textContent = '\u2715';
+        deleteBtn.title = 'Delete folder';
+        deleteBtn.onclick = (e) => { e.stopPropagation(); deleteFolder(folder.folder_id, folder.name); };
+
+        actions.appendChild(renameBtn);
+        actions.appendChild(deleteBtn);
+        header.appendChild(actions);
+    }
+
+    wrapper.appendChild(header);
+
+    // Content (collapsible)
+    const content = document.createElement('div');
+    content.className = 'folder-content' + (isCollapsed ? ' collapsed' : '');
+    content.dataset.folderId = folder.folder_id;
+
+    // Nested folders
+    folder.children.forEach(child => {
+        content.appendChild(createFolderElement(child));
+    });
+
+    // Rooms in this folder
+    folder.rooms.forEach(room => {
+        content.appendChild(createRoomItem(room));
+    });
+
+    wrapper.appendChild(content);
+
+    // Update badge after rendering
+    if (isCollapsed) {
+        requestAnimationFrame(() => updateFolderBadge(folder.folder_id));
+    }
+
+    return wrapper;
+}
+
+function getUnreadCountInFolder(folderId) {
+    // Recursively sum unread counts for all rooms in a folder and its children
+    let count = 0;
+    const folderMap = {};
+    folderData.forEach(f => { folderMap[f.folder_id] = f; });
+
+    function sumFolder(fid) {
+        // Count rooms in this folder
+        Object.values(roomMeta).forEach(room => {
+            if (room.is_dm) return;
+            const pos = roomPositions[room.room_id];
+            const roomFolderId = pos?.folder_id || room.folder_id;
+            if (roomFolderId === fid && room.room_id !== currentRoom) {
+                count += room.unread_count || 0;
+            }
+        });
+        // Count child folders
+        folderData.forEach(f => {
+            if (f.parent_folder_id === fid) {
+                sumFolder(f.folder_id);
+            }
+        });
+    }
+    sumFolder(folderId);
+    return count;
+}
+
+function updateFolderBadge(folderId) {
+    const badge = document.querySelector(`.folder-badge[data-folder-id="${folderId}"]`);
+    const content = document.querySelector(`.folder-content[data-folder-id="${folderId}"]`);
+    if (!badge) return;
+
+    const isCollapsed = content?.classList.contains('collapsed');
+    if (!isCollapsed) {
+        badge.style.display = 'none';
+        return;
+    }
+
+    const count = getUnreadCountInFolder(folderId);
+    if (count > 0) {
+        badge.textContent = count > 99 ? '99+' : count;
+        badge.style.display = '';
+    } else {
+        badge.style.display = 'none';
+    }
+}
+
+function initDragAndDrop() {
+    const isAdmin = currentRole === 'admin' || currentRole === 'moderator';
+    if (!isAdmin) return;
+
+    // Destroy old instances
+    sortableInstances.forEach(s => s.destroy());
+    sortableInstances = [];
+
+    // Make the root channel-list sortable
+    const channelList = document.getElementById('channel-list');
+    if (channelList) {
+        sortableInstances.push(new Sortable(channelList, {
+            group: 'rooms-and-folders',
+            animation: 150,
+            fallbackOnBody: true,
+            ghostClass: 'drag-ghost',
+            chosenClass: 'drag-chosen',
+            draggable: '.room-item, .folder-item',
+            onEnd: handleDragEnd,
+        }));
+    }
+
+    // Make each folder-content sortable
+    document.querySelectorAll('.folder-content').forEach(el => {
+        sortableInstances.push(new Sortable(el, {
+            group: 'rooms-and-folders',
+            animation: 150,
+            fallbackOnBody: true,
+            ghostClass: 'drag-ghost',
+            chosenClass: 'drag-chosen',
+            draggable: '.room-item, .folder-item',
+            onEnd: handleDragEnd,
+        }));
+    });
+}
+
+async function handleDragEnd() {
+    // Collect new order from DOM
+    const folders = [];
+    const rooms = [];
+
+    function collectFromContainer(container, parentFolderId) {
+        let position = 0;
+        Array.from(container.children).forEach(child => {
+            if (child.classList.contains('folder-item')) {
+                const folderId = child.dataset.folderId;
+                folders.push({
+                    folder_id: folderId,
+                    parent_folder_id: parentFolderId || null,
+                    position: position,
+                });
+                position++;
+                // Recurse into folder content
+                const content = child.querySelector(':scope > .folder-content');
+                if (content) {
+                    collectFromContainer(content, folderId);
+                }
+            } else if (child.classList.contains('room-item')) {
+                const roomId = child.dataset.roomId;
+                if (roomId) {
+                    rooms.push({
+                        room_id: roomId,
+                        folder_id: parentFolderId || null,
+                        position: position,
+                    });
+                    position++;
+                }
+            }
+        });
+    }
+
+    const channelList = document.getElementById('channel-list');
+    collectFromContainer(channelList, null);
+
+    try {
+        await fetch(`${API_URL}/room-folders/reorder`, {
+            method: 'POST',
+            headers: {
+                'Authorization': `Bearer ${sessionToken}`,
+                'Content-Type': 'application/json',
+            },
+            body: JSON.stringify({ folders, rooms }),
+        });
+    } catch (error) {
+        console.error('Error saving reorder:', error);
+        loadRooms();  // Reload on failure
+    }
+}
+
+// Folder CRUD
+function openCreateFolderModal() {
+    const modal = document.getElementById('create-folder-modal');
+    modal.classList.add('open');
+    document.getElementById('new-folder-input').value = '';
+    document.getElementById('new-folder-input').focus();
+}
+
+function closeCreateFolderModal() {
+    document.getElementById('create-folder-modal').classList.remove('open');
+}
+
+async function createFolder() {
+    const input = document.getElementById('new-folder-input');
+    const name = input.value.trim();
+    if (!name) return;
+
+    try {
+        const response = await fetch(`${API_URL}/room-folders`, {
+            method: 'POST',
+            headers: {
+                'Authorization': `Bearer ${sessionToken}`,
+                'Content-Type': 'application/json',
+            },
+            body: JSON.stringify({ name }),
+        });
+        if (response.ok) {
+            closeCreateFolderModal();
+            await loadRooms();
+        } else {
+            const data = await response.json();
+            alert(data.detail || 'Failed to create folder');
+        }
+    } catch (error) {
+        console.error('Error creating folder:', error);
+    }
+}
+
+async function renameFolder(folderId, currentName) {
+    const newName = prompt('Rename folder:', currentName);
+    if (!newName || newName.trim() === currentName) return;
+
+    try {
+        await fetch(`${API_URL}/room-folders/${folderId}`, {
+            method: 'PATCH',
+            headers: {
+                'Authorization': `Bearer ${sessionToken}`,
+                'Content-Type': 'application/json',
+            },
+            body: JSON.stringify({ name: newName.trim() }),
+        });
+        await loadRooms();
+    } catch (error) {
+        console.error('Error renaming folder:', error);
+    }
+}
+
+async function deleteFolder(folderId, folderName) {
+    if (!confirm(`Delete folder "${folderName}"? Rooms inside will become unfiled.`)) return;
+
+    try {
+        await fetch(`${API_URL}/room-folders/${folderId}`, {
+            method: 'DELETE',
+            headers: { 'Authorization': `Bearer ${sessionToken}` },
+        });
+        await loadRooms();
+    } catch (error) {
+        console.error('Error deleting folder:', error);
     }
 }
 
@@ -1250,6 +1652,11 @@ function handleRoomMessage(action, data) {
 
         case 'update':
             console.log('[WS] Room list updated, reloading...');
+            loadRooms();
+            break;
+
+        case 'folders_updated':
+            console.log('[WS] Folder structure updated, reloading...');
             loadRooms();
             break;
 
@@ -1966,6 +2373,32 @@ document.addEventListener('DOMContentLoaded', () => {
     const addChannelBtn = document.getElementById('add-channel-btn');
     if (addChannelBtn) {
         addChannelBtn.addEventListener('click', openCreateRoomModal);
+    }
+
+    // Add folder button
+    const addFolderBtn = document.getElementById('add-folder-btn');
+    if (addFolderBtn) {
+        addFolderBtn.addEventListener('click', openCreateFolderModal);
+    }
+
+    // Create folder modal
+    const createFolderCloseBtn = document.getElementById('create-folder-close-btn');
+    if (createFolderCloseBtn) {
+        createFolderCloseBtn.addEventListener('click', closeCreateFolderModal);
+    }
+    const createFolderBackdrop = document.getElementById('create-folder-backdrop');
+    if (createFolderBackdrop) {
+        createFolderBackdrop.addEventListener('click', closeCreateFolderModal);
+    }
+    const createFolderSubmitBtn = document.getElementById('create-folder-submit-btn');
+    if (createFolderSubmitBtn) {
+        createFolderSubmitBtn.addEventListener('click', createFolder);
+    }
+    const newFolderInput = document.getElementById('new-folder-input');
+    if (newFolderInput) {
+        newFolderInput.addEventListener('keypress', (e) => {
+            if (e.key === 'Enter') createFolder();
+        });
     }
 
     // Add DM button

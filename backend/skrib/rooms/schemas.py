@@ -12,6 +12,8 @@ class RoomInfo(BaseModel):
     unread_count: int = 0
     notify_level: str = 'all'  # "all", "mentions", "muted"
     is_dm: bool = False
+    folder_id: Optional[str] = None
+    sort_position: float = 0
 
 
 class CreateRoomRequest(BaseModel):

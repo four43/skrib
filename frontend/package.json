@@ -16,6 +16,7 @@
     "vite": "^6.0.7"
   },
   "dependencies": {
-    "@playwright/test": "^1.58.2"
+    "@playwright/test": "^1.58.2",
+    "sortablejs": "^1.15.7"
   }
 }

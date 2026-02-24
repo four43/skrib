@@ -1,0 +1,11 @@
+#!/bin/bash
+set -euo pipefail
+DIR="$(dirname "$(readlink -f "$0")")"
+cd "$DIR/.."
+
+# Build frontend so the backend can serve it from dist/
+npm run build > /dev/null
+
+# SKRIB_TEST_DATA_DIR just needs to be set (truthy) to enable the e2e project.
+# Each Playwright worker creates its own temp data dir via the _workerBackend fixture.
+SKRIB_TEST_DATA_DIR=1 npx playwright test --project=e2e "$@" 2>&1 | tail -20

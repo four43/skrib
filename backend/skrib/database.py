@@ -148,6 +148,30 @@ def init_db():
             )
         ''')
 
+        # Room folders table (nestable categories for channels)
+        conn.execute('''
+            CREATE TABLE IF NOT EXISTS room_folders (
+                folder_id TEXT PRIMARY KEY,
+                name TEXT NOT NULL,
+                parent_folder_id TEXT,
+                position REAL NOT NULL DEFAULT 0,
+                created_at TEXT NOT NULL,
+                created_by TEXT,
+                FOREIGN KEY (parent_folder_id) REFERENCES room_folders(folder_id)
+            )
+        ''')
+
+        # Add folder_id and sort_position to rooms table
+        try:
+            conn.execute('ALTER TABLE rooms ADD COLUMN folder_id TEXT REFERENCES room_folders(folder_id)')
+        except Exception:
+            pass
+
+        try:
+            conn.execute('ALTER TABLE rooms ADD COLUMN sort_position REAL NOT NULL DEFAULT 0')
+        except Exception:
+            pass
+
         # Invite tokens table for invite-only registration mode
         conn.execute('''
             CREATE TABLE IF NOT EXISTS invite_tokens (

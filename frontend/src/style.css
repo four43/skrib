@@ -788,6 +788,125 @@ input:focus-visible {
     box-shadow: 0 1px 4px rgba(var(--theme-rgb), 0.3);
 }
 
+/* ═══════════════════════════════════════════
+   Room Folders
+   ═══════════════════════════════════════════ */
+
+.sidebar-section-actions {
+    display: flex;
+    align-items: center;
+    gap: 2px;
+}
+
+.folder-item {
+    margin-bottom: 2px;
+}
+
+.folder-header {
+    display: flex;
+    align-items: center;
+    padding: 6px 8px;
+    border-radius: 6px;
+    cursor: pointer;
+    gap: 4px;
+    transition: background 0.15s ease;
+}
+
+.folder-header:hover {
+    background: rgba(var(--theme-rgb), 0.06);
+}
+
+.folder-toggle {
+    font-size: 8px;
+    width: 14px;
+    flex-shrink: 0;
+    text-align: center;
+    color: var(--text-muted);
+    user-select: none;
+}
+
+.folder-name {
+    flex: 1;
+    font-size: 11px;
+    font-weight: 700;
+    text-transform: uppercase;
+    letter-spacing: 0.5px;
+    color: var(--text-tertiary);
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+    user-select: none;
+}
+
+.folder-actions {
+    display: none;
+    align-items: center;
+    gap: 2px;
+    flex-shrink: 0;
+}
+
+.folder-header:hover .folder-actions {
+    display: flex;
+}
+
+.folder-action-btn {
+    width: auto;
+    background: none;
+    border: none;
+    color: var(--text-muted);
+    font-size: 12px;
+    padding: 2px 4px;
+    margin: 0;
+    cursor: pointer;
+    line-height: 1;
+    border-radius: 4px;
+    box-shadow: none;
+    transition: all 0.15s ease;
+}
+
+.folder-action-btn:hover {
+    color: var(--theme-color);
+    background: rgba(var(--theme-rgb), 0.1);
+    transform: none;
+    box-shadow: none;
+}
+
+.folder-content {
+    padding-left: 8px;
+    overflow: hidden;
+    transition: max-height 0.2s ease;
+}
+
+.folder-content.collapsed {
+    max-height: 0 !important;
+    overflow: hidden;
+}
+
+.folder-badge {
+    background: var(--theme-color);
+    color: var(--text-inverse);
+    font-size: 10px;
+    font-weight: 700;
+    min-width: 16px;
+    height: 16px;
+    line-height: 16px;
+    text-align: center;
+    border-radius: 8px;
+    padding: 0 4px;
+    flex-shrink: 0;
+    margin-left: 4px;
+}
+
+/* Drag and drop states */
+.drag-ghost {
+    opacity: 0.4;
+}
+
+.drag-chosen {
+    background: rgba(var(--theme-rgb), 0.08);
+    border-radius: 8px;
+}
+
 .sidebar-footer {
     padding: 12px;
     padding-bottom: max(12px, env(safe-area-inset-bottom));

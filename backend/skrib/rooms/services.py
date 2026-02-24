@@ -40,7 +40,8 @@ def get_user_rooms(username: str) -> List[Dict]:
 
     with get_db() as conn:
         cursor = conn.execute('''
-            SELECT r.room_id, r.room_type, r.topic, rm.notify_level
+            SELECT r.room_id, r.room_type, r.topic, rm.notify_level,
+                   r.folder_id, r.sort_position
             FROM rooms r
             JOIN room_users rm ON r.room_id = rm.room_id
             WHERE r.deleted = 0 AND rm.username = ?
@@ -63,6 +64,8 @@ def get_user_rooms(username: str) -> List[Dict]:
                 'unread_count': unread_counts.get(room_id, 0),
                 'notify_level': row['notify_level'],
                 'is_dm': is_dm(room_id),
+                'folder_id': row['folder_id'],
+                'sort_position': row['sort_position'] or 0,
             })
 
         return rooms

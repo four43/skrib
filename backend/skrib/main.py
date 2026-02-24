@@ -24,6 +24,7 @@ from .database import init_db
 # Import plugin system
 from .plugins import registry
 from .plugins.routes import router as plugins_router
+from .room_folders.routes import router as room_folders_router
 from .rooms.routes import router as rooms_router
 from .rooms.services import load_rooms_from_db
 from .server.routes import router as server_router
@@ -58,6 +59,7 @@ if STATIC_DIR.exists():
 # Register API routers
 app.include_router(auth_router, prefix="/api")
 app.include_router(rooms_router, prefix="/api")
+app.include_router(room_folders_router, prefix="/api")
 app.include_router(server_router, prefix="/api")
 app.include_router(preferences_router, prefix="/api")
 app.include_router(ws_router, prefix="/api")

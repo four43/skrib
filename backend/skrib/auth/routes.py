@@ -134,7 +134,10 @@ async def complete_registration(request: RegistrationCompleteRequest):
             request.username,
             request.credentialId,
             request.publicKey,
-            invite_token=request.invite_token
+            invite_token=request.invite_token,
+            encryption_public_key=request.encryption_public_key,
+            passphrase_encrypted_private_key=request.passphrase_encrypted_private_key,
+            encrypted_private_key=request.encrypted_private_key,
         )
 
         if is_auto_approved:

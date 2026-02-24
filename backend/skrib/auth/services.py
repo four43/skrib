@@ -159,7 +159,10 @@ def generate_approval_code() -> str:
 
 
 def create_pending_user(username: str, credential_id: str, public_key: str,
-                        invite_token: Optional[str] = None) -> tuple[str, bool]:
+                        invite_token: Optional[str] = None,
+                        encryption_public_key: Optional[str] = None,
+                        passphrase_encrypted_private_key: Optional[str] = None,
+                        encrypted_private_key: Optional[str] = None) -> tuple[str, bool]:
     """Create a pending user and return approval code and whether auto-approved.
 
     Returns:
@@ -187,18 +190,22 @@ def create_pending_user(username: str, credential_id: str, public_key: str,
         if user_count == 0:
             # First user - auto-approve as admin
             conn.execute('''
-                INSERT INTO users (username, credential_id, public_key, role, status, color, avatar_data, created_at, approved_at, approved_by)
-                VALUES (?, ?, ?, 'admin', 'active', ?, ?, ?, ?, 'system')
-            ''', (username, credential_id, public_key, color, avatar_data, now, now))
+                INSERT INTO users (username, credential_id, public_key, role, status, color, avatar_data, created_at, approved_at, approved_by,
+                                   encryption_public_key, passphrase_encrypted_private_key, encrypted_private_key)
+                VALUES (?, ?, ?, 'admin', 'active', ?, ?, ?, ?, 'system', ?, ?, ?)
+            ''', (username, credential_id, public_key, color, avatar_data, now, now,
+                  encryption_public_key, passphrase_encrypted_private_key, encrypted_private_key))
             conn.commit()
             return (approval_code, True)
 
         if mode == 'open':
             # Open mode - auto-approve immediately
             conn.execute('''
-                INSERT INTO users (username, credential_id, public_key, role, status, color, avatar_data, created_at, approved_at, approved_by)
-                VALUES (?, ?, ?, 'user', 'active', ?, ?, ?, ?, 'OPEN_STATE')
-            ''', (username, credential_id, public_key, color, avatar_data, now, now))
+                INSERT INTO users (username, credential_id, public_key, role, status, color, avatar_data, created_at, approved_at, approved_by,
+                                   encryption_public_key, passphrase_encrypted_private_key, encrypted_private_key)
+                VALUES (?, ?, ?, 'user', 'active', ?, ?, ?, ?, 'OPEN_STATE', ?, ?, ?)
+            ''', (username, credential_id, public_key, color, avatar_data, now, now,
+                  encryption_public_key, passphrase_encrypted_private_key, encrypted_private_key))
             conn.commit()
             return (approval_code, True)
 
@@ -206,17 +213,21 @@ def create_pending_user(username: str, credential_id: str, public_key: str,
             # Invite-only mode with valid token - auto-approve
             consume_invite_token(invite_token, username)
             conn.execute('''
-                INSERT INTO users (username, credential_id, public_key, role, status, color, avatar_data, created_at, approved_at, approved_by)
-                VALUES (?, ?, ?, 'user', 'active', ?, ?, ?, ?, 'INVITE')
-            ''', (username, credential_id, public_key, color, avatar_data, now, now))
+                INSERT INTO users (username, credential_id, public_key, role, status, color, avatar_data, created_at, approved_at, approved_by,
+                                   encryption_public_key, passphrase_encrypted_private_key, encrypted_private_key)
+                VALUES (?, ?, ?, 'user', 'active', ?, ?, ?, ?, 'INVITE', ?, ?, ?)
+            ''', (username, credential_id, public_key, color, avatar_data, now, now,
+                  encryption_public_key, passphrase_encrypted_private_key, encrypted_private_key))
             conn.commit()
             return (approval_code, True)
 
         # approval_required mode - require approval
         conn.execute('''
-            INSERT INTO users (username, credential_id, public_key, status, color, avatar_data, approval_code, created_at)
-            VALUES (?, ?, ?, 'pending', ?, ?, ?, ?)
-        ''', (username, credential_id, public_key, color, avatar_data, approval_code, now))
+            INSERT INTO users (username, credential_id, public_key, status, color, avatar_data, approval_code, created_at,
+                               encryption_public_key, passphrase_encrypted_private_key, encrypted_private_key)
+            VALUES (?, ?, ?, 'pending', ?, ?, ?, ?, ?, ?, ?)
+        ''', (username, credential_id, public_key, color, avatar_data, approval_code, now,
+              encryption_public_key, passphrase_encrypted_private_key, encrypted_private_key))
         conn.commit()
         return (approval_code, False)
 

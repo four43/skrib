@@ -15,6 +15,7 @@ const RoomTypeChatPlugin = (function() {
     let PLUGIN_API = '';
 
     const USE_NOTIFICATION_TAG = false;
+    const LONG_PRESS_DELAY_MS = 400;
 
     async function init(pluginCtx) {
         ctx = pluginCtx;
@@ -398,7 +399,7 @@ const RoomTypeChatPlugin = (function() {
         // Mobile: long press to show hover bar (avoids accidental triggers)
         let pressTimer = null;
         let touchMoved = false;
-        let touchHandled = false;
+        let isTouchInteraction = false;
 
         messageDiv.addEventListener('touchstart', (e) => {
             if (e.target.closest('.message-hover-bar') ||
@@ -408,17 +409,16 @@ const RoomTypeChatPlugin = (function() {
                 return;
             }
             touchMoved = false;
-            touchHandled = false;
+            isTouchInteraction = true;
             pressTimer = setTimeout(() => {
                 if (!touchMoved) {
-                    touchHandled = true;
                     document.querySelectorAll('.message-hover-bar.active').forEach(bar => {
                         if (bar !== hoverBar) bar.classList.remove('active');
                     });
                     dismissMoreMenu();
                     hoverBar.classList.add('active');
                 }
-            }, 400);
+            }, LONG_PRESS_DELAY_MS);
         }, { passive: true });
 
         messageDiv.addEventListener('touchmove', () => {
@@ -429,12 +429,12 @@ const RoomTypeChatPlugin = (function() {
         messageDiv.addEventListener('touchend', () => {
             clearTimeout(pressTimer);
             // Keep flag set briefly to suppress the synthetic click
-            setTimeout(() => { touchHandled = false; }, 300);
+            setTimeout(() => { isTouchInteraction = false; }, 300);
         }, { passive: true });
 
-        // Desktop: click to show hover bar
+        // Desktop: click to show hover bar (suppressed on touch devices)
         messageDiv.addEventListener('click', (e) => {
-            if (touchHandled) return;
+            if (isTouchInteraction) return;
             if (e.target.closest('.message-hover-bar') ||
                 e.target.closest('.message-more-menu') ||
                 e.target.closest('.four43-reaction-btn') ||

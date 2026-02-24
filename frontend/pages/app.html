@@ -36,7 +36,10 @@
                 <div class="sidebar-section">
                     <div class="sidebar-section-header">
                         <span>Channels</span>
-                        <button id="add-channel-btn" class="add-room-btn" title="Create channel">+</button>
+                        <div class="sidebar-section-actions">
+                            <button id="add-folder-btn" class="add-room-btn hidden" title="Create folder">&#128193;</button>
+                            <button id="add-channel-btn" class="add-room-btn" title="Create channel">+</button>
+                        </div>
                     </div>
                     <div class="room-list" id="channel-list"></div>
                 </div>
@@ -178,6 +181,25 @@
             <div class="room-settings-body">
                 <div id="add-member-user-list" class="user-select-list"></div>
                 <button id="add-member-btn-confirm" class="hidden" onclick="addMembersFromModal()">Add Selected</button>
+            </div>
+        </div>
+    </div>
+
+    <!-- Create Folder Modal -->
+    <div id="create-folder-modal" class="room-settings-modal">
+        <div id="create-folder-backdrop" class="room-settings-backdrop"></div>
+        <div class="room-settings-content">
+            <div class="room-settings-header">
+                <h3>Create Folder</h3>
+                <button id="create-folder-close-btn" class="close-btn">&times;</button>
+            </div>
+            <div class="room-settings-body">
+                <div class="form-group">
+                    <label for="new-folder-input">Folder name</label>
+                    <input type="text" id="new-folder-input" placeholder="e.g. Projects, Social"
+                           maxlength="50" autofocus>
+                </div>
+                <button id="create-folder-submit-btn">Create</button>
             </div>
         </div>
     </div>

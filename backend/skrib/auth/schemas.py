@@ -30,6 +30,9 @@ class RegistrationCompleteRequest(BaseModel):
     publicKey: str
     challenge: str
     invite_token: Optional[str] = None
+    encryption_public_key: Optional[str] = None
+    passphrase_encrypted_private_key: Optional[str] = None
+    encrypted_private_key: Optional[str] = None
 
 
 class RegistrationCompleteResponse(BaseModel):

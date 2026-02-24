@@ -98,12 +98,24 @@ async function enrollPasskey() {
         const prfSupported = clientExtensions?.prf?.enabled === true;
         console.log('[E2E] PRF supported by authenticator:', prfSupported);
 
-        // Complete registration on the backend
+        // Generate encryption keys before completing registration
+        showStatus('enroll-status', 'Generating encryption keys...', 'info');
+        const keyPair = await generateEncryptionKeyPair();
+        const publicKeyJwk = await exportPublicKey(keyPair);
+        const privateKeyJwk = await crypto.subtle.exportKey('jwk', keyPair.privateKey);
+
+        // Passphrase-wrap the private key
+        const passphraseWrapped = await passphraseWrapPrivateKey(passphrase, privateKeyJwk);
+        console.log('[E2E] Private key wrapped with passphrase for recovery');
+
+        // Complete registration on the backend (includes encryption keys)
         const completeBody = {
             username: username,
             credentialId: arrayBufferToBase64(credential.rawId),
             publicKey: arrayBufferToBase64(credential.response.getPublicKey()),
-            challenge: beginData.challenge
+            challenge: beginData.challenge,
+            encryption_public_key: JSON.stringify(publicKeyJwk),
+            passphrase_encrypted_private_key: passphraseWrapped,
         };
         if (inviteToken) {
             completeBody.invite_token = inviteToken;
@@ -122,10 +134,15 @@ async function enrollPasskey() {
             return;
         }
 
+        // Store private key locally in IndexedDB
+        await storePrivateKey(username, keyPair.privateKey);
+
         if (completeData.status === 'approved') {
-            showStatus('enroll-status', 'Generating encryption keys...', 'info');
-            await generateAndUploadKeys(passphrase, prfSupported);
+            // Login to get a session token
+            await loginAndRedirect(prfSupported, privateKeyJwk, passphrase);
         } else {
+            // Pending approval — keys are already stored on the server
+            sessionStorage.removeItem('reg_passphrase');
             showStatus('enroll-status',
                 `<div class="approval-code">
                     <h3>Registration Pending Approval</h3>
@@ -146,12 +163,7 @@ async function enrollPasskey() {
     }
 }
 
-async function generateAndUploadKeys(passphrase, prfSupported) {
-    const keyPair = await generateEncryptionKeyPair();
-    const publicKeyJwk = await exportPublicKey(keyPair);
-    await storePrivateKey(username, keyPair.privateKey);
-
-    // Log in via WebAuthn to get a session token for key upload
+async function loginAndRedirect(prfSupported, privateKeyJwk, passphrase) {
     const loginBegin = await fetch(`${API_URL}/auth/login/begin`);
     const loginBeginData = await loginBegin.json();
     const loginChallenge = base64ToArrayBuffer(loginBeginData.challenge);
@@ -182,36 +194,34 @@ async function generateAndUploadKeys(passphrase, prfSupported) {
     const loginData = await loginResp.json();
 
     if (loginData.session_token) {
-        const encKeyBody = { public_key: JSON.stringify(publicKeyJwk) };
-
-        // Passphrase-wrap the private key (primary recovery method)
-        const privateKeyJwk = await crypto.subtle.exportKey('jwk', keyPair.privateKey);
-        encKeyBody.passphrase_encrypted_private_key = await passphraseWrapPrivateKey(passphrase, privateKeyJwk);
-        console.log('[E2E] Private key wrapped with passphrase for recovery');
-
-        // Also PRF-wrap if available
+        // Upload PRF-wrapped key if available
         const loginExtensions = loginAssertion.getClientExtensionResults();
         if (prfSupported) {
             const prfResult = loginExtensions?.prf?.results?.first;
             if (prfResult) {
                 try {
                     const wrappingKey = await deriveWrappingKey(prfResult);
-                    encKeyBody.encrypted_private_key = await wrapPrivateKey(wrappingKey, privateKeyJwk);
+                    const publicKeyJwk = {
+                        kty: privateKeyJwk.kty, n: privateKeyJwk.n, e: privateKeyJwk.e,
+                        alg: privateKeyJwk.alg, ext: true, key_ops: ['encrypt'],
+                    };
+                    await fetch(`${API_URL}/auth/encryption-key`, {
+                        method: 'POST',
+                        headers: {
+                            'Content-Type': 'application/json',
+                            'Authorization': `Bearer ${loginData.session_token}`,
+                        },
+                        body: JSON.stringify({
+                            public_key: JSON.stringify(publicKeyJwk),
+                            encrypted_private_key: await wrapPrivateKey(wrappingKey, privateKeyJwk),
+                        }),
+                    });
                     console.log('[E2E] Private key also wrapped with PRF');
                 } catch (prfErr) {
                     console.warn('[E2E] PRF wrapping failed:', prfErr);
                 }
             }
         }
-
-        await fetch(`${API_URL}/auth/encryption-key`, {
-            method: 'POST',
-            headers: {
-                'Content-Type': 'application/json',
-                'Authorization': `Bearer ${loginData.session_token}`,
-            },
-            body: JSON.stringify(encKeyBody),
-        });
 
         localStorage.setItem('session_token', loginData.session_token);
         localStorage.setItem('username', loginData.username);
@@ -221,14 +231,7 @@ async function generateAndUploadKeys(passphrase, prfSupported) {
     // Clean up
     sessionStorage.removeItem('reg_passphrase');
 
-    showStatus('enroll-status',
-        `<div class="approval-code">
-            <h3>Registration Complete!</h3>
-            <p>Your passkey and encryption key have been saved. Redirecting...</p>
-        </div>`,
-        'success'
-    );
-    setTimeout(() => { window.location.href = '/app.html'; }, 1500);
+    window.location.href = '/app.html';
 }
 
 // Wire up
