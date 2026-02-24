@@ -4,7 +4,7 @@ import { rename, readdir, rm } from 'fs/promises'
 
 // HTML pages live in pages/ but are served at flat URLs (e.g. /login.html, not /pages/login.html)
 function flatPages() {
-  const htmlFiles = ['index.html', 'app.html', 'login.html', 'register.html', 'enroll-passkey.html', 'admin.html', 'settings.html', 'room-settings.html', 'prf-debug.html']
+  const htmlFiles = ['index.html', 'app.html', 'login.html', 'register.html', 'enroll-passkey.html', 'admin.html', 'settings.html', 'room-settings.html', 'prf-debug.html', 'key-recovery.html']
 
   return {
     name: 'flat-pages',
@@ -53,6 +53,7 @@ export default defineConfig({
         settings: resolve(__dirname, 'pages/settings.html'),
         roomSettings: resolve(__dirname, 'pages/room-settings.html'),
         prfDebug: resolve(__dirname, 'pages/prf-debug.html'),
+        keyRecovery: resolve(__dirname, 'pages/key-recovery.html'),
       },
     },
   },

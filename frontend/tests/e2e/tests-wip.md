@@ -1,16 +1,4 @@
 
-## registration-modes.spec.js
-
-Registration mode enforcement (closed, invite_only). Tests modify the server's registration mode and restore it via `afterEach`.
-
-- Closed mode disables registration form with "Registration is currently closed" message
-- Closed mode rejects backend registration attempt with 403
-- invite_only mode disables form without invite token
-- invite_only mode allows registration with valid invite token
-- Invite token is consumed after use (reuse rejected)
-- Login page hides register button in closed mode
-
----
 
 ## room-types.spec.js
 

@@ -1,5 +1,5 @@
 import { API_URL, showStatus, arrayBufferToBase64, base64ToArrayBuffer, friendlyError } from './utils.js';
-import { loadPrivateKey, loadPrivateKeyJwk, generateEncryptionKeyPair, exportPublicKey, storePrivateKey, exportStoredPublicKey, PRF_SALT, deriveWrappingKey, wrapPrivateKey, unwrapPrivateKey, passphraseUnwrapPrivateKey } from './crypto.js';
+import { loadPrivateKey, loadPrivateKeyJwk, generateEncryptionKeyPair, exportPublicKey, storePrivateKey, exportStoredPublicKey, PRF_SALT, deriveWrappingKey, wrapPrivateKey, unwrapPrivateKey } from './crypto.js';
 import { loadTheme } from './theme-manager.js';
 
 // Load default theme (no authentication on login page)
@@ -138,7 +138,7 @@ async function login() {
                     });
                     let recovered = false;
 
-                    // Try PRF recovery first
+                    // Try PRF recovery first (automatic, no user interaction)
                     if (ekData?.encrypted_private_key && prfResult) {
                         try {
                             const wrappingKey = await deriveWrappingKey(prfResult);
@@ -165,15 +165,11 @@ async function login() {
                         }
                     }
 
-                    // Try passphrase recovery
+                    // Passphrase recovery needed — redirect to key-recovery page
                     if (!recovered && ekData?.passphrase_encrypted_private_key) {
-                        console.log('[E2E] Passphrase-wrapped key available, showing recovery UI...');
-                        recovered = await showPassphraseRecovery(
-                            ekData.passphrase_encrypted_private_key,
-                            completeData.username,
-                            authHeaders,
-                        );
-                        console.log('[E2E] Passphrase recovery result:', recovered);
+                        console.log('[E2E] Passphrase-wrapped key available, redirecting to key-recovery...');
+                        window.location.href = '/key-recovery.html';
+                        return;
                     }
 
                     // No recovery possible — generate fresh pair
@@ -216,104 +212,14 @@ async function login() {
                 console.error('[E2E] Pre-redirect key verification failed:', verifyErr);
             }
 
-            // Redirect to chat — submit recovery form if shown (triggers password manager save)
-            const recoveryForm = document.getElementById('passphrase-recovery');
-            if (recoveryForm && !recoveryForm.classList.contains('hidden')) {
-                recoveryForm.action = '/app.html';
-                recoveryForm.method = 'GET';
-                recoveryForm.submit();
-            } else {
-                window.location.href = '/app.html';
-            }
+            // Redirect to chat
+            window.location.href = '/app.html';
         }
 
     } catch (error) {
         console.error(error);
         showStatus('auth-status', `❌ ${friendlyError(error)}`, 'error');
     }
-}
-
-/**
- * Show the passphrase recovery UI and wait for the user to enter their passphrase
- * or skip. Returns true if recovery succeeded, false if skipped/failed.
- */
-function showPassphraseRecovery(encryptedBlob, username, authHeaders) {
-    return new Promise((resolve) => {
-        // Hide login form, show recovery UI
-        document.getElementById('login-form').classList.add('hidden');
-        const recoveryDiv = document.getElementById('passphrase-recovery');
-        recoveryDiv.classList.remove('hidden');
-
-        // Populate hidden username so password managers can match the credential
-        const usernameField = document.getElementById('recovery-username');
-        if (usernameField) usernameField.value = username;
-
-        const input = document.getElementById('login-recovery-passphrase');
-        const submitBtn = document.getElementById('recovery-submit-button');
-        const skipBtn = document.getElementById('recovery-skip-button');
-
-        input.focus();
-
-        async function attemptRecovery() {
-            const passphrase = input.value;
-            if (!passphrase) {
-                showStatus('recovery-status', '❌ Please enter your password', 'error');
-                return;
-            }
-
-            submitBtn.disabled = true;
-            showStatus('recovery-status', 'Recovering encryption key...', 'info');
-
-            try {
-                console.log('[E2E] Attempting passphrase unwrap for user:', username);
-                const privateKeyJwk = await passphraseUnwrapPrivateKey(passphrase, encryptedBlob);
-                console.log('[E2E] Passphrase unwrap succeeded, key modulus prefix:', privateKeyJwk.n?.slice(0, 20));
-                const importedKey = await crypto.subtle.importKey(
-                    'jwk', privateKeyJwk,
-                    { name: 'RSA-OAEP', hash: 'SHA-256' },
-                    true, ['decrypt'],
-                );
-                console.log('[E2E] CryptoKey imported, storing in IndexedDB for user:', username);
-                await storePrivateKey(username, importedKey);
-
-                // Verify the key was actually stored
-                const verifyKey = await loadPrivateKey(username);
-                console.log('[E2E] IndexedDB store verification:', !!verifyKey);
-                if (!verifyKey) {
-                    console.error('[E2E] CRITICAL: Key was stored but could not be read back!');
-                }
-
-                // Re-upload public key to ensure consistency
-                const publicKeyJwk = {
-                    kty: privateKeyJwk.kty, n: privateKeyJwk.n, e: privateKeyJwk.e,
-                    alg: privateKeyJwk.alg, ext: true, key_ops: ['encrypt'],
-                };
-                await fetch(`${API_URL}/auth/encryption-key`, {
-                    method: 'POST',
-                    headers: authHeaders,
-                    body: JSON.stringify({ public_key: JSON.stringify(publicKeyJwk) }),
-                });
-
-                console.log('[E2E] Private key recovered from server via passphrase');
-                resolve(true);
-            } catch (err) {
-                console.warn('[E2E] Passphrase recovery failed:', err);
-                showStatus('recovery-status', '❌ Wrong password. Please try again.', 'error');
-                submitBtn.disabled = false;
-                input.value = '';
-                input.focus();
-            }
-        }
-
-        recoveryDiv.addEventListener('submit', (e) => {
-            e.preventDefault();
-            attemptRecovery();
-        });
-        skipBtn.addEventListener('click', () => {
-            console.log('[E2E] User skipped passphrase recovery');
-            resolve(false);
-        });
-    });
 }
 
 async function checkRegistrationMode() {

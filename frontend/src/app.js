@@ -824,12 +824,9 @@ async function checkSession() {
                         );
                         const ekData = ekResp.ok ? await ekResp.json() : null;
                         if (ekData?.passphrase_encrypted_private_key || ekData?.encrypted_private_key) {
-                            // Key recovery is possible — send user through login flow
-                            console.log('[E2E] Server has recoverable key, redirecting to login for recovery...');
-                            localStorage.removeItem('session_token');
-                            localStorage.removeItem('username');
-                            localStorage.removeItem('role');
-                            window.location.href = '/login.html';
+                            // Key recovery is possible — redirect to dedicated recovery page
+                            console.log('[E2E] Server has recoverable key, redirecting to key-recovery...');
+                            window.location.href = '/key-recovery.html';
                             return;
                         }
                     } catch (_) { /* best-effort check */ }

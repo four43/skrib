@@ -3,7 +3,7 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover">
-    <title>Login - Skrīb</title>
+    <title>Key Recovery - Skrīb</title>
     <link rel="stylesheet" href="/src/style.css">
     <link rel="manifest" href="/manifest.json">
     <meta name="theme-color" content="#6366f1">
@@ -11,32 +11,30 @@
     <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
     <link rel="apple-touch-icon" href="/icons/icon-192.png">
     <script>
-        // Apply dark mode + theme before first paint to prevent flash
         (function(){var s=localStorage.getItem('skrib-color-scheme')||'auto';var d=s==='dark'||(s==='auto'&&matchMedia('(prefers-color-scheme:dark)').matches);if(d)document.documentElement.toggleAttribute('data-theme-dark',true);var t=localStorage.getItem('skrib-theme');if(t){var l=document.createElement('link');l.id='theme-stylesheet';l.rel='stylesheet';l.href='/api/themes/'+t;document.head.appendChild(l)}})();
         if('serviceWorker' in navigator) navigator.serviceWorker.register('/sw.js');
     </script>
 </head>
 <body>
-    <!-- Login View -->
     <div id="auth-view" class="auth-container">
         <div class="auth-box">
-            <div id="login-form">
-                <h1>✍️ Skrīb</h1>
-                <p>Secure collaboration</p>
-
-                <div id="auth-status"></div>
-
-                <button id="login-button">🔑 Sign In</button>
-                <div id="register-section" class="hidden">
-                    <div class="divider">
-                        <span>OR</span>
-                    </div>
-                    <button id="go-to-register-button">👤 Register</button>
+            <form id="passphrase-recovery" novalidate>
+                <h2>Key Recovery</h2>
+                <p>Your encryption key wasn't found locally. Enter your password to restore it.</p>
+                <input type="hidden" id="recovery-username" name="username" autocomplete="username">
+                <div class="form-group">
+                    <label for="recovery-passphrase">Passphrase</label>
+                    <input type="password" id="recovery-passphrase" name="password"
+                           placeholder="Enter your recovery passphrase"
+                           autocomplete="current-password">
                 </div>
-            </div>
+                <div id="recovery-status"></div>
+                <button type="submit" id="recovery-submit-button">Recover Key</button>
+                <button type="button" id="recovery-skip-button" class="link-button">Skip (generate new key)</button>
+            </form>
         </div>
     </div>
 
-    <script type="module" src="/src/login.js"></script>
+    <script type="module" src="/src/key-recovery.js"></script>
 </body>
 </html>

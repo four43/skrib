@@ -31,14 +31,14 @@ async function createRoomAndSendHello(page) {
 }
 
 /**
- * Clear all storage, navigate to login, click Sign In, wait for the
- * passphrase recovery form to appear. Returns when the form is visible.
+ * Clear all storage, navigate to login, click Sign In, wait for redirect
+ * to key-recovery.html. Returns when the recovery page is loaded.
  */
 async function clearAndLoginToRecovery(page) {
     await clearAllStorage(page);
     await page.goto('/login.html');
     await page.locator('#login-button').click();
-    await page.locator('#passphrase-recovery').waitFor({ state: 'visible', timeout: 15_000 });
+    await page.waitForURL('**/key-recovery.html**', { timeout: 15_000 });
 }
 
 // ─── Registration form validation ───────────────────────────────────────
@@ -197,7 +197,7 @@ test.describe('Registration and login flow', () => {
         await clearAndLoginToRecovery(page);
 
         // Enter correct passphrase
-        await page.locator('#login-recovery-passphrase').fill(PASSPHRASE);
+        await page.locator('#recovery-passphrase').fill(PASSPHRASE);
         await page.locator('#recovery-submit-button').click();
 
         // Should redirect to app.html after recovery
@@ -220,12 +220,12 @@ test.describe('Registration and login flow', () => {
         await clearAndLoginToRecovery(page);
 
         // Enter WRONG passphrase
-        await page.locator('#login-recovery-passphrase').fill('Wrong-Passphrase-9999!xxxxxxxxxxxxx');
+        await page.locator('#recovery-passphrase').fill('Wrong-Passphrase-9999!xxxxxxxxxxxxx');
         await page.locator('#recovery-submit-button').click();
 
-        // Should show error and stay on login page
+        // Should show error and stay on recovery page
         await expect(page.locator('#recovery-status')).toContainText('Wrong password', { timeout: 10_000 });
-        expect(page.url()).toContain('login.html');
+        expect(page.url()).toContain('key-recovery.html');
     });
 
     test('User B: duplicate username is rejected', async ({ registeredUser, browser, baseURL }) => {
@@ -364,7 +364,7 @@ test.describe('Registration and login flow', () => {
         await clearAndLoginToRecovery(userB.page);
 
         // User B enters correct passphrase to recover encryption key
-        await userB.page.locator('#login-recovery-passphrase').fill(PASSPHRASE);
+        await userB.page.locator('#recovery-passphrase').fill(PASSPHRASE);
         await userB.page.locator('#recovery-submit-button').click();
 
         // User B redirected to app.html after recovery
@@ -470,6 +470,33 @@ test.describe('Registration and login flow', () => {
     test('unauthenticated user accessing app.html is redirected to login', async ({ authenticatedPage: page }) => {
         await page.goto('/app.html');
         await page.waitForURL('**/login.html**', { timeout: 10_000 });
+    });
+
+    test('User A on app.html with missing IndexedDB keys is redirected to key-recovery, not login', async ({ registeredUser }) => {
+        const { page } = registeredUser;
+        await page.waitForURL('**/app.html**', { timeout: 15_000 });
+        await expect(page.locator('#sidebar')).toBeVisible();
+
+        // Send a message so the server has a passphrase-wrapped key to recover
+        await createRoomAndSendHello(page);
+
+        // Clear only IndexedDB (simulates lost keys) — keep localStorage session intact
+        await page.evaluate(async () => {
+            if (indexedDB.databases) {
+                const dbs = await indexedDB.databases();
+                for (const db of dbs) {
+                    indexedDB.deleteDatabase(db.name);
+                }
+            }
+        });
+
+        // Reload app.html — should detect missing key and redirect to key-recovery, NOT login
+        await page.goto('/app.html');
+        await page.waitForURL('**/key-recovery.html**', { timeout: 15_000 });
+
+        // Session should still be intact (not cleared)
+        const token = await page.evaluate(() => localStorage.getItem('session_token'));
+        expect(token).toBeTruthy();
     });
 
     test('User A sets server to closed, new user cannot register', async ({ registeredUser, browser, baseURL }) => {
