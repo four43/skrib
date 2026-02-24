@@ -743,34 +743,6 @@ input:focus-visible {
     white-space: nowrap;
 }
 
-.room-settings-btn {
-    width: auto;
-    background: none;
-    border: none;
-    color: var(--text-muted);
-    font-size: 16px;
-    padding: 2px 6px;
-    margin: 0;
-    cursor: pointer;
-    flex-shrink: 0;
-    line-height: 1;
-    border-radius: 6px;
-    box-shadow: none;
-    transition: all 0.15s ease;
-    opacity: 0;
-}
-
-.room-item:hover .room-settings-btn {
-    opacity: 1;
-}
-
-.room-settings-btn:hover {
-    color: var(--theme-color);
-    background: rgba(var(--theme-rgb), 0.1);
-    transform: none;
-    box-shadow: none;
-}
-
 /* Unread badge */
 .unread-badge {
     background: var(--theme-color);
@@ -989,10 +961,33 @@ input:focus-visible {
     white-space: nowrap;
 }
 
-.members-toggle-btn {
+.chat-header-btn {
     width: auto;
     margin: 0;
     margin-left: auto;
+    padding: 4px 10px;
+    background: none;
+    border: none;
+    color: var(--text-tertiary);
+    font-size: 16px;
+    cursor: pointer;
+    border-radius: 6px;
+    box-shadow: none;
+    flex-shrink: 0;
+    line-height: 1;
+    transition: all 0.15s ease;
+}
+
+.chat-header-btn:hover {
+    background: rgba(var(--theme-rgb), 0.1);
+    color: var(--theme-color);
+    transform: none;
+    box-shadow: none;
+}
+
+.members-toggle-btn {
+    width: auto;
+    margin: 0;
     padding: 4px 10px;
     background: none;
     border: none;
@@ -2197,14 +2192,13 @@ input:focus-visible {
         transition: none;
     }
 
-    .room-settings-btn {
-        opacity: 1;
-        padding: 8px 10px;
+    .chat-header-btn {
         min-width: 44px;
         min-height: 44px;
         display: flex;
         align-items: center;
         justify-content: center;
+        padding: 8px 12px;
     }
 
     .sidebar-section-header {

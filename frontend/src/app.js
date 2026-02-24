@@ -1509,16 +1509,6 @@ function createRoomItem(room) {
         item.appendChild(badge);
     }
 
-    const settingsBtn = document.createElement('button');
-    settingsBtn.className = 'room-settings-btn';
-    settingsBtn.textContent = '\u2699';
-    settingsBtn.title = 'Room settings';
-    settingsBtn.onclick = (e) => {
-        e.stopPropagation();
-        openRoomSettings(room.room_id);
-    };
-    item.appendChild(settingsBtn);
-
     return item;
 }
 
@@ -1831,9 +1821,11 @@ async function selectRoom(roomId) {
     const topicEl = document.getElementById('chat-header-topic');
     topicEl.textContent = (meta && meta.topic) ? meta.topic : '';
 
-    // Show members button; auto-open panel on wide screens unless user closed it
+    // Show header action buttons
     const membersBtn = document.getElementById('members-toggle-btn');
     if (membersBtn) membersBtn.classList.remove('hidden');
+    const roomSettingsBtn = document.getElementById('room-settings-header-btn');
+    if (roomSettingsBtn) roomSettingsBtn.classList.remove('hidden');
     closeMembersPanel();
     const membersPref = getUiPref('members_panel');
     if (membersPref === true || (membersPref === null && window.innerWidth > 1024)) {
@@ -2516,6 +2508,13 @@ document.addEventListener('DOMContentLoaded', () => {
     }
 
     // Members panel
+    const roomSettingsHeaderBtn = document.getElementById('room-settings-header-btn');
+    if (roomSettingsHeaderBtn) {
+        roomSettingsHeaderBtn.addEventListener('click', () => {
+            if (currentRoom) openRoomSettings(currentRoom);
+        });
+    }
+
     const membersToggleBtn = document.getElementById('members-toggle-btn');
     if (membersToggleBtn) {
         membersToggleBtn.addEventListener('click', toggleMembersPanel);
