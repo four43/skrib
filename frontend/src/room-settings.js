@@ -9,6 +9,14 @@ let currentRoom = null;
 let userRole = null; // User's role in this room
 let originalTopic = null; // Track original topic to detect changes
 
+function getDmDisplayName(room) {
+    if (!room.is_dm) return `#${room.room_id}`;
+    const others = (room.members || [])
+        .map(m => m.nickname || m.username)
+        .filter(name => name !== currentUsername);
+    return others.length > 0 ? others.join(', ') : currentUsername;
+}
+
 // Check session and redirect if not authenticated
 checkSession();
 
@@ -85,17 +93,20 @@ async function initializeRoomSettings() {
             backBtn.href = `/app.html#/r/${encodeURIComponent(currentRoomId)}`;
         }
 
+        // Build display name
+        const displayName = getDmDisplayName(currentRoom);
+
         // Update page title
         const pageTitle = document.getElementById('room-settings-title');
         if (pageTitle) {
-            const displayName = !currentRoom.is_dm ? `#${currentRoom.room_id}` : currentRoom.room_id;
-            pageTitle.textContent = `${displayName} Settings`;
+            pageTitle.textContent = currentRoom.is_dm
+                ? `Direct Message Settings`
+                : `#${currentRoom.room_id} Settings`;
         }
 
         // Display room name
         const roomNameDisplay = document.getElementById('room-name-display');
         if (roomNameDisplay) {
-            const displayName = !currentRoom.is_dm ? `#${currentRoom.room_id}` : currentRoom.room_id;
             roomNameDisplay.textContent = displayName;
         }
 

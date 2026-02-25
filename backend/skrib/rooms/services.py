@@ -115,7 +115,7 @@ def dm_display_name(members: List[str], viewer: str) -> str:
 def create_or_get_dm(creator: str, other_users: List[str], room_type: str = 'chat') -> Dict:
     """Create or return existing DM room among a set of users (including the creator)."""
     all_users = sorted(set([creator] + other_users))
-    room_id = "dm|" + room_type + "|" + "|".join(all_users)
+    room_id = "dm|" + "|".join(all_users)
 
     with ROOMS_LOCK:
         if room_id in ROOMS:
