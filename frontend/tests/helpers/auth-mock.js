@@ -48,6 +48,14 @@ export async function setupAuthMocks(page, { role = 'admin' } = {}) {
         }),
     );
 
+    await page.route('**/api/server/icon*', route =>
+        route.fulfill({
+            status: 200,
+            contentType: 'image/png',
+            body: Buffer.from('iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR42mNk+M9QDwADhgGAWjR9awAAAABJRU5ErkJggg==', 'base64'),
+        }),
+    );
+
     await page.route('**/api/server', route =>
         route.fulfill({
             status: 200,
@@ -56,6 +64,7 @@ export async function setupAuthMocks(page, { role = 'admin' } = {}) {
                 name: 'Test Server',
                 registration_mode: 'open',
                 default_theme: 'four43.theme-default',
+                icon_custom: false,
             }),
         }),
     );

@@ -15,6 +15,7 @@ class ServerInfoResponse(BaseModel):
     registration_mode: RegistrationMode
     default_theme: str
     name: str
+    icon_custom: bool = False
 
 
 class ServerUpdateRequest(BaseModel):

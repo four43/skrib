@@ -96,6 +96,9 @@ async function loadAdminSettings() {
             nameInput.value = data.name || '';
         }
 
+        // Server icon
+        loadServerIcon(data.icon_custom);
+
         // Registration mode
         updateRegModeSlider(data.registration_mode);
 
@@ -130,11 +133,72 @@ async function updateServerName() {
             },
             body: JSON.stringify({ name })
         });
-        if (!resp.ok) {
+        if (resp.ok) {
+            const data = await resp.json();
+            // Refresh icon preview (auto-generated icon depends on server name)
+            loadServerIcon(data.icon_custom);
+        } else {
             console.error('Failed to update server name');
         }
     } catch (error) {
         console.error('[HTTP] Error updating server name:', error);
+    }
+}
+
+// Server icon
+
+function loadServerIcon(isCustom) {
+    const img = document.getElementById('server-icon-img');
+    const label = document.getElementById('server-icon-label');
+    const resetBtn = document.getElementById('server-icon-reset-btn');
+
+    if (img) {
+        // Cache-bust with timestamp
+        img.src = `${API_URL}/server/icon?t=${Date.now()}`;
+    }
+    if (label) {
+        label.textContent = isCustom ? 'Custom' : 'Auto-generated';
+    }
+    if (resetBtn) {
+        resetBtn.style.display = isCustom ? '' : 'none';
+    }
+}
+
+async function uploadServerIcon(file) {
+    const formData = new FormData();
+    formData.append('file', file);
+
+    try {
+        const resp = await fetch(`${API_URL}/server/icon`, {
+            method: 'PUT',
+            headers: { 'Authorization': `Bearer ${sessionToken}` },
+            body: formData,
+        });
+
+        if (resp.ok) {
+            loadServerIcon(true);
+        } else {
+            const data = await resp.json();
+            alert(`Failed to upload icon: ${data.detail || 'Unknown error'}`);
+        }
+    } catch (error) {
+        console.error('[HTTP] Error uploading server icon:', error);
+        alert('Failed to upload server icon');
+    }
+}
+
+async function resetServerIcon() {
+    try {
+        const resp = await fetch(`${API_URL}/server/icon`, {
+            method: 'DELETE',
+            headers: { 'Authorization': `Bearer ${sessionToken}` },
+        });
+
+        if (resp.ok) {
+            loadServerIcon(false);
+        }
+    } catch (error) {
+        console.error('[HTTP] Error resetting server icon:', error);
     }
 }
 
@@ -609,6 +673,24 @@ document.addEventListener('DOMContentLoaded', () => {
     if (regModeSlider) {
         regModeSlider.addEventListener('input', updateRegModeLabel);
         regModeSlider.addEventListener('change', setRegistrationMode);
+    }
+
+    // Server icon upload
+    const iconUpload = document.getElementById('server-icon-upload');
+    if (iconUpload) {
+        iconUpload.addEventListener('change', (e) => {
+            const file = e.target.files[0];
+            if (file) {
+                uploadServerIcon(file);
+                e.target.value = '';  // Reset so same file can be re-selected
+            }
+        });
+    }
+
+    // Server icon reset
+    const iconResetBtn = document.getElementById('server-icon-reset-btn');
+    if (iconResetBtn) {
+        iconResetBtn.addEventListener('click', resetServerIcon);
     }
 
     // Generate invite button

@@ -1,12 +1,21 @@
 """Business logic for server operations."""
 import secrets
 from datetime import datetime
+from pathlib import Path
 from typing import Dict, List
 
+from ..config import DB_DIR
 from ..database import get_db, get_setting, set_setting
+from ..users.avatar import generate_identicon
 
 
 VALID_REGISTRATION_MODES = ('closed', 'invite_only', 'approval_required', 'open')
+
+# Server icon file path in the data directory
+SERVER_ICON_PATH = DB_DIR / "server_icon.png"
+
+# Default color for auto-generated server icon
+SERVER_ICON_COLOR = '#6366f1'
 
 
 def set_registration_mode(mode: str) -> str:
@@ -61,4 +70,37 @@ def get_system_status() -> Dict:
         'registration_mode': get_registration_mode(),
         'default_theme': get_setting('default_theme', 'four43.theme-default'),
         'name': get_setting('server_name', 'My Server'),
+        'icon_custom': is_server_icon_custom(),
     }
+
+
+def get_server_icon() -> bytes:
+    """Get the server icon PNG bytes.
+
+    Returns the custom icon if one has been uploaded, otherwise
+    auto-generates a deterministic identicon from the server name.
+    """
+    if is_server_icon_custom() and SERVER_ICON_PATH.exists():
+        return SERVER_ICON_PATH.read_bytes()
+
+    # Auto-generate from server name
+    server_name = get_setting('server_name', 'My Server')
+    return generate_identicon(server_name, SERVER_ICON_COLOR)
+
+
+def set_server_icon(data: bytes) -> None:
+    """Save a custom server icon (PNG bytes)."""
+    SERVER_ICON_PATH.write_bytes(data)
+    set_setting('server_icon_custom', 'true')
+
+
+def reset_server_icon() -> None:
+    """Remove custom icon and revert to auto-generated."""
+    if SERVER_ICON_PATH.exists():
+        SERVER_ICON_PATH.unlink()
+    set_setting('server_icon_custom', 'false')
+
+
+def is_server_icon_custom() -> bool:
+    """Check whether the server icon is a custom upload."""
+    return get_setting('server_icon_custom', 'false') == 'true'

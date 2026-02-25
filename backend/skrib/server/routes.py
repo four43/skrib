@@ -1,5 +1,9 @@
 """Server info API routes."""
-from fastapi import APIRouter, Depends, HTTPException, Request
+import io
+
+from fastapi import APIRouter, Depends, HTTPException, Request, UploadFile, File
+from fastapi.responses import Response
+from PIL import Image
 
 from .schemas import (
     ServerInfoResponse,
@@ -13,6 +17,10 @@ from .services import (
     create_invite_token,
     get_invite_tokens,
     delete_invite_token,
+    get_server_icon,
+    set_server_icon,
+    reset_server_icon,
+    is_server_icon_custom,
 )
 from ..database import set_setting
 from ..dependencies import require_admin
@@ -41,10 +49,66 @@ async def update_server(
 
     if updates.name is not None:
         set_setting('server_name', updates.name)
+        # If using auto-generated icon, it will regenerate on next request
+        # since it's based on the server name (no cached file when not custom)
+        if not is_server_icon_custom():
+            reset_server_icon()
 
     # Return updated server info
     status = get_system_status()
     return ServerInfoResponse(**status)
+
+
+# --- Server icon ---
+
+MAX_ICON_SIZE = 2 * 1024 * 1024  # 2 MB
+ICON_DIMENSION = 128
+
+
+@router.get("/icon")
+async def get_icon():
+    """Get server icon image. Public endpoint (no auth required)."""
+    icon_data = get_server_icon()
+    return Response(
+        content=icon_data,
+        media_type="image/png",
+        headers={"Cache-Control": "public, max-age=3600"},
+    )
+
+
+@router.put("/icon")
+async def upload_icon(
+    file: UploadFile = File(...),
+    _: str = Depends(require_admin),
+):
+    """Upload a custom server icon (admin only). Accepts PNG, JPEG, GIF, or WebP."""
+    if file.content_type not in ("image/png", "image/jpeg", "image/gif", "image/webp"):
+        raise HTTPException(status_code=400, detail="Image must be PNG, JPEG, GIF, or WebP")
+
+    data = await file.read()
+    if len(data) > MAX_ICON_SIZE:
+        raise HTTPException(status_code=400, detail="Image must be under 2 MB")
+
+    # Resize to standard icon size and convert to PNG
+    try:
+        img = Image.open(io.BytesIO(data))
+        img = img.convert("RGBA")
+        img = img.resize((ICON_DIMENSION, ICON_DIMENSION), Image.LANCZOS)
+        buf = io.BytesIO()
+        img.save(buf, format="PNG")
+        png_data = buf.getvalue()
+    except Exception:
+        raise HTTPException(status_code=400, detail="Could not process image")
+
+    set_server_icon(png_data)
+    return {"status": "uploaded", "custom": True}
+
+
+@router.delete("/icon")
+async def delete_icon(_: str = Depends(require_admin)):
+    """Reset server icon to auto-generated (admin only)."""
+    reset_server_icon()
+    return {"status": "reset", "custom": False}
 
 
 @router.post("/invites", response_model=CreateInviteResponse)

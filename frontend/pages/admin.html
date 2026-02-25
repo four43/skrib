@@ -57,6 +57,21 @@
                     </div>
 
                     <div class="admin-section">
+                        <h3>Server Icon</h3>
+                        <div class="server-icon-section">
+                            <div class="server-icon-preview">
+                                <img id="server-icon-img" src="" alt="Server icon" width="64" height="64">
+                                <span id="server-icon-label" class="server-icon-label"></span>
+                            </div>
+                            <div class="server-icon-actions">
+                                <label class="btn-sm upload-btn" for="server-icon-upload">Upload Icon</label>
+                                <input type="file" id="server-icon-upload" accept="image/png,image/jpeg,image/gif,image/webp" hidden>
+                                <button class="btn-sm reject-btn" id="server-icon-reset-btn" style="display:none;">Reset to Default</button>
+                            </div>
+                        </div>
+                    </div>
+
+                    <div class="admin-section">
                         <h3>Registration Mode</h3>
                         <div class="reg-mode-slider">
                             <input type="range" id="reg-mode-slider" min="0" max="3" step="1" value="0">

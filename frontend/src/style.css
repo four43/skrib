@@ -1109,6 +1109,53 @@ input:focus-visible {
     font-size: 15px;
 }
 
+/* Server Icon */
+.server-icon-section {
+    display: flex;
+    align-items: center;
+    gap: 20px;
+    padding: 12px 16px;
+    background: rgba(var(--theme-rgb), 0.04);
+    border-radius: 10px;
+    border: 1px solid rgba(var(--theme-rgb), 0.08);
+}
+
+.server-icon-preview {
+    display: flex;
+    align-items: center;
+    gap: 12px;
+}
+
+.server-icon-preview img {
+    border-radius: 12px;
+    border: 2px solid rgba(var(--theme-rgb), 0.15);
+}
+
+.server-icon-label {
+    font-size: 13px;
+    color: var(--text-muted);
+}
+
+.server-icon-actions {
+    display: flex;
+    gap: 8px;
+    margin-left: auto;
+}
+
+.upload-btn {
+    cursor: pointer;
+    background: var(--theme-color);
+    color: white;
+    border-radius: 6px;
+    padding: 5px 12px;
+    font-size: 12px;
+    font-weight: 600;
+}
+
+.upload-btn:hover {
+    opacity: 0.9;
+}
+
 /* Registration Mode Slider */
 .reg-mode-slider {
     padding: 14px 16px;
