@@ -64,6 +64,7 @@ export const test = base.extend({
                 ...process.env,
                 SKRIB_DATA_DIR: dataDir,
                 SKRIB_RP_ID: 'localhost',
+                PYTHONPATH: BACKEND_DIR,
             },
             stdio: ['ignore', 'pipe', 'pipe'],
         });

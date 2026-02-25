@@ -20,6 +20,10 @@ class ChatTypingPlugin(Plugin):
         self.typing_state = {}
 
     @property
+    def id(self) -> str:
+        return "four43.chat-typing"
+
+    @property
     def name(self) -> str:
         return "Typing Indicators"
 
