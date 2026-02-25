@@ -2,7 +2,7 @@
 from . import database as db
 
 
-async def handle_reaction(bus, ws, username, msg):
+async def handle_reaction(bus, reply_to, username, msg):
     """Handle reaction WebSocket messages.
 
     Args:

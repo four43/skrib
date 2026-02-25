@@ -176,11 +176,8 @@ def delete_room(room_id: str, deleted_by: str) -> bool:
         conn.execute('DELETE FROM rooms WHERE room_id = ?', (room_id,))
         conn.commit()
 
-    # Let all plugins clean up their own databases (messages, reactions, etc.)
-    from ..plugins import registry
-    for plugin in registry.get_all_plugins():
-        plugin.on_room_deleted(room_id, room_type)
-    return True
+    # Returns room_type so the caller can emit the bus lifecycle event
+    return room_type
 
 
 def room_exists(room_id: str) -> bool:
@@ -434,14 +431,15 @@ def get_unread_counts(username: str) -> Dict[str, int]:
             by_type[rt] = {}
         by_type[rt][room['room_id']] = room['last_read'] or 0
 
+    from ..plugins.callbacks import get_unread_counts_batch as _plugin_batch
+
     result = {}
     for room_type, positions in by_type.items():
         plugin = registry.get_plugin_for_room_type(room_type)
-        if plugin and hasattr(plugin, 'get_unread_counts_batch'):
-            counts = plugin.get_unread_counts_batch(positions)
+        if plugin:
+            counts = _plugin_batch(plugin, positions)
             result.update(counts)
         else:
-            # No plugin or plugin doesn't support unread counts
             for room_id in positions:
                 result[room_id] = 0
 
@@ -470,8 +468,10 @@ def get_unread_count_for_room(room_id: str, username: str) -> int:
         return 0
 
     from ..plugins import registry
+    from ..plugins.callbacks import get_unread_count as _plugin_unread
+
     plugin = registry.get_plugin_for_room_type(room_type)
-    if plugin and hasattr(plugin, 'get_unread_count'):
-        return plugin.get_unread_count(room_id, last_read)
+    if plugin:
+        return _plugin_unread(plugin, room_id, last_read)
 
     return 0

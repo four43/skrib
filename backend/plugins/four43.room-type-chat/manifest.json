@@ -6,9 +6,12 @@
   "author": "Four43",
   "entry": "frontend/plugin.js",
   "permissions": [
-    "websocket.send",
-    "websocket.receive",
-    "database.messages"
+    "bus.send",
+    "bus.receive",
+    "http.routes",
+    "storage.read",
+    "storage.write",
+    "core_api"
   ],
   "hooks": {},
   "styles": ["frontend/plugin.css"]

@@ -2,7 +2,7 @@
 from typing import Optional
 
 from skrib.plugins.base import Plugin
-from skrib.permissions import can_edit_resource
+from skrib.plugins.auth import can_edit_resource
 
 from . import services as services_module
 from .routes import router
@@ -57,14 +57,10 @@ class RoomTypeTodoPlugin(Plugin):
             )
         '''
 
-    def on_room_deleted(self, room_id: str, room_type: str):
-        """Delete all todo items for the room."""
-        with self.get_plugin_db() as conn:
-            conn.execute('DELETE FROM todo_items WHERE room_id = ?', (room_id,))
-            conn.commit()
-
     async def on_startup(self):
         """Create indexes on plugin database."""
+        self.register_event("core:room_deleted", self._on_room_deleted)
+
         with self.get_plugin_db() as conn:
             conn.execute('''
                 CREATE INDEX IF NOT EXISTS idx_todo_items_room_id
@@ -75,7 +71,16 @@ class RoomTypeTodoPlugin(Plugin):
     def register_routes(self, app):
         return router
 
-    async def handle_room_action(self, bus, ws, username: str, msg: dict, action: str):
+    async def _on_room_deleted(self, event_data: dict):
+        """Clean up todo items when a room is deleted."""
+        room_id = event_data.get("room_id")
+        if room_id:
+            with self.get_plugin_db() as conn:
+                conn.execute('DELETE FROM todo_items WHERE room_id = ?', (room_id,))
+                conn.commit()
+
+    async def handle_room_action(self, bus, reply_to, username: str, msg: dict, action: str,
+                                *, user_role: str = "user", room_role: str | None = None):
         """Handle room actions for todo rooms via WebSocket."""
         room_id = msg.get("room_id")
         todo = services_module.TodoList(room_id)
@@ -85,7 +90,7 @@ class RoomTypeTodoPlugin(Plugin):
             description = msg.get("description", "").strip()
 
             if not title:
-                await bus.send_error(ws, "Title is required", room_id=room_id)
+                await bus.send_error(reply_to, "Title is required", room_id=room_id)
                 return
 
             item = todo.add_item(username, title, description)
@@ -99,13 +104,14 @@ class RoomTypeTodoPlugin(Plugin):
 
             existing = todo.get_item(item_id)
             if not existing:
-                await bus.send_error(ws, "Item not found", room_id=room_id)
+                await bus.send_error(reply_to, "Item not found", room_id=room_id)
                 return
 
             # Permission check: anyone can toggle done, but only creator/ops/admins can edit text
             if title is not None or description is not None:
-                if not can_edit_resource(room_id, username, existing['username']):
-                    await bus.send_error(ws, "Only the creator, room ops, or admins can edit this item", room_id=room_id)
+                if not can_edit_resource(username, existing['username'],
+                                        room_role=room_role, global_role=user_role):
+                    await bus.send_error(reply_to, "Only the creator, room ops, or admins can edit this item", room_id=room_id)
                     return
 
             updated = todo.update_item(item_id, title=title, description=description, done=done)
@@ -116,15 +122,16 @@ class RoomTypeTodoPlugin(Plugin):
             existing = todo.get_item(item_id)
 
             if not existing:
-                await bus.send_error(ws, "Item not found", room_id=room_id)
+                await bus.send_error(reply_to, "Item not found", room_id=room_id)
                 return
 
-            if not can_edit_resource(room_id, username, existing['username']):
-                await bus.send_error(ws, "Only the creator, room ops, or admins can delete this item", room_id=room_id)
+            if not can_edit_resource(username, existing['username'],
+                                    room_role=room_role, global_role=user_role):
+                await bus.send_error(reply_to, "Only the creator, room ops, or admins can delete this item", room_id=room_id)
                 return
 
             todo.delete_item(item_id)
             await bus.broadcast_to_room(room_id, "todo_deleted", data={"id": item_id})
 
         else:
-            await bus.send_error(ws, f"Unknown todo action: {action}", room_id=room_id or "")
+            await bus.send_error(reply_to, f"Unknown todo action: {action}", room_id=room_id or "")

@@ -76,6 +76,14 @@ async def create_new_room(
     # Add creator as owner
     add_room_member(request.room_id, username, room_role='owner')
 
+    # Emit lifecycle event
+    await bus.emit_event({
+        "type": "core:room_created",
+        "room_id": request.room_id,
+        "room_type": request.room_type,
+        "creator": username,
+    })
+
     # Notify creator — new channel appears in their room list
     await bus.notify_user(username, {"type": "room:update"})
 
@@ -140,8 +148,17 @@ async def delete_room_endpoint(
     global_role = _get_global_role(username)
     if room_role != 'owner' and global_role != 'admin':
         raise HTTPException(status_code=403, detail="Room owner or admin required")
-    if not delete_room(room_id, username):
+
+    room_type = delete_room(room_id, username)
+    if not room_type:
         raise HTTPException(status_code=404, detail="Room not found")
+
+    # Emit lifecycle event so plugins can clean up their own data
+    await bus.emit_event({
+        "type": "core:room_deleted",
+        "room_id": room_id,
+        "room_type": room_type,
+    })
 
     # Notify all subscribers — room removed from list
     await bus.notify_all_users({"type": "room:update"})
@@ -270,6 +287,22 @@ async def get_room_keys_endpoint(
     _check_room_access(room_id, username)
     return get_room_keys(room_id, username)
 
+
+
+@router.get("/{room_id}/members/{target_username}")
+async def get_member_detail(
+    room_id: str,
+    target_username: str,
+    username: str = Depends(require_auth),
+):
+    """Get a single member's details (role, notify_level) in a room."""
+    _check_room_access(room_id, username)
+    from .services import get_room_role, get_notify_level
+    role = get_room_role(room_id, target_username)
+    if role is None:
+        raise HTTPException(status_code=404, detail="User is not a member of this room")
+    notify_level = get_notify_level(room_id, target_username)
+    return {"username": target_username, "room_role": role, "notify_level": notify_level}
 
 
 @router.get("/{room_id}", response_model=RoomDetailResponse)

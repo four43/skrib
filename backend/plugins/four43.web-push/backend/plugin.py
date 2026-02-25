@@ -49,6 +49,8 @@ class WebPushPlugin(Plugin):
 
     async def on_startup(self):
         """Create additional tables and indexes."""
+        self.register_event("four43.room-type-chat:message", self._handle_room_message)
+
         with self.get_plugin_db() as conn:
             conn.execute("""
                 CREATE TABLE IF NOT EXISTS vapid_keys (
@@ -70,16 +72,8 @@ class WebPushPlugin(Plugin):
     def register_routes(self, app):
         return router
 
-    def register_event_listeners(self, bus):
-        """Listen for chat message events to trigger push notifications."""
-        bus.on_event("four43.room-type-chat:message", self._handle_room_message)
-        self._bus = bus
-
     async def _handle_room_message(self, event_data: dict):
         """Called when a four43.room-type-chat:message event is broadcast to a room.
-
-        event_data looks like:
-            {"type": "four43.room-type-chat:message", "room_id": "...", "data": {"username": "...", ...}}
 
         Fires once per message. We check all room members and send push
         notifications to those without active WebSocket connections.
@@ -92,9 +86,7 @@ class WebPushPlugin(Plugin):
             return
 
         try:
-            from skrib.rooms.services import get_room_members
-
-            members = get_room_members(room_id)
+            members = self.core_api.get_room_members(room_id)
             _, vapid_private_key = services_module.get_or_create_vapid_keys()
 
             for member in members:
@@ -102,14 +94,13 @@ class WebPushPlugin(Plugin):
                     continue
 
                 # Skip if user has active WebSocket connections
-                if member in self._bus.user_connections and self._bus.user_connections[member]:
+                if self.core_api.is_user_connected(member):
                     continue
 
                 subs = services_module.get_subscriptions_for_user(member)
                 if not subs:
                     continue
 
-                # Build room display name
                 room_label = room_id
 
                 payload = {

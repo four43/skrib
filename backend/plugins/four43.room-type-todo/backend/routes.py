@@ -1,10 +1,9 @@
 """HTTP routes for todo list operations."""
-from fastapi import APIRouter, HTTPException, Depends
+from fastapi import APIRouter, HTTPException, Depends, Request
 from pydantic import BaseModel
 from typing import List, Optional
 
-from skrib.dependencies import require_auth
-from skrib.permissions import check_room_membership as _check_room_access, require_edit_permission as _check_edit_permission
+from skrib.plugins.auth import require_room_member, get_user_role, get_room_role, require_edit_permission
 
 # Injected by plugin.py after module load
 TodoList = None
@@ -41,10 +40,10 @@ class UpdateTodoRequest(BaseModel):
 @router.get("/rooms/{room_id}/items", response_model=list[TodoItemResponse])
 async def get_todo_items(
     room_id: str,
-    username: str = Depends(require_auth),
+    request: Request,
+    username: str = Depends(require_room_member),
 ):
     """Get all todo items for a room."""
-    _check_room_access(room_id, username)
     todo = TodoList(room_id)
     return todo.get_items()
 
@@ -52,17 +51,16 @@ async def get_todo_items(
 @router.post("/rooms/{room_id}/items", response_model=TodoItemResponse, status_code=201)
 async def create_todo_item(
     room_id: str,
-    request: CreateTodoRequest,
-    username: str = Depends(require_auth),
+    body: CreateTodoRequest,
+    request: Request,
+    username: str = Depends(require_room_member),
 ):
     """Create a new todo item."""
-    _check_room_access(room_id, username)
-
-    if not request.title.strip():
+    if not body.title.strip():
         raise HTTPException(status_code=400, detail="Title is required")
 
     todo = TodoList(room_id)
-    item = todo.add_item(username, request.title.strip(), request.description.strip())
+    item = todo.add_item(username, body.title.strip(), body.description.strip())
     return item
 
 
@@ -70,26 +68,29 @@ async def create_todo_item(
 async def update_todo_item(
     room_id: str,
     item_id: int,
-    request: UpdateTodoRequest,
-    username: str = Depends(require_auth),
+    body: UpdateTodoRequest,
+    request: Request,
+    username: str = Depends(require_room_member),
 ):
     """Update a todo item. Any member can toggle done. Only creator/ops/admins can edit title/description."""
-    _check_room_access(room_id, username)
-
     todo = TodoList(room_id)
     item = todo.get_item(item_id)
     if not item:
         raise HTTPException(status_code=404, detail="Item not found")
 
     # If updating title or description, check edit permission
-    if request.title is not None or request.description is not None:
-        _check_edit_permission(room_id, username, item['username'])
+    if body.title is not None or body.description is not None:
+        require_edit_permission(
+            username, item['username'],
+            room_role=get_room_role(request),
+            global_role=get_user_role(request),
+        )
 
     updated = todo.update_item(
         item_id,
-        title=request.title,
-        description=request.description,
-        done=request.done,
+        title=body.title,
+        description=body.description,
+        done=body.done,
     )
 
     if not updated:
@@ -102,17 +103,20 @@ async def update_todo_item(
 async def delete_todo_item(
     room_id: str,
     item_id: int,
-    username: str = Depends(require_auth),
+    request: Request,
+    username: str = Depends(require_room_member),
 ):
     """Delete a todo item. Only creator/ops/admins can delete."""
-    _check_room_access(room_id, username)
-
     todo = TodoList(room_id)
     item = todo.get_item(item_id)
     if not item:
         raise HTTPException(status_code=404, detail="Item not found")
 
-    _check_edit_permission(room_id, username, item['username'])
+    require_edit_permission(
+        username, item['username'],
+        room_role=get_room_role(request),
+        global_role=get_user_role(request),
+    )
 
     todo.delete_item(item_id)
     return {}

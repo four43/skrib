@@ -117,3 +117,120 @@ This is for core functionality, once the user is logged in. This tests assumes a
   - User B sends "reply message" — it appears for User A in real-time as well.
 - User A is in "test-room-a", navigates to "test-room-b", then refreshes the page.
   - After refresh, User A is still viewing "test-room-b" (room selection persists).
+
+---
+
+## chat-messages.spec.js
+
+Tests for the chat room type plugin (four43.room-type-chat). Covers message editing, deletion, and message-specific UI. Assumes 3 registered users (admin User A, User B, User C).
+
+- User A creates a room "edit-room" and invites User B.
+  - User A sends "original message". User A clicks the message and sees a hover bar with Edit (pencil icon) and a "..." more menu.
+    - User A clicks Edit: the message content becomes an inline editable text field with the original text.
+      - User A changes it to "edited message" and presses Enter. The message updates in place and shows an "(edited)" indicator.
+      - User B sees the updated message text and "(edited)" indicator in real-time (no refresh).
+    - User A clicks Edit, then presses Escape — edit is cancelled, original text remains.
+  - User B sends "User B's message". User B clicks it and sees Edit and "..." menu.
+    - User A clicks User B's message — User A does NOT see Edit (not the author), but sees "..." with Delete (User A is admin/owner).
+    - User B clicks Edit on their own message, changes it to "User B edited" and saves — both users see the update.
+  - User A sends a message, then clicks "..." and selects Delete.
+    - The message content is replaced with "[deleted]" for both User A and User B.
+    - The deleted message no longer shows a hover bar when clicked.
+  - User A deletes User B's message via "..." menu (admin privilege).
+    - The message shows "[deleted]" for both users.
+  - User B sends a message. User B clicks "..." and selects Delete — message shows "[deleted]".
+    - User C is invited. User C sends a message. User B clicks User C's message — User B does NOT see a delete option (User B is a regular member, not op/admin).
+- User A creates a room "history-room" and invites User B.
+  - User A sends 5 messages. User B opens the room and sees all 5 messages in order.
+  - User B refreshes the page — all 5 messages are still visible (loaded from server history).
+- User A creates a room "read-receipt-room" and invites User B.
+  - User B is in a different room. User A sends 3 messages.
+  - User B sees an unread badge on "read-receipt-room".
+  - User B clicks into the room — the unread badge clears.
+  - User B navigates away, then back — no unread badge (read position was persisted).
+  - User A sends a new message while User B is away — badge reappears with count 1.
+
+## todo-rooms.spec.js
+
+Tests for the todo list room type plugin (four43.room-type-todo). Assumes 3 registered users (admin User A, User B, User C).
+
+- User A creates a room "todo-room" with room type "todo". The room opens showing a todo list UI (not a chat input).
+  - The UI shows filter buttons: "All", "Active", "Done".
+  - The UI shows a task counter (e.g., "0 active, 0 done").
+  - An empty state message is visible (e.g., "No tasks yet").
+  - User A types a title "Buy groceries" in the new task input and presses Enter (or clicks Add).
+    - The task appears in the list with title "Buy groceries", User A's username, and today's date.
+    - The counter updates to "1 active, 0 done".
+  - User A adds another task "Walk the dog" with description "Take the long route".
+    - Both tasks are visible. The second task shows its description below the title.
+    - Counter: "2 active, 0 done".
+  - User A tries to add a task with an empty title — nothing is added (title required).
+- User A invites User B to "todo-room".
+  - User B opens the room and sees both existing tasks.
+  - User B adds a task "Reply to emails". All three tasks are visible to both users.
+  - User B clicks the checkbox on "Buy groceries" to mark it done.
+    - The task shows as completed (checked) for both User A and User B in real-time.
+    - Counter updates to "2 active, 1 done" for both users.
+  - User A clicks the "Done" filter — only "Buy groceries" is shown.
+  - User A clicks the "Active" filter — only "Walk the dog" and "Reply to emails" are shown.
+  - User A clicks the "All" filter — all three tasks are shown.
+  - User A unchecks "Buy groceries" — it returns to active state for both users.
+- User A clicks Edit on "Walk the dog" (User A is the creator).
+  - The task becomes an inline edit form with title and description fields and Save/Cancel buttons.
+  - User A changes the title to "Walk the dog later" and clicks Save.
+    - The task updates for both users in real-time.
+  - User B tries to click Edit on "Walk the dog later" — User B does NOT see an Edit button (User B is not the creator, not an op/admin).
+  - User B CAN click the checkbox on any task (toggling done is allowed for all members).
+  - User B clicks Edit on "Reply to emails" (User B is the creator) — edit form appears, User B can save changes.
+- User A clicks Delete on "Buy groceries" (User A is the creator).
+  - A confirmation dialog appears. User A confirms.
+  - The task is removed from the list for both users in real-time.
+  - Counter updates accordingly.
+  - User B tries to delete "Walk the dog later" — User B does NOT see a Delete button (not creator/op/admin).
+- User A refreshes the page. All remaining tasks are still present (persisted to database).
+- User A invites User C. User C opens the room and sees the current task list.
+  - User C adds a task. All three users see it appear in real-time.
+
+## message-reactions.spec.js
+
+Tests for the emoji reactions plugin (four43.message-reactions). Assumes 3 registered users (admin User A, User B, User C).
+
+- User A creates a room "reactions-room" and invites User B and User C.
+  - User A sends "React to this message".
+  - User A clicks the message — the hover bar shows emoji reaction buttons (including at minimum a thumbs-up).
+    - User A clicks the thumbs-up (👍) emoji button.
+      - A reaction pill appears below the message showing "👍 1".
+      - The pill is highlighted (current user has reacted).
+      - User B and User C see the "👍 1" pill appear in real-time.
+    - User B clicks the message, then clicks 👍.
+      - The pill updates to "👍 2" for all three users.
+      - Hovering/inspecting the pill shows both User A and User B's usernames.
+    - User A clicks the 👍 pill to toggle off their reaction.
+      - The pill updates to "👍 1" for all users. The pill is no longer highlighted for User A.
+    - User B clicks the 👍 pill to remove their reaction.
+      - The pill disappears entirely (count went to 0).
+  - User A sends "Multi-react message".
+    - User A adds 👍, User B adds ❤️, User C adds 👍 and 😂.
+      - The message shows three pills: "👍 2", "❤️ 1", "😂 1".
+      - Each pill is highlighted only for the user who reacted with that emoji.
+  - User A refreshes the page — all reactions are still visible (loaded from server).
+  - User B sends "User B's message". User C adds a reaction to it — the reaction appears for all users in real-time.
+
+## typing-indicators.spec.js
+
+Tests for the typing indicator plugin (four43.chat-typing). Assumes 2 registered users (User A, User B).
+
+- User A creates a room "typing-room" and invites User B. Both users open the room.
+  - User A types in the message input field (without sending).
+    - User B sees a typing indicator (e.g., "User A is typing...") appear near the message input area.
+    - User A does NOT see their own typing indicator.
+  - User A stops typing and waits ~3 seconds.
+    - The typing indicator disappears for User B.
+  - User A types and then sends the message (presses Enter).
+    - The typing indicator disappears for User B (replaced by the actual message).
+  - User B types in the input. User A sees "User B is typing...".
+  - Both User A and User B type simultaneously.
+    - User A sees "User B is typing...", User B sees "User A is typing..." (each sees only the other).
+  - User A is typing in "typing-room", then switches to a different room.
+    - The typing indicator for User A disappears for User B (room switch sends stop).
+  - User A opens "typing-room" again and types. The indicator reappears for User B.

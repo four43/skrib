@@ -6,8 +6,8 @@
   "author": "Four43",
   "entry": "frontend/plugin.js",
   "permissions": [
-    "websocket.send",
-    "websocket.receive",
+    "bus.send",
+    "bus.receive",
     "dom.input",
     "dom.message-area"
   ],

@@ -83,6 +83,20 @@ async def get_avatar(username: str):
 
 # --- User profile and properties ---
 
+@router.get("/{target_username}/presence")
+async def get_user_presence(
+    target_username: str,
+    _: str = Depends(require_auth),
+):
+    """Check if a user has active WebSocket connections."""
+    from ..ws import bus
+    connected = (
+        target_username in bus.user_connections
+        and bool(bus.user_connections[target_username])
+    )
+    return {"username": target_username, "connected": connected}
+
+
 @router.get("/{target_username}", response_model=UserProfile)
 async def get_user_profile(
     target_username: str,

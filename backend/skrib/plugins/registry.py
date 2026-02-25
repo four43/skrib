@@ -18,6 +18,7 @@ class PluginRegistry:
 
     def __init__(self):
         self.plugins: Dict[str, Plugin] = {}
+        self.manifests: Dict[str, dict] = {}  # plugin_id -> manifest data (enabled)
         self.disabled_plugins: Dict[str, dict] = {}  # plugin_id -> manifest data
         self.room_type_map: Dict[str, Plugin] = {}  # room_type -> plugin
         self.capability_map: Dict[str, list[Plugin]] = {}  # capability -> [plugins]
@@ -104,6 +105,11 @@ class PluginRegistry:
     def get_all_plugins(self) -> list[Plugin]:
         """Get all registered (enabled) plugins."""
         return list(self.plugins.values())
+
+    def get_plugin_permissions(self, plugin_id: str) -> list[str]:
+        """Get declared permissions for a plugin from its manifest."""
+        manifest = self.manifests.get(plugin_id, {})
+        return manifest.get("permissions", [])
 
     def is_plugin_enabled(self, plugin_id: str) -> bool:
         """Check if a plugin is enabled. Defaults to True if no setting exists."""
@@ -205,6 +211,8 @@ class PluginRegistry:
                             try:
                                 plugin_instance = obj()
                                 self.register(plugin_instance)
+                                if manifest_data:
+                                    self.manifests[plugin_instance.id] = manifest_data
                             except Exception as e:
                                 print(f"[Plugins] Failed to instantiate {name} from {plugin_id}: {e}")
 

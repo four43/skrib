@@ -1,4 +1,5 @@
 """Base plugin interface for Mini Chat plugin system."""
+import asyncio
 import logging
 import sqlite3
 import threading
@@ -15,33 +16,47 @@ class PluginBus:
 
     Prevents plugins from accidentally sending messages outside their namespace.
     All outgoing messages get type ``{namespace}:{action}`` automatically.
+
+    Enforces declared permissions from the plugin manifest. If a permission
+    is not declared, the corresponding bus method raises PermissionError.
     """
 
-    def __init__(self, bus, namespace: str):
+    def __init__(self, bus, namespace: str, permissions: list[str] | None = None):
         self._bus = bus
         self._namespace = namespace
+        self._permissions = set(permissions or [])
+
+    def _require(self, permission: str):
+        """Raise PermissionError if the plugin lacks the given permission."""
+        if self._permissions and permission not in self._permissions:
+            raise PermissionError(
+                f"Plugin '{self._namespace}' lacks '{permission}' permission"
+            )
 
     async def broadcast_to_room(self, room_id: str, action: str, *, exclude_user: str = None, **fields):
         """Broadcast ``{namespace}:{action}`` to all sockets in a room.
 
         Extra keyword arguments are merged into the message dict.
         """
+        self._require("bus.send")
         message = {"type": f"{self._namespace}:{action}", "room_id": room_id, **fields}
         await self._bus.broadcast_to_room(room_id, message, exclude_user=exclude_user)
 
     async def notify_user(self, username: str, action: str, **fields):
         """Send ``{namespace}:{action}`` to all of a user's sockets."""
+        self._require("bus.send")
         message = {"type": f"{self._namespace}:{action}", **fields}
         await self._bus.notify_user(username, message)
 
     async def notify_all_users(self, action: str, **fields):
         """Send ``{namespace}:{action}`` to every connected user."""
+        self._require("bus.send")
         message = {"type": f"{self._namespace}:{action}", **fields}
         await self._bus.notify_all_users(message)
 
-    async def send_error(self, ws, message: str, *, room_id: str = ""):
-        """Send a namespaced error to a single socket."""
-        await ws.send_json({
+    async def send_error(self, reply_to: str, message: str, *, room_id: str = ""):
+        """Send a namespaced error to the originating client via reply token."""
+        await self._bus.send_reply(reply_to, {
             "type": f"{self._namespace}:error",
             "room_id": room_id,
             "message": message,
@@ -76,6 +91,9 @@ class Plugin(ABC):
 
     def __init__(self):
         self.bus = None  # Set by core during startup to PluginBus(ws.bus, plugin.id)
+        self.core_api = None  # Set by core during startup to CoreAPI instance
+        self._callbacks = None  # Set during startup for callback registration
+        self._registered_resources = []  # Auto-cleanup tracking
         self.logger = logging.getLogger(f"plugin.{self.id}")
         if not self.logger.handlers:
             handler = logging.StreamHandler()
@@ -187,6 +205,62 @@ class Plugin(ABC):
         """
         pass
 
+    def register_callbacks(self, callbacks):
+        """Register callback handlers that core can invoke.
+
+        Override to register handlers for plugin callback endpoints:
+            /unread-count         {room_id, since_message_id} -> count
+            /unread-counts-batch  {room_positions} -> {room_id: count}
+            /intercept-message    {message_data} -> message_data or None
+            /health               {} -> {"status": "ok"}
+
+        Args:
+            callbacks: PluginCallbacks instance — call callbacks.register(endpoint, handler)
+        """
+        pass
+
+    # Auto-cleanup registration methods
+
+    def register_event(self, event_name: str, handler):
+        """Subscribe to a bus event. Auto-unsubscribed on plugin disable/shutdown."""
+        self.bus._bus.on_event(event_name, handler)
+        self._registered_resources.append(("event", event_name, handler))
+
+    def register_interval(self, seconds: float, callback):
+        """Run a periodic async task. Auto-cancelled on plugin disable/shutdown."""
+        async def _loop():
+            while True:
+                await asyncio.sleep(seconds)
+                try:
+                    await callback()
+                except Exception as e:
+                    self.logger.error(f"Interval task error: {e}")
+
+        task = asyncio.create_task(_loop())
+        self._registered_resources.append(("interval", task))
+        return task
+
+    def register_cleanup(self, callback):
+        """Run arbitrary cleanup on disable/shutdown."""
+        self._registered_resources.append(("cleanup", callback))
+
+    async def _cleanup_all(self):
+        """Called by framework on disable/shutdown. Plugins should NOT override."""
+        for resource in reversed(self._registered_resources):
+            try:
+                if resource[0] == "event":
+                    self.bus._bus.off_event(resource[1], resource[2])
+                elif resource[0] == "interval":
+                    resource[1].cancel()
+                elif resource[0] == "cleanup":
+                    if asyncio.iscoroutinefunction(resource[1]):
+                        await resource[1]()
+                    else:
+                        resource[1]()
+            except Exception as e:
+                self.logger.error(f"Cleanup error: {e}")
+        self._registered_resources.clear()
+
     # Lifecycle hooks
 
     async def on_startup(self):
@@ -278,7 +352,8 @@ class Plugin(ABC):
 
     # Room-type action handling
 
-    async def handle_room_action(self, bus: PluginBus, ws, username: str, msg: dict, action: str):
+    async def handle_room_action(self, bus: PluginBus, reply_to: str, username: str, msg: dict, action: str,
+                                *, user_role: str = "user", room_role: str | None = None):
         """Handle a room-scoped WebSocket action for rooms of this type.
 
         Called by the core room handler for any action other than join/leave.
@@ -286,12 +361,14 @@ class Plugin(ABC):
 
         Args:
             bus: PluginBus scoped to the plugin's own namespace
-            ws: The WebSocket connection
+            reply_to: Opaque reply token — pass to bus.send_error() to respond
             username: Authenticated username
             msg: Full message dict (includes type, room_id, etc.)
             action: The action part after "room:" (e.g., "message")
+            user_role: User's global role (admin/moderator/user), looked up by core
+            room_role: User's role in this room (owner/op/member), or None if not a member
         """
-        await bus.send_error(ws, f"Unsupported action: {action}", room_id=msg.get("room_id", ""))
+        await bus.send_error(reply_to, f"Unsupported action: {action}", room_id=msg.get("room_id", ""))
 
     # Message interception
 

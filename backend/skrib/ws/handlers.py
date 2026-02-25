@@ -1,6 +1,7 @@
 """Namespace handlers for the unified WebSocket bus."""
 from fastapi import WebSocket
 
+from ..permissions import get_global_role
 from ..plugins import registry
 from ..plugins.base import PluginBus
 from ..rooms.services import (
@@ -8,6 +9,7 @@ from ..rooms.services import (
     is_dm,
     get_room_type,
     get_room_members,
+    get_room_role,
 )
 
 
@@ -82,7 +84,14 @@ async def handle_room(bus, ws: WebSocket, username: str, msg: dict):
         plugin = registry.get_plugin_for_room_type(room_type)
         if plugin:
             room_bus = PluginBus(bus, plugin.id)
-            await plugin.handle_room_action(room_bus, ws, username, msg, action)
+            user_role = get_global_role(username)
+            room_role = get_room_role(room_id, username)
+            reply_to = bus.create_reply_token(ws)
+            try:
+                await plugin.handle_room_action(room_bus, reply_to, username, msg, action,
+                                                user_role=user_role, room_role=room_role)
+            finally:
+                bus.invalidate_reply_token(reply_to)
         else:
             await ws.send_json({
                 "type": "room:error",

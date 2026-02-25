@@ -1,8 +1,8 @@
 """Web Push plugin HTTP endpoints."""
-from fastapi import APIRouter, Depends, HTTPException
+from fastapi import APIRouter, Depends, HTTPException, Request
 from pydantic import BaseModel
 
-from skrib.dependencies import require_auth
+from skrib.plugins.auth import plugin_user
 
 router = APIRouter(tags=["Plugin: four43/web-push"])
 
@@ -23,7 +23,7 @@ async def get_vapid_key():
 
 
 @router.post("/subscribe")
-async def subscribe(body: SubscribeRequest, username: str = Depends(require_auth)):
+async def subscribe(body: SubscribeRequest, username: str = Depends(plugin_user)):
     """Save a push subscription for the authenticated user."""
     p256dh = body.keys.get("p256dh")
     auth = body.keys.get("auth")
@@ -35,7 +35,7 @@ async def subscribe(body: SubscribeRequest, username: str = Depends(require_auth
 
 
 @router.delete("/subscribe")
-async def unsubscribe(body: SubscribeRequest, username: str = Depends(require_auth)):
+async def unsubscribe(body: SubscribeRequest, username: str = Depends(plugin_user)):
     """Remove a push subscription for the authenticated user."""
     services.remove_subscription(username, body.endpoint)
     return {}

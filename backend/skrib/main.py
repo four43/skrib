@@ -23,6 +23,7 @@ from .database import init_db
 
 # Import plugin system
 from .plugins import registry
+from .plugins.middleware import PluginAuthMiddleware
 from .plugins.routes import router as plugins_router
 from .room_folders.routes import router as room_folders_router
 from .rooms.routes import router as rooms_router
@@ -51,6 +52,9 @@ app.add_middleware(
     allow_methods=CORS_ALLOW_METHODS,
     allow_headers=CORS_ALLOW_HEADERS,
 )
+
+# Pre-authenticate requests to plugin routes (injects x-skrib-* headers)
+app.add_middleware(PluginAuthMiddleware)
 
 # Mount static files from Vite build
 if STATIC_DIR.exists():
@@ -126,20 +130,31 @@ async def startup_event():
     # Register plugin WebSocket namespaces (core controls the namespace name)
     from . import ws
     from .plugins.base import PluginBus
+    from .plugins.callbacks import PluginCallbacks
+    from .plugins.core_api import CoreAPI
+    core_api = CoreAPI(bus=ws.bus)
+
     for plugin in registry.get_all_plugins():
         try:
             # Give every plugin a scoped bus so it can send outgoing messages
             # under its own namespace (e.g. "four43.room-type-chat:message")
-            plugin.bus = PluginBus(ws.bus, plugin.id)
+            permissions = registry.get_plugin_permissions(plugin.id)
+            plugin.bus = PluginBus(ws.bus, plugin.id, permissions=permissions)
+            plugin.core_api = core_api
+            plugin._callbacks = PluginCallbacks(plugin)
+            plugin.register_callbacks(plugin._callbacks)
 
             ws_handler = plugin.get_ws_handler()
             if ws_handler:
                 async def scoped_handler(bus, ws_conn, username, msg, _pb=plugin.bus, _h=ws_handler):
-                    await _h(_pb, ws_conn, username, msg)
+                    reply_to = bus.create_reply_token(ws_conn)
+                    try:
+                        await _h(_pb, reply_to, username, msg)
+                    finally:
+                        bus.invalidate_reply_token(reply_to)
 
                 ws.bus.register_namespace(plugin.id, scoped_handler)
                 print(f"[Plugins] Registered WebSocket namespace '{plugin.id}' for: {plugin.id}")
-            plugin.register_event_listeners(ws.bus)
         except Exception as e:
             print(f"[Plugins] Failed to register WS for {plugin.id}: {e}")
 
@@ -155,13 +170,17 @@ async def startup_event():
 
 @app.on_event("shutdown")
 async def shutdown_event():
-    """Call on_shutdown for all plugins."""
+    """Call on_shutdown for all plugins, then auto-cleanup registered resources."""
     print("\n[Plugins] Shutting down plugins...")
     for plugin in registry.get_all_plugins():
         try:
             await plugin.on_shutdown()
         except Exception as e:
             print(f"[Plugins] Error in on_shutdown for {plugin.id}: {e}")
+        try:
+            await plugin._cleanup_all()
+        except Exception as e:
+            print(f"[Plugins] Error in cleanup for {plugin.id}: {e}")
 
 
 def signal_handler(sig, frame):

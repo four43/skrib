@@ -31,13 +31,13 @@ class ChatTypingPlugin(Plugin):
         """Return handler for four43.chat-typing:* namespace."""
         typing_state = self.typing_state
 
-        async def handle_typing(bus, ws, username, msg):
+        async def handle_typing(bus, reply_to, username, msg):
             """Handle four43.chat-typing:* messages from clients."""
             action = msg["type"].split(":", 1)[1]  # Get action after namespace
             room_id = msg.get("room_id")
 
             if not room_id:
-                await bus.send_error(ws, "room_id required")
+                await bus.send_error(reply_to, "room_id required")
                 return
 
             if action == "start":

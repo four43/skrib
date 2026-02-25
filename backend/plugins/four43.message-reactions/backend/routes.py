@@ -1,8 +1,8 @@
 """REST API endpoints for reactions plugin."""
-from fastapi import APIRouter, Depends, HTTPException
+from fastapi import APIRouter, Depends, HTTPException, Request
 from pydantic import BaseModel
 
-from skrib.dependencies import require_auth
+from skrib.plugins.auth import plugin_user
 
 from . import database as db
 
@@ -22,7 +22,7 @@ class RemoveReactionRequest(BaseModel):
 @router.post("/add")
 async def add_reaction(
     request: AddReactionRequest,
-    username: str = Depends(require_auth)
+    username: str = Depends(plugin_user)
 ):
     """Add a reaction to a message.
 
@@ -47,7 +47,7 @@ async def add_reaction(
 @router.post("/remove")
 async def remove_reaction(
     request: RemoveReactionRequest,
-    username: str = Depends(require_auth)
+    username: str = Depends(plugin_user)
 ):
     """Remove a reaction from a message.
 

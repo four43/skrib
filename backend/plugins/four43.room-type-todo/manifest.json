@@ -6,9 +6,11 @@
   "author": "Four43",
   "entry": "frontend/plugin.js",
   "permissions": [
-    "websocket.send",
-    "websocket.receive",
-    "database.todo_items"
+    "bus.send",
+    "bus.receive",
+    "http.routes",
+    "storage.read",
+    "storage.write"
   ],
   "hooks": {},
   "styles": ["frontend/plugin.css"]

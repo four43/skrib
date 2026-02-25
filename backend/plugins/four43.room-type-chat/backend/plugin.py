@@ -2,12 +2,6 @@
 from typing import Optional
 
 from skrib.plugins.base import Plugin
-from skrib.permissions import get_global_role
-from skrib.rooms.services import (
-    get_room_members,
-    get_notify_level,
-    get_unread_count_for_room,
-)
 
 from . import services as services_module
 from .routes import router
@@ -67,10 +61,12 @@ class RoomTypeChatPlugin(Plugin):
         '''
 
     async def on_startup(self):
-        """Create indexes on plugin database and inject bus into routes."""
-        # Inject plugin_bus so HTTP routes can broadcast under this plugin's namespace
+        """Create indexes on plugin database and inject bus/core_api into routes."""
         from . import routes as routes_module
         routes_module.plugin_bus = self.bus
+        routes_module.core_api = self.core_api
+
+        self.register_event("core:room_deleted", self._on_room_deleted)
 
         with self.get_plugin_db() as conn:
             conn.execute('''
@@ -82,15 +78,23 @@ class RoomTypeChatPlugin(Plugin):
     def register_routes(self, app):
         return router
 
-    def on_room_deleted(self, room_id: str, room_type: str):
-        """Delete all messages for the room."""
-        with self.get_plugin_db() as conn:
-            conn.execute('DELETE FROM messages WHERE room_id = ?', (room_id,))
-            conn.commit()
+    async def _on_room_deleted(self, event_data: dict):
+        """Clean up messages when a room is deleted."""
+        room_id = event_data.get("room_id")
+        if room_id:
+            with self.get_plugin_db() as conn:
+                conn.execute('DELETE FROM messages WHERE room_id = ?', (room_id,))
+                conn.commit()
 
-    # --- Unread count API (called by core via registry) ---
+    def register_callbacks(self, callbacks):
+        callbacks.register('/unread-count',
+                           lambda data: self._get_unread_count(data['room_id'], data['since_message_id']))
+        callbacks.register('/unread-counts-batch',
+                           lambda data: self._get_unread_counts_batch(data['room_positions']))
 
-    def get_unread_count(self, room_id: str, since_message_id: int) -> int:
+    # --- Unread count implementation ---
+
+    def _get_unread_count(self, room_id: str, since_message_id: int) -> int:
         """Count messages in a room with id > since_message_id."""
         with self.get_plugin_db() as conn:
             cursor = conn.execute(
@@ -100,7 +104,7 @@ class RoomTypeChatPlugin(Plugin):
             row = cursor.fetchone()
             return row['cnt'] if row else 0
 
-    def get_unread_counts_batch(self, room_positions: dict[str, int]) -> dict[str, int]:
+    def _get_unread_counts_batch(self, room_positions: dict[str, int]) -> dict[str, int]:
         """Get unread counts for multiple rooms.
 
         Args:
@@ -125,7 +129,8 @@ class RoomTypeChatPlugin(Plugin):
 
     # --- WebSocket handler ---
 
-    async def handle_room_action(self, bus, ws, username: str, msg: dict, action: str):
+    async def handle_room_action(self, bus, reply_to, username: str, msg: dict, action: str,
+                                *, user_role: str = "user", room_role: str | None = None):
         """Handle room:message (and future chat actions) for chat rooms."""
         room_id = msg.get("room_id")
 
@@ -141,12 +146,12 @@ class RoomTypeChatPlugin(Plugin):
             await bus.broadcast_to_room(room_id, "message", data=message_data)
 
             # Notify other members (user-scoped) for sidebar badges / notifications
-            members = get_room_members(room_id)
+            members = self.core_api.get_room_members(room_id)
             for member in members:
                 if member != username:
-                    level = get_notify_level(room_id, member)
+                    level = self.core_api.get_notify_level(room_id, member)
                     notify_action = "new_message" if level == "all" else "update"
-                    unread_count = get_unread_count_for_room(room_id, member)
+                    unread_count = self.core_api.get_unread_count(room_id, member)
                     await bus.notify_user(
                         member, notify_action,
                         room_id=room_id, sender=username, unread_count=unread_count,
@@ -163,18 +168,18 @@ class RoomTypeChatPlugin(Plugin):
                 result = room.edit_message(message_id, username, content, content_type, key_epoch)
                 await bus.broadcast_to_room(room_id, "message_edited", data=result)
             except (ValueError, PermissionError) as e:
-                await bus.send_error(ws, str(e), room_id=room_id)
+                await bus.send_error(reply_to, str(e), room_id=room_id)
 
         elif action == "delete_message":
             message_id = msg.get("message_id")
-            is_admin = get_global_role(username) == 'admin'
+            is_admin = user_role == 'admin'
 
             room = services_module.ChatRoom(room_id)
             try:
                 result = room.delete_message(message_id, username, is_admin=is_admin)
                 await bus.broadcast_to_room(room_id, "message_deleted", data=result)
             except (ValueError, PermissionError) as e:
-                await bus.send_error(ws, str(e), room_id=room_id)
+                await bus.send_error(reply_to, str(e), room_id=room_id)
 
         else:
-            await bus.send_error(ws, f"Unknown chat action: {action}", room_id=room_id or "")
+            await bus.send_error(reply_to, f"Unknown chat action: {action}", room_id=room_id or "")

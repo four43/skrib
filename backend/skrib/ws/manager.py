@@ -4,6 +4,7 @@ Replaces both ConnectionManager (per-room) and ListSubscriptionManager (per-user
 with a single bus that handles namespaced message routing.
 """
 import json
+import uuid
 from typing import Callable, Dict, Set, Awaitable
 from fastapi import WebSocket
 
@@ -28,6 +29,8 @@ class UnifiedConnectionManager:
         self.namespace_handlers: Dict[str, Callable[..., Awaitable]] = {}
         # event_type -> list of async callbacks for cross-namespace listening
         self.event_listeners: Dict[str, list[Callable[[dict], Awaitable]]] = {}
+        # reply_token -> WebSocket (for plugin reply-to pattern)
+        self._reply_tokens: Dict[str, WebSocket] = {}
 
     def register_namespace(self, namespace: str, handler: Callable[..., Awaitable]):
         """Register an async handler for a message namespace (e.g. 'system', 'room')."""
@@ -46,6 +49,17 @@ class UnifiedConnectionManager:
         if event_type not in self.event_listeners:
             self.event_listeners[event_type] = []
         self.event_listeners[event_type].append(callback)
+
+    def off_event(self, event_type: str, callback: Callable[[dict], Awaitable]):
+        """Remove a previously registered event listener."""
+        listeners = self.event_listeners.get(event_type)
+        if listeners:
+            try:
+                listeners.remove(callback)
+            except ValueError:
+                pass
+            if not listeners:
+                del self.event_listeners[event_type]
 
     async def _trigger_event_listeners(self, message: dict):
         """Notify all registered listeners for this message type.
@@ -144,6 +158,39 @@ class UnifiedConnectionManager:
         """Send a message to every connected user."""
         for username in list(self.user_connections.keys()):
             await self.notify_user(username, message)
+
+    async def emit_event(self, event_data: dict):
+        """Emit an internal event to listeners without broadcasting to WebSocket clients.
+
+        Used for lifecycle events (core:room_created, core:room_deleted, etc.)
+        that plugins need to observe but clients don't need to receive directly.
+        """
+        await self._trigger_event_listeners(event_data)
+
+    # --- Reply Token API ---
+
+    def create_reply_token(self, ws: WebSocket) -> str:
+        """Create an opaque reply token for a WebSocket connection.
+
+        Plugins use the token with PluginBus.send_error() instead of
+        accessing the raw WebSocket directly.
+        """
+        token = uuid.uuid4().hex
+        self._reply_tokens[token] = ws
+        return token
+
+    def invalidate_reply_token(self, token: str):
+        """Remove a reply token after the handler completes."""
+        self._reply_tokens.pop(token, None)
+
+    async def send_reply(self, token: str, message: dict):
+        """Send a message to the WebSocket associated with a reply token."""
+        ws = self._reply_tokens.get(token)
+        if ws:
+            try:
+                await ws.send_json(message)
+            except Exception:
+                self.disconnect(ws)
 
     async def dispatch(self, ws: WebSocket, username: str, raw: str):
         """Parse incoming JSON and route to the appropriate namespace handler."""
