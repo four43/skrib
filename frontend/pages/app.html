@@ -6,7 +6,8 @@
     <title>Skrīb</title>
     <link rel="stylesheet" href="/src/style.css">
     <link rel="manifest" href="/manifest.json">
-    <meta name="theme-color" content="#6366f1">
+    <meta name="theme-color" content="#f1f5f9">
+    <script src="https://code.iconify.design/iconify-icon/2.3.0/iconify-icon.min.js"></script>
     <meta name="mobile-web-app-capable" content="yes">
     <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
     <link rel="apple-touch-icon" href="/icons/icon-192.png">
@@ -22,9 +23,10 @@
     <div id="chat-view" class="container">
         <div class="header">
             <div class="header-brand">
-                <button id="menu-toggle" class="menu-toggle">☰</button>
+                <button id="menu-toggle" class="menu-toggle"><iconify-icon icon="lucide:menu"></iconify-icon></button>
+                <img id="server-icon" class="server-header-icon" src="/api/server/icon" alt="" width="28" height="28" onerror="this.style.display='none'">
                 <h1 id="server-title">My Server</h1>
-                <a id="admin-panel-btn" class="admin-btn hidden" href="/admin.html" title="Admin Panel">⚙</a>
+                <a id="admin-panel-btn" class="admin-btn hidden" href="/admin.html" title="Admin Panel"><iconify-icon icon="lucide:settings"></iconify-icon></a>
             </div>
             <div class="header-actions">
                 <span class="header-app-name">Skrīb</span>
@@ -43,8 +45,8 @@
                     <div class="sidebar-section-header">
                         <span>Channels</span>
                         <div class="sidebar-section-actions">
-                            <button id="add-folder-btn" class="add-room-btn hidden" title="Create folder">&#128193;</button>
-                            <button id="add-channel-btn" class="add-room-btn" title="Create channel">+</button>
+                            <button id="add-folder-btn" class="add-room-btn hidden" title="Create folder"><iconify-icon icon="lucide:folder-plus"></iconify-icon></button>
+                            <button id="add-channel-btn" class="add-room-btn" title="Create channel"><iconify-icon icon="lucide:plus"></iconify-icon></button>
                         </div>
                     </div>
                     <div class="room-list" id="channel-list"></div>
@@ -52,7 +54,7 @@
                 <div class="sidebar-section">
                     <div class="sidebar-section-header">
                         <span>Direct Messages</span>
-                        <button id="add-dm-btn" class="add-room-btn" title="New message">+</button>
+                        <button id="add-dm-btn" class="add-room-btn" title="New message"><iconify-icon icon="lucide:plus"></iconify-icon></button>
                     </div>
                     <div class="room-list" id="dm-list"></div>
                 </div>
@@ -60,7 +62,7 @@
                     <a href="/settings.html" id="sidebar-settings-btn" class="sidebar-settings-btn">
                         <img id="sidebar-avatar" class="user-avatar sidebar-avatar" width="24" height="24" alt="">
                         <span id="sidebar-username" class="sidebar-username">Loading...</span>
-                        <span class="sidebar-settings-icon">⚙</span>
+                        <span class="sidebar-settings-icon"><iconify-icon icon="lucide:settings"></iconify-icon></span>
                     </a>
                 </div>
             </div>
@@ -69,31 +71,37 @@
             <div id="sidebar-overlay" class="sidebar-overlay"></div>
 
             <div class="chat-area">
+                <div class="chat-area-title" id="chat-area-title">
+                    <h2 id="chat-header-name"></h2>
+                </div>
                 <div class="chat-header" id="chat-header">
-                    <span id="chat-header-name">[No room selected]</span>
                     <span id="chat-header-topic" class="chat-header-topic"></span>
-                    <button id="room-settings-header-btn" class="chat-header-btn hidden" title="Room settings">&#9881;</button>
-                    <button id="members-toggle-btn" class="members-toggle-btn hidden" title="Members">&#128101;</button>
+                    <div class="chat-header-actions">
+                        <button id="room-settings-header-btn" class="chat-header-btn hidden" title="Room settings"><iconify-icon icon="lucide:settings"></iconify-icon></button>
+                        <button id="members-toggle-btn" class="members-toggle-btn hidden" title="Members"><iconify-icon icon="lucide:users"></iconify-icon></button>
+                    </div>
                 </div>
                 <div class="messages" id="messages">
                     <div class="empty-state">
                         <p>Select a chat room to start</p>
-                        <p class="mobile-hint">Tap ☰ to see rooms</p>
+                        <p class="mobile-hint">Tap <iconify-icon icon="lucide:menu" inline></iconify-icon> to see rooms</p>
                     </div>
                 </div>
             </div>
 
             <!-- Members Panel (inline, like sidebar) -->
             <div id="members-panel" class="members-panel">
-                <div class="members-panel-header">
-                    <h3>Members <span id="members-panel-count" class="members-panel-count"></span></h3>
-                    <button id="members-panel-close-btn" class="close-btn">&times;</button>
-                </div>
-                <div class="members-panel-body">
-                    <div id="members-panel-list" class="members-list"></div>
+                <div class="sidebar-section">
+                    <div class="sidebar-section-header">
+                        <span>Members <span id="members-panel-count" class="members-panel-count"></span></span>
+                        <button id="members-panel-close-btn" class="panel-close-btn"><iconify-icon icon="lucide:x"></iconify-icon></button>
+                    </div>
+                    <div class="members-panel-body">
+                        <div id="members-panel-list" class="members-list"></div>
+                    </div>
                 </div>
                 <div class="members-panel-footer">
-                    <button id="add-member-btn" onclick="openAddMemberModal()">+ Add User</button>
+                    <button id="add-member-btn" onclick="openAddMemberModal()"><iconify-icon icon="lucide:user-plus"></iconify-icon> Add User</button>
                 </div>
             </div>
         </div>
@@ -105,7 +113,7 @@
         <div class="room-settings-content">
             <div class="room-settings-header">
                 <h3>Room Settings</h3>
-                <button id="room-settings-close-btn" class="close-btn">&times;</button>
+                <button id="room-settings-close-btn" class="close-btn"><iconify-icon icon="lucide:x"></iconify-icon></button>
             </div>
             <div class="room-settings-body">
                 <div class="room-settings-name-row">
@@ -135,7 +143,7 @@
         <div class="room-settings-content">
             <div class="room-settings-header">
                 <h3>Create Channel</h3>
-                <button id="create-room-close-btn" class="close-btn">&times;</button>
+                <button id="create-room-close-btn" class="close-btn"><iconify-icon icon="lucide:x"></iconify-icon></button>
             </div>
             <div class="room-settings-body">
                 <div class="form-group">
@@ -164,7 +172,7 @@
         <div class="room-settings-content">
             <div class="room-settings-header">
                 <h3>New Direct Message</h3>
-                <button id="dm-modal-close-btn" class="close-btn">&times;</button>
+                <button id="dm-modal-close-btn" class="close-btn"><iconify-icon icon="lucide:x"></iconify-icon></button>
             </div>
             <div class="room-settings-body">
                 <div id="dm-user-list" class="user-select-list"></div>
@@ -179,7 +187,7 @@
         <div class="room-settings-content">
             <div class="room-settings-header">
                 <h3>Add Users</h3>
-                <button class="close-btn" onclick="closeAddMemberModal()">&times;</button>
+                <button class="close-btn" onclick="closeAddMemberModal()"><iconify-icon icon="lucide:x"></iconify-icon></button>
             </div>
             <div class="room-settings-body">
                 <div id="add-member-user-list" class="user-select-list"></div>
@@ -194,7 +202,7 @@
         <div class="room-settings-content">
             <div class="room-settings-header">
                 <h3>Create Folder</h3>
-                <button id="create-folder-close-btn" class="close-btn">&times;</button>
+                <button id="create-folder-close-btn" class="close-btn"><iconify-icon icon="lucide:x"></iconify-icon></button>
             </div>
             <div class="room-settings-body">
                 <div class="form-group">
@@ -213,7 +221,7 @@
         <div class="room-settings-content">
             <div class="room-settings-header">
                 <h3>Add Server</h3>
-                <button id="add-server-close-btn" class="close-btn">&times;</button>
+                <button id="add-server-close-btn" class="close-btn"><iconify-icon icon="lucide:x"></iconify-icon></button>
             </div>
             <div class="room-settings-body">
                 <div class="form-group">

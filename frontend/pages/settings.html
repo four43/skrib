@@ -6,10 +6,11 @@
     <title>Settings - Skrīb</title>
     <link rel="stylesheet" href="/src/style.css">
     <link rel="manifest" href="/manifest.json">
-    <meta name="theme-color" content="#6366f1">
+    <meta name="theme-color" content="#f1f5f9">
     <meta name="mobile-web-app-capable" content="yes">
     <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
     <link rel="apple-touch-icon" href="/icons/icon-192.png">
+    <script src="https://code.iconify.design/iconify-icon/2.3.0/iconify-icon.min.js"></script>
     <script>
         // Apply dark mode before first paint to prevent white flash
         // Apply dark mode + theme before first paint to prevent flash
@@ -29,15 +30,15 @@
         <div class="settings-layout">
             <nav class="settings-nav">
                 <button class="settings-nav-item active" data-section="account">
-                    <span class="settings-nav-icon">&#x1F464;</span>
+                    <span class="settings-nav-icon"><iconify-icon icon="lucide:user"></iconify-icon></span>
                     Account
                 </button>
                 <button class="settings-nav-item" data-section="appearance">
-                    <span class="settings-nav-icon">&#x1F3A8;</span>
+                    <span class="settings-nav-icon"><iconify-icon icon="lucide:palette"></iconify-icon></span>
                     Appearance
                 </button>
                 <button class="settings-nav-item" data-section="servers">
-                    <span class="settings-nav-icon">&#x1F5A5;</span>
+                    <span class="settings-nav-icon"><iconify-icon icon="lucide:monitor"></iconify-icon></span>
                     Servers
                 </button>
             </nav>
@@ -72,15 +73,15 @@
                         <h3>Color Scheme</h3>
                         <div class="color-scheme-picker" id="color-scheme-picker">
                             <button class="color-scheme-option active" data-scheme="auto" type="button">
-                                <span class="color-scheme-icon">🌓</span>
+                                <span class="color-scheme-icon"><iconify-icon icon="lucide:sun-moon"></iconify-icon></span>
                                 Auto
                             </button>
                             <button class="color-scheme-option" data-scheme="light" type="button">
-                                <span class="color-scheme-icon">☀️</span>
+                                <span class="color-scheme-icon"><iconify-icon icon="lucide:sun"></iconify-icon></span>
                                 Light
                             </button>
                             <button class="color-scheme-option" data-scheme="dark" type="button">
-                                <span class="color-scheme-icon">🌙 </span>
+                                <span class="color-scheme-icon"><iconify-icon icon="lucide:moon"></iconify-icon></span>
                                 Dark
                             </button>
                         </div>

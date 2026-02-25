@@ -6,7 +6,8 @@
     <title>Login - Skrīb</title>
     <link rel="stylesheet" href="/src/style.css">
     <link rel="manifest" href="/manifest.json">
-    <meta name="theme-color" content="#6366f1">
+    <meta name="theme-color" content="#f1f5f9">
+    <script src="https://code.iconify.design/iconify-icon/2.3.0/iconify-icon.min.js"></script>
     <meta name="mobile-web-app-capable" content="yes">
     <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
     <link rel="apple-touch-icon" href="/icons/icon-192.png">
@@ -22,17 +23,17 @@
     <div id="auth-view" class="auth-container">
         <div class="auth-box">
             <div id="login-form">
-                <h1>✍️ Skrīb</h1>
+                <h1><iconify-icon icon="lucide:pen-tool" inline></iconify-icon> Skrīb</h1>
                 <p>Secure collaboration</p>
 
                 <div id="auth-status"></div>
 
-                <button id="login-button">🔑 Sign In</button>
+                <button id="login-button"><iconify-icon icon="lucide:key-round" inline></iconify-icon> Sign In</button>
                 <div id="register-section" class="hidden">
                     <div class="divider">
                         <span>OR</span>
                     </div>
-                    <button id="go-to-register-button">👤 Register</button>
+                    <button id="go-to-register-button"><iconify-icon icon="lucide:user" inline></iconify-icon> Register</button>
                 </div>
             </div>
         </div>

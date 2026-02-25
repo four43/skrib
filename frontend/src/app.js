@@ -1124,7 +1124,7 @@ function toggleFolder(folderId) {
     const toggle = document.querySelector(`.folder-toggle[data-folder-id="${folderId}"]`);
     const badge = document.querySelector(`.folder-badge[data-folder-id="${folderId}"]`);
     if (content) content.classList.toggle('collapsed');
-    if (toggle) toggle.textContent = content?.classList.contains('collapsed') ? '\u25B6' : '\u25BC';
+    if (toggle) toggle.innerHTML = content?.classList.contains('collapsed') ? '<iconify-icon icon="lucide:chevron-right"></iconify-icon>' : '<iconify-icon icon="lucide:chevron-down"></iconify-icon>';
     if (badge) updateFolderBadge(folderId);
 }
 
@@ -1210,7 +1210,7 @@ function createFolderElement(folder) {
     const toggle = document.createElement('span');
     toggle.className = 'folder-toggle';
     toggle.dataset.folderId = folder.folder_id;
-    toggle.textContent = isCollapsed ? '\u25B6' : '\u25BC';
+    toggle.innerHTML = isCollapsed ? '<iconify-icon icon="lucide:chevron-right"></iconify-icon>' : '<iconify-icon icon="lucide:chevron-down"></iconify-icon>';
     toggle.onclick = (e) => { e.stopPropagation(); toggleFolder(folder.folder_id); };
 
     const name = document.createElement('span');
@@ -1234,13 +1234,13 @@ function createFolderElement(folder) {
 
         const renameBtn = document.createElement('button');
         renameBtn.className = 'folder-action-btn';
-        renameBtn.textContent = '\u270E';
+        renameBtn.innerHTML = '<iconify-icon icon="lucide:pencil"></iconify-icon>';
         renameBtn.title = 'Rename folder';
         renameBtn.onclick = (e) => { e.stopPropagation(); renameFolder(folder.folder_id, folder.name); };
 
         const deleteBtn = document.createElement('button');
         deleteBtn.className = 'folder-action-btn';
-        deleteBtn.textContent = '\u2715';
+        deleteBtn.innerHTML = '<iconify-icon icon="lucide:trash-2"></iconify-icon>';
         deleteBtn.title = 'Delete folder';
         deleteBtn.onclick = (e) => { e.stopPropagation(); deleteFolder(folder.folder_id, folder.name); };
 

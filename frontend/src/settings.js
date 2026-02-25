@@ -55,7 +55,7 @@ async function checkSession() {
 
 async function initializeSettingsPage() {
     // Display username
-    document.getElementById('current-user').textContent = `👤 ${currentUsername}`;
+    document.getElementById('current-user').innerHTML = `<iconify-icon icon="lucide:user" inline></iconify-icon> ${currentUsername}`;
 
     // Show admin badge if applicable
     if (currentRole === 'admin' || currentRole === 'moderator') {

@@ -9,19 +9,28 @@
     overflow-y: auto;
     padding: 20px 0;
     overscroll-behavior: contain;
+    display: flex;
+    flex-direction: column;
+    align-items: center;
 }
 
 .message {
-    padding: 8px 20px;
+    padding: 10px 20px;
     position: relative;
     display: grid;
     grid-template-columns: auto 1fr;
     column-gap: 10px;
     align-items: start;
+    margin: 4px 16px;
+    border-radius: 12px;
+    background: rgba(var(--theme-rgb), 0.04);
+    width: 100%;
+    max-width: 800px;
+    box-sizing: border-box;
 }
 
 .message:hover {
-    background-color: var(--bg-surface);
+    background-color: rgba(var(--theme-rgb), 0.07);
 }
 
 .message > .user-avatar {
@@ -248,10 +257,12 @@
 .input-area {
     padding: 16px 20px;
     padding-bottom: max(16px, env(safe-area-inset-bottom));
-    border-top: 1px solid rgba(var(--theme-rgb), 0.08);
     display: flex;
     gap: 10px;
-    background: rgba(255, 255, 255, 0.4);
+    background: transparent;
+    max-width: 800px;
+    margin: 0 auto;
+    width: 100%;
 }
 
 .message-input {
@@ -286,12 +297,22 @@
     color: var(--text-muted);
     padding: 60px 40px;
     font-size: 15px;
+    width: 100%;
+    max-width: 800px;
 }
 
 /* ── Dark mode overrides ────────────────────────────────────────── */
 
+html[data-theme-dark] .message {
+    background: rgba(255, 255, 255, 0.03);
+}
+
+html[data-theme-dark] .message:hover {
+    background-color: rgba(255, 255, 255, 0.05);
+}
+
 html[data-theme-dark] .input-area {
-    background: rgba(15, 23, 42, 0.6);
+    background: transparent;
 }
 
 html[data-theme-dark] .message-input {
@@ -318,6 +339,7 @@ html[data-theme-dark] .deleted-text {
 
     .message {
         padding: 10px 10px;
+        margin: 4px 8px;
     }
 
     .message-text {

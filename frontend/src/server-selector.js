@@ -153,7 +153,7 @@ export function renderServerStrip() {
         if (!isActive) {
             const removeBtn = document.createElement('button');
             removeBtn.className = 'server-remove-btn';
-            removeBtn.innerHTML = '&times;';
+            removeBtn.innerHTML = '<iconify-icon icon="lucide:x"></iconify-icon>';
             removeBtn.title = 'Remove server';
             removeBtn.addEventListener('click', (e) => {
                 e.stopPropagation();

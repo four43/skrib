@@ -455,7 +455,7 @@ async function loadInviteTokens() {
                             <div class="invite-url" onclick="copyInviteLink('${inviteUrl}')" title="Click to copy">${inviteUrl}</div>
                             <div class="invite-meta">${status} &middot; by ${escapeHtml(inv.created_by)}</div>
                         </div>
-                        ${!inv.used_by ? `<button class="reject-btn btn-sm invite-delete-btn" onclick="deleteInvite('${inv.token}')">&#x2715;</button>` : ''}
+                        ${!inv.used_by ? `<button class="reject-btn btn-sm invite-delete-btn" onclick="deleteInvite('${inv.token}')"><iconify-icon icon="lucide:x"></iconify-icon></button>` : ''}
                     </div>
                 `;
             }).join('');
@@ -505,12 +505,12 @@ async function loadPendingUsers() {
         } else {
             pendingList.innerHTML = data.map(user => `
                 <div class="pending-user">
-                    <h4>&#x1F464; ${user.username}</h4>
+                    <h4><iconify-icon icon="lucide:user" inline></iconify-icon> ${user.username}</h4>
                     <div class="code">Code: ${user.approval_code}</div>
                     <div style="font-size: 12px; color: #666;">${new Date(user.created_at).toLocaleString()}</div>
                     <div class="pending-user-actions">
-                        <button class="approve-btn btn-sm" onclick="window.approveUser('${user.approval_code}')">&#x2713; Approve</button>
-                        <button class="reject-btn btn-sm" onclick="window.rejectUser('${user.approval_code}')">&#x2715; Reject</button>
+                        <button class="approve-btn btn-sm" onclick="window.approveUser('${user.approval_code}')"><iconify-icon icon="lucide:check" inline></iconify-icon> Approve</button>
+                        <button class="reject-btn btn-sm" onclick="window.rejectUser('${user.approval_code}')"><iconify-icon icon="lucide:x" inline></iconify-icon> Reject</button>
                     </div>
                 </div>
             `).join('');

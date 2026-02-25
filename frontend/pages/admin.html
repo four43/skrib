@@ -6,10 +6,11 @@
     <title>Admin - Skrīb</title>
     <link rel="stylesheet" href="/src/style.css">
     <link rel="manifest" href="/manifest.json">
-    <meta name="theme-color" content="#6366f1">
+    <meta name="theme-color" content="#f1f5f9">
     <meta name="mobile-web-app-capable" content="yes">
     <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
     <link rel="apple-touch-icon" href="/icons/icon-192.png">
+    <script src="https://code.iconify.design/iconify-icon/2.3.0/iconify-icon.min.js"></script>
     <script>
         // Apply dark mode + theme before first paint to prevent flash
         (function(){var s=localStorage.getItem('skrib-color-scheme')||'auto';var d=s==='dark'||(s==='auto'&&matchMedia('(prefers-color-scheme:dark)').matches);if(d)document.documentElement.toggleAttribute('data-theme-dark',true);var t=localStorage.getItem('skrib-theme');if(t){var l=document.createElement('link');l.id='theme-stylesheet';l.rel='stylesheet';l.href='/api/themes/'+t;document.head.appendChild(l)}})();
@@ -28,19 +29,19 @@
         <div class="settings-layout">
             <nav class="settings-nav">
                 <button class="settings-nav-item active admin-only" data-section="server">
-                    <span class="settings-nav-icon">&#x2699;</span>
+                    <span class="settings-nav-icon"><iconify-icon icon="lucide:settings"></iconify-icon></span>
                     Server
                 </button>
                 <button class="settings-nav-item admin-only" data-section="appearance">
-                    <span class="settings-nav-icon">&#x1F3A8;</span>
+                    <span class="settings-nav-icon"><iconify-icon icon="lucide:palette"></iconify-icon></span>
                     Appearance
                 </button>
                 <button class="settings-nav-item" data-section="users">
-                    <span class="settings-nav-icon">&#x1F465;</span>
+                    <span class="settings-nav-icon"><iconify-icon icon="lucide:users"></iconify-icon></span>
                     Users
                 </button>
                 <button class="settings-nav-item admin-only hidden" data-section="invites" id="invites-nav-item">
-                    <span class="settings-nav-icon">&#x1F517;</span>
+                    <span class="settings-nav-icon"><iconify-icon icon="lucide:link"></iconify-icon></span>
                     Invites
                 </button>
             </nav>

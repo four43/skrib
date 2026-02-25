@@ -397,7 +397,7 @@ const RoomTypeChatPlugin = (function() {
         if (isAuthor) {
             const editBtn = document.createElement('button');
             editBtn.className = 'message-hover-btn';
-            editBtn.innerHTML = '&#9998;'; // ✎ pencil
+            editBtn.innerHTML = '<iconify-icon icon="lucide:pencil"></iconify-icon>';
             editBtn.title = 'Edit';
             editBtn.onclick = (e) => {
                 e.stopPropagation();
@@ -411,7 +411,7 @@ const RoomTypeChatPlugin = (function() {
         if (isAuthor || isAdmin) {
             const moreBtn = document.createElement('button');
             moreBtn.className = 'message-hover-btn message-more-btn';
-            moreBtn.textContent = '\u22EF'; // ⋯ midline horizontal ellipsis
+            moreBtn.innerHTML = '<iconify-icon icon="lucide:more-horizontal"></iconify-icon>';
             moreBtn.title = 'More';
             moreBtn.onclick = (e) => {
                 e.stopPropagation();
