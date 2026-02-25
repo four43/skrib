@@ -10,7 +10,10 @@ const RoomTypeChatPlugin = (function() {
 
     // Plugin-owned state
     let lastMessageId = 0;
+    let oldestMessageId = null;   // tracks the oldest loaded message for scroll-back
     let isLoadingMessages = false;
+    let hasOlderMessages = true;  // false once the server returns fewer than PAGE_SIZE
+    const PAGE_SIZE = 50;
     const PLUGIN_ID = 'four43.room-type-chat';
     let PLUGIN_API = '';
 
@@ -51,11 +54,15 @@ const RoomTypeChatPlugin = (function() {
 
     async function onRoomSelected(roomId) {
         lastMessageId = 0;
+        oldestMessageId = null;
+        hasOlderMessages = true;
+
         const messagesDiv = document.getElementById('messages');
         messagesDiv.className = 'messages';
         messagesDiv.innerHTML = '';
 
         createInputArea();
+        attachScrollListener(messagesDiv);
 
         // Keys are loaded by core (selectRoom) before room:join to prevent race conditions
         await loadMessages(roomId);
@@ -65,6 +72,8 @@ const RoomTypeChatPlugin = (function() {
 
     function onRoomLeft(roomId) {
         lastMessageId = 0;
+        oldestMessageId = null;
+        hasOlderMessages = true;
         removeInputArea();
     }
 
@@ -286,14 +295,10 @@ const RoomTypeChatPlugin = (function() {
         });
     }
 
-    async function displayMessage(msg) {
-        const messagesDiv = document.getElementById('messages');
-
-        // Clear empty state if present
-        if (messagesDiv.querySelector('.empty-state')) {
-            messagesDiv.innerHTML = '';
-        }
-
+    /**
+     * Build a DOM element for a message (shared by append and prepend paths).
+     */
+    async function buildMessageElement(msg) {
         const messageDiv = document.createElement('div');
         messageDiv.className = 'message';
         messageDiv.dataset.messageId = msg.id;
@@ -302,15 +307,12 @@ const RoomTypeChatPlugin = (function() {
         const date = new Date(msg.timestamp);
         const timeStr = date.toLocaleTimeString();
 
-        // Get user's color preference, default to blue
         const userColors = ctx.userColors();
         const userColor = userColors[msg.username] || '#1976d2';
         const displayName = ctx.getDisplayName(msg.username);
         const avatarUrl = `${ctx.API_URL}/users/${encodeURIComponent(msg.username)}/avatar`;
 
-        const isDeleted = msg.deleted;
-
-        if (isDeleted) {
+        if (msg.deleted) {
             messageDiv.classList.add('message-deleted');
             messageDiv.innerHTML = `
                 <img class="user-avatar" src="${avatarUrl}" alt="">
@@ -324,7 +326,6 @@ const RoomTypeChatPlugin = (function() {
             const plaintext = await decryptContent(msg);
             const messageBody = linkifyRoomRefs(ctx.escapeHtml(plaintext));
 
-            // Store plaintext for editing
             messageDiv.dataset.plaintext = plaintext;
 
             const editedHtml = msg.edited_at
@@ -341,19 +342,44 @@ const RoomTypeChatPlugin = (function() {
                 <div class="message-text">${messageBody}</div>
             `;
 
-            // Add hover bar with action buttons
             createHoverBar(messageDiv, msg);
         }
 
+        return messageDiv;
+    }
+
+    /**
+     * Append a message to the bottom (new / real-time messages). Scrolls down.
+     */
+    async function displayMessage(msg) {
+        const messagesDiv = document.getElementById('messages');
+
+        if (messagesDiv.querySelector('.empty-state')) {
+            messagesDiv.innerHTML = '';
+        }
+
+        const messageDiv = await buildMessageElement(msg);
         messagesDiv.appendChild(messageDiv);
 
-        // Update lastMessageId
         if (msg.id > lastMessageId) {
             lastMessageId = msg.id;
         }
 
-        // Scroll to bottom
         messagesDiv.scrollTop = messagesDiv.scrollHeight;
+    }
+
+    /**
+     * Insert a message before a reference node (for prepending older messages).
+     * Does NOT scroll — the caller handles scroll preservation.
+     */
+    async function displayMessageElement(msg, beforeNode) {
+        const messagesDiv = document.getElementById('messages');
+        const messageDiv = await buildMessageElement(msg);
+        messagesDiv.insertBefore(messageDiv, beforeNode);
+
+        if (msg.id > lastMessageId) {
+            lastMessageId = msg.id;
+        }
     }
 
     // -----------------------------------------------------------------------
@@ -664,20 +690,23 @@ const RoomTypeChatPlugin = (function() {
     }
 
     // -----------------------------------------------------------------------
-    // Message loading
+    // Message loading (paginated)
     // -----------------------------------------------------------------------
 
+    /**
+     * Load the initial page of messages (most recent PAGE_SIZE).
+     */
     async function loadMessages(roomId) {
         if (!roomId || isLoadingMessages) return;
 
         isLoadingMessages = true;
 
         try {
-            console.log(`[RoomTypeChat] Loading message history since=${lastMessageId}`);
-            const response = await fetch(
-                `${PLUGIN_API}/rooms/${encodeURIComponent(roomId)}/messages?since=${lastMessageId}`,
-                { headers: { 'Authorization': `Bearer ${ctx.sessionToken()}` } }
-            );
+            console.log(`[RoomTypeChat] Loading recent messages (limit=${PAGE_SIZE})`);
+            const url = `${PLUGIN_API}/rooms/${encodeURIComponent(roomId)}/messages?limit=${PAGE_SIZE}`;
+            const response = await fetch(url, {
+                headers: { 'Authorization': `Bearer ${ctx.sessionToken()}` },
+            });
             const data = await response.json();
 
             if (data && data.length > 0) {
@@ -685,13 +714,80 @@ const RoomTypeChatPlugin = (function() {
                 for (const msg of data) {
                     await displayMessage(msg);
                 }
+                oldestMessageId = data[0].id;
+                hasOlderMessages = data.length >= PAGE_SIZE;
             } else {
                 console.log('[RoomTypeChat] No message history');
+                hasOlderMessages = false;
             }
         } catch (error) {
             console.error('[RoomTypeChat] Error loading messages:', error);
         } finally {
             isLoadingMessages = false;
+        }
+    }
+
+    /**
+     * Load an older page of messages (before the oldest currently displayed).
+     */
+    async function loadOlderMessages(roomId) {
+        if (!roomId || isLoadingMessages || !hasOlderMessages || oldestMessageId === null) return;
+
+        isLoadingMessages = true;
+        const messagesDiv = document.getElementById('messages');
+
+        try {
+            console.log(`[RoomTypeChat] Loading older messages before=${oldestMessageId}`);
+            const url = `${PLUGIN_API}/rooms/${encodeURIComponent(roomId)}/messages?before=${oldestMessageId}&limit=${PAGE_SIZE}`;
+            const response = await fetch(url, {
+                headers: { 'Authorization': `Bearer ${ctx.sessionToken()}` },
+            });
+            const data = await response.json();
+
+            if (data && data.length > 0) {
+                // Preserve scroll position: record distance from bottom before prepending
+                const scrollBottomBefore = messagesDiv.scrollHeight - messagesDiv.scrollTop;
+
+                // Build message elements in order (oldest first) and prepend as a batch
+                const firstChild = messagesDiv.firstChild;
+                for (const msg of data) {
+                    await displayMessageElement(msg, firstChild);
+                }
+
+                // Restore scroll position so the viewport doesn't jump
+                messagesDiv.scrollTop = messagesDiv.scrollHeight - scrollBottomBefore;
+
+                oldestMessageId = data[0].id;
+                hasOlderMessages = data.length >= PAGE_SIZE;
+                console.log(`[RoomTypeChat] Prepended ${data.length} older messages`);
+            } else {
+                hasOlderMessages = false;
+                console.log('[RoomTypeChat] No older messages');
+            }
+        } catch (error) {
+            console.error('[RoomTypeChat] Error loading older messages:', error);
+        } finally {
+            isLoadingMessages = false;
+        }
+    }
+
+    /**
+     * Attach a scroll listener that loads older messages when the user
+     * scrolls near the top of the message area.
+     */
+    function attachScrollListener(messagesDiv) {
+        // Remove previous listener if any (room switches)
+        messagesDiv.removeEventListener('scroll', onMessagesScroll);
+        messagesDiv.addEventListener('scroll', onMessagesScroll);
+    }
+
+    function onMessagesScroll() {
+        const messagesDiv = document.getElementById('messages');
+        if (!messagesDiv) return;
+
+        // Trigger when within 100px of the top
+        if (messagesDiv.scrollTop < 100 && hasOlderMessages && !isLoadingMessages) {
+            loadOlderMessages(ctx.currentRoom());
         }
     }
 

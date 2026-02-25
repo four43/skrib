@@ -111,19 +111,65 @@ class ChatRoom:
 
         return {'message_id': message_id, 'deleted': True}
 
-    def get_messages(self, since: int = 0) -> List[Dict]:
-        """Get messages since a certain ID."""
+    def get_messages(
+        self,
+        since: int = 0,
+        before: Optional[int] = None,
+        limit: Optional[int] = None,
+    ) -> List[Dict]:
+        """Get messages with cursor-based pagination.
+
+        Args:
+            since: Return messages with id > since (exclusive lower bound).
+            before: Return messages with id < before (exclusive upper bound).
+            limit: Max number of messages to return. When used with ``before``
+                   (or alone), the *most recent* ``limit`` messages in the
+                   range are returned in ascending id order.
+        """
         with _get_db() as conn:
-            cursor = conn.execute('''
-                SELECT id, username, content, content_type, key_epoch, timestamp,
-                       edited_at, deleted
-                FROM messages
-                WHERE room_id = ? AND id > ?
-                ORDER BY id
-            ''', (self.room_id, since))
+            conditions = ["room_id = ?"]
+            params: list = [self.room_id]
+
+            if since:
+                conditions.append("id > ?")
+                params.append(since)
+            if before is not None:
+                conditions.append("id < ?")
+                params.append(before)
+
+            where = " AND ".join(conditions)
+
+            if limit is not None and not since:
+                # Loading recent / older messages: grab the last N rows by
+                # sorting DESC, then reverse so the caller gets ASC order.
+                query = f"""
+                    SELECT id, username, content, content_type, key_epoch,
+                           timestamp, edited_at, deleted
+                    FROM messages
+                    WHERE {where}
+                    ORDER BY id DESC
+                    LIMIT ?
+                """
+                params.append(limit)
+                cursor = conn.execute(query, params)
+                rows = list(cursor)
+                rows.reverse()
+            else:
+                query = f"""
+                    SELECT id, username, content, content_type, key_epoch,
+                           timestamp, edited_at, deleted
+                    FROM messages
+                    WHERE {where}
+                    ORDER BY id
+                """
+                if limit is not None:
+                    query += " LIMIT ?"
+                    params.append(limit)
+                cursor = conn.execute(query, params)
+                rows = list(cursor)
 
             messages = []
-            for row in cursor:
+            for row in rows:
                 msg = {
                     'id': row['id'],
                     'username': row['username'],

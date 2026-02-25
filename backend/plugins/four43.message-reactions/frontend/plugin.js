@@ -11,6 +11,12 @@ const ReactionsPlugin = (function() {
     const PLUGIN_ID = 'four43.message-reactions';
     const API_BASE = `/api/plugins/${PLUGIN_ID}/reactions`;
 
+    // Batch reaction loading — collect message IDs from MutationObserver
+    // and load them all in one request after a short debounce.
+    let pendingMessageIds = new Set();
+    let batchTimer = null;
+    const BATCH_DEBOUNCE_MS = 50;
+
     /**
      * Initialize the plugin
      */
@@ -109,24 +115,43 @@ const ReactionsPlugin = (function() {
         container.dataset.messageId = messageId;
         messageElement.appendChild(container);
 
-        // Load existing reactions for this message
-        loadReactions(messageId);
+        // Queue this message for batch reaction loading
+        queueReactionLoad(messageId);
     }
 
     /**
-     * Load existing reactions from the server
+     * Queue a message ID for batch reaction loading.
+     * After a short debounce, all queued IDs are fetched in a single request.
      */
-    async function loadReactions(messageId) {
+    function queueReactionLoad(messageId) {
+        pendingMessageIds.add(messageId);
+        if (batchTimer) clearTimeout(batchTimer);
+        batchTimer = setTimeout(flushReactionQueue, BATCH_DEBOUNCE_MS);
+    }
+
+    /**
+     * Fetch reactions for all queued message IDs in one batch request.
+     */
+    async function flushReactionQueue() {
+        const ids = Array.from(pendingMessageIds);
+        pendingMessageIds.clear();
+        batchTimer = null;
+
+        if (ids.length === 0) return;
+
         try {
-            const response = await fetch(`${API_BASE}/message/${messageId}`);
+            const response = await fetch(`${API_BASE}/messages?message_ids=${ids.join(',')}`);
             if (!response.ok) return;
 
-            const reactions = await response.json();
-            reactions.forEach(reaction => {
-                updateReactionDisplay(messageId, reaction.emoji, reaction.usernames);
-            });
+            // Response: { messageId: [{emoji, usernames, count}], ... }
+            const byMessage = await response.json();
+            for (const [msgId, reactions] of Object.entries(byMessage)) {
+                for (const reaction of reactions) {
+                    updateReactionDisplay(msgId, reaction.emoji, reaction.usernames);
+                }
+            }
         } catch (error) {
-            console.error('[Reactions] Failed to load:', error);
+            console.error('[Reactions] Failed to batch-load reactions:', error);
         }
     }
 

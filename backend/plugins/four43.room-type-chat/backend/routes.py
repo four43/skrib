@@ -1,7 +1,7 @@
 """HTTP routes for chat message operations."""
-from fastapi import APIRouter, HTTPException, Depends, Request
+from fastapi import APIRouter, Depends, Query, Request
 from pydantic import BaseModel
-from typing import List, Optional
+from typing import Optional
 
 from skrib.plugins.auth import plugin_user, check_room_access
 
@@ -46,13 +46,21 @@ async def get_room_messages(
     room_id: str,
     request: Request,
     since: int = 0,
+    before: Optional[int] = Query(None, description="Return messages with id < before"),
+    limit: Optional[int] = Query(None, ge=1, le=500, description="Max messages to return"),
     username: str = Depends(plugin_user),
 ):
-    """Get messages from a specific room."""
+    """Get messages from a specific room.
+
+    Pagination modes:
+    - ``?limit=50`` — most recent 50 messages
+    - ``?before=123&limit=50`` — 50 messages older than id 123
+    - ``?since=100`` — all messages newer than id 100 (real-time catch-up)
+    """
     check_room_access(request, room_id)
 
     room = ChatRoom(room_id)
-    return room.get_messages(since)
+    return room.get_messages(since=since, before=before, limit=limit)
 
 
 @router.post("/rooms/{room_id}/messages", response_model=SendMessageResponse)
