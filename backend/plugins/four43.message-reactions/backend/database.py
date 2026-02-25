@@ -15,7 +15,7 @@ def init_db_provider(get_db_fn):
     _get_db = get_db_fn
 
 
-def add_reaction(message_id: int, username: str, emoji: str) -> bool:
+def add_reaction(message_id: int, username: str, emoji: str, room_id: str = "") -> bool:
     """Add a reaction to a message.
 
     Returns:
@@ -24,9 +24,9 @@ def add_reaction(message_id: int, username: str, emoji: str) -> bool:
     with _get_db() as conn:
         try:
             conn.execute('''
-                INSERT INTO message_reactions (message_id, username, emoji, created_at)
-                VALUES (?, ?, ?, ?)
-            ''', (message_id, username, emoji, datetime.now(timezone.utc).isoformat()))
+                INSERT INTO message_reactions (message_id, room_id, username, emoji, created_at)
+                VALUES (?, ?, ?, ?, ?)
+            ''', (message_id, room_id, username, emoji, datetime.now(timezone.utc).isoformat()))
             conn.commit()
             return True
         except Exception:
@@ -70,23 +70,24 @@ def get_reactions(message_id: int) -> list:
         return list(reactions.values())
 
 
-def get_reactions_for_messages(message_ids: list) -> dict:
-    """Get reactions for multiple messages efficiently.
+def get_reactions_for_room_range(room_id: str, min_id: int, max_id: int) -> dict:
+    """Get reactions for a range of messages in a room.
+
+    Args:
+        room_id: Room to query.
+        min_id: Minimum message ID (inclusive).
+        max_id: Maximum message ID (inclusive).
 
     Returns:
         {message_id: [{"emoji": "...", "usernames": [...], "count": N}]}
     """
-    if not message_ids:
-        return {}
-
     with _get_db() as conn:
-        placeholders = ','.join('?' * len(message_ids))
-        cursor = conn.execute(f'''
+        cursor = conn.execute('''
             SELECT message_id, emoji, username
             FROM message_reactions
-            WHERE message_id IN ({placeholders})
+            WHERE room_id = ? AND message_id BETWEEN ? AND ?
             ORDER BY message_id, created_at
-        ''', message_ids)
+        ''', (room_id, min_id, max_id))
 
         by_message = {}
         for row in cursor.fetchall():
@@ -103,7 +104,6 @@ def get_reactions_for_messages(message_ids: list) -> dict:
             by_message[msg_id][emoji]["usernames"].append(username)
             by_message[msg_id][emoji]["count"] += 1
 
-        # Convert to list format
         return {
             msg_id: list(reactions.values())
             for msg_id, reactions in by_message.items()

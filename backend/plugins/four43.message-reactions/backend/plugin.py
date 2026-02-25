@@ -39,6 +39,7 @@ class MessageReactionsPlugin(Plugin):
         return '''
             CREATE TABLE IF NOT EXISTS message_reactions (
                 message_id INTEGER NOT NULL,
+                room_id TEXT NOT NULL,
                 username TEXT NOT NULL,
                 emoji TEXT NOT NULL,
                 created_at TEXT NOT NULL,
@@ -52,6 +53,10 @@ class MessageReactionsPlugin(Plugin):
             conn.execute('''
                 CREATE INDEX IF NOT EXISTS idx_reactions_message_id
                 ON message_reactions(message_id)
+            ''')
+            conn.execute('''
+                CREATE INDEX IF NOT EXISTS idx_reactions_room_message
+                ON message_reactions(room_id, message_id)
             ''')
             conn.commit()
         print("[Reactions Plugin] Database initialized")

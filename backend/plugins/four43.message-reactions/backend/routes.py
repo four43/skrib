@@ -1,5 +1,5 @@
 """REST API endpoints for reactions plugin."""
-from fastapi import APIRouter, Depends, HTTPException, Request
+from fastapi import APIRouter, Depends, HTTPException, Query
 from pydantic import BaseModel
 
 from skrib.plugins.auth import plugin_user
@@ -11,6 +11,7 @@ router = APIRouter(prefix="/reactions", tags=["Plugin: four43/message-reactions"
 
 class AddReactionRequest(BaseModel):
     message_id: int
+    room_id: str
     emoji: str
 
 
@@ -24,16 +25,8 @@ async def add_reaction(
     request: AddReactionRequest,
     username: str = Depends(plugin_user)
 ):
-    """Add a reaction to a message.
-
-    Args:
-        request: Contains message_id and emoji
-        username: Authenticated user (from token)
-
-    Returns:
-        Reaction details
-    """
-    success = db.add_reaction(request.message_id, username, request.emoji)
+    """Add a reaction to a message."""
+    success = db.add_reaction(request.message_id, username, request.emoji, request.room_id)
     if not success:
         raise HTTPException(status_code=400, detail="Reaction already exists")
 
@@ -49,45 +42,22 @@ async def remove_reaction(
     request: RemoveReactionRequest,
     username: str = Depends(plugin_user)
 ):
-    """Remove a reaction from a message.
-
-    Args:
-        request: Contains message_id and emoji
-        username: Authenticated user (from token)
-
-    Returns:
-        Success status
-    """
+    """Remove a reaction from a message."""
     db.remove_reaction(request.message_id, username, request.emoji)
     return {}
 
 
 @router.get("/message/{message_id}")
 async def get_message_reactions(message_id: int):
-    """Get all reactions for a specific message.
-
-    Args:
-        message_id: ID of the message
-
-    Returns:
-        List of reactions grouped by emoji
-    """
+    """Get all reactions for a specific message."""
     return db.get_reactions(message_id)
 
 
-@router.get("/messages")
-async def get_multiple_reactions(message_ids: str):
-    """Get reactions for multiple messages.
-
-    Args:
-        message_ids: Comma-separated list of message IDs (e.g., "123,124,125")
-
-    Returns:
-        Dictionary mapping message IDs to their reactions
-    """
-    try:
-        ids = [int(id.strip()) for id in message_ids.split(',') if id.strip()]
-    except ValueError:
-        raise HTTPException(status_code=400, detail="Invalid message IDs format")
-
-    return db.get_reactions_for_messages(ids)
+@router.get("/room/{room_id}")
+async def get_room_reactions(
+    room_id: str,
+    min_id: int = Query(..., description="Minimum message ID (inclusive)"),
+    max_id: int = Query(..., description="Maximum message ID (inclusive)"),
+):
+    """Get reactions for all messages in a room within an ID range."""
+    return db.get_reactions_for_room_range(room_id, min_id, max_id)

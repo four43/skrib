@@ -17,7 +17,7 @@ async def handle_reaction(bus, reply_to, username, msg):
     room_id = msg.get("room_id")
 
     if action == "add":
-        success = db.add_reaction(message_id, username, emoji)
+        success = db.add_reaction(message_id, username, emoji, room_id=room_id or "")
         if success:
             await bus.broadcast_to_room(room_id, "added", data={
                 "message_id": message_id,

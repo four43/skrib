@@ -11,9 +11,10 @@ const ReactionsPlugin = (function() {
     const PLUGIN_ID = 'four43.message-reactions';
     const API_BASE = `/api/plugins/${PLUGIN_ID}/reactions`;
 
-    // Batch reaction loading — collect message IDs from MutationObserver
-    // and load them all in one request after a short debounce.
-    let pendingMessageIds = new Set();
+    // Batch reaction loading — track min/max message IDs from MutationObserver
+    // and load them as a range query after a short debounce.
+    let pendingMinId = null;
+    let pendingMaxId = null;
     let batchTimer = null;
     const BATCH_DEBOUNCE_MS = 50;
 
@@ -121,26 +122,35 @@ const ReactionsPlugin = (function() {
 
     /**
      * Queue a message ID for batch reaction loading.
-     * After a short debounce, all queued IDs are fetched in a single request.
+     * Expands the pending min/max range; after a short debounce the range
+     * is fetched in a single request scoped to room + ID range.
      */
     function queueReactionLoad(messageId) {
-        pendingMessageIds.add(messageId);
+        const id = parseInt(messageId);
+        if (pendingMinId === null || id < pendingMinId) pendingMinId = id;
+        if (pendingMaxId === null || id > pendingMaxId) pendingMaxId = id;
         if (batchTimer) clearTimeout(batchTimer);
         batchTimer = setTimeout(flushReactionQueue, BATCH_DEBOUNCE_MS);
     }
 
     /**
-     * Fetch reactions for all queued message IDs in one batch request.
+     * Fetch reactions for the pending message-ID range in the current room.
      */
     async function flushReactionQueue() {
-        const ids = Array.from(pendingMessageIds);
-        pendingMessageIds.clear();
+        const minId = pendingMinId;
+        const maxId = pendingMaxId;
+        pendingMinId = null;
+        pendingMaxId = null;
         batchTimer = null;
 
-        if (ids.length === 0) return;
+        if (minId === null || maxId === null) return;
+
+        const roomId = context.currentRoom();
+        if (!roomId) return;
 
         try {
-            const response = await fetch(`${API_BASE}/messages?message_ids=${ids.join(',')}`);
+            const url = `${API_BASE}/room/${encodeURIComponent(roomId)}?min_id=${minId}&max_id=${maxId}`;
+            const response = await fetch(url);
             if (!response.ok) return;
 
             // Response: { messageId: [{emoji, usernames, count}], ... }
@@ -151,7 +161,7 @@ const ReactionsPlugin = (function() {
                 }
             }
         } catch (error) {
-            console.error('[Reactions] Failed to batch-load reactions:', error);
+            console.error('[Reactions] Failed to load reactions:', error);
         }
     }
 
