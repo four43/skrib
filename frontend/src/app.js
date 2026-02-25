@@ -188,10 +188,10 @@ async function loadPlugins() {
 
                 // Load plugin stylesheets
                 if (plugin.styles && plugin.styles.length > 0) {
-                    for (const styleUrl of plugin.styles) {
+                    for (const stylePath of plugin.styles) {
                         const link = document.createElement('link');
                         link.rel = 'stylesheet';
-                        link.href = styleUrl;
+                        link.href = `${API_URL}/plugins/${plugin.id}/file/${stylePath}`;
                         document.head.appendChild(link);
                     }
                 }

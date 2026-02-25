@@ -79,13 +79,6 @@ class RoomTypeChatPlugin(Plugin):
             ''')
             conn.commit()
 
-    def get_frontend_assets(self) -> dict:
-        return {
-            "scripts": ["/api/plugins/four43.room-type-chat/file/frontend/plugin.js"],
-            "styles": ["/api/plugins/four43.room-type-chat/file/frontend/plugin.css"],
-            "config": {}
-        }
-
     def register_routes(self, app):
         return router
 

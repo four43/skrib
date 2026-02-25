@@ -10,5 +10,6 @@
     "websocket.receive",
     "database.todo_items"
   ],
-  "hooks": {}
+  "hooks": {},
+  "styles": ["frontend/plugin.css"]
 }

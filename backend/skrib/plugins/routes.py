@@ -82,8 +82,6 @@ async def list_plugins():
                 plugin_instance = registry.get_plugin(plugin_id)
                 if plugin_instance:
                     plugin_info.room_types = plugin_instance.room_types
-                    assets = plugin_instance.get_frontend_assets()
-                    plugin_info.styles = assets.get("styles", [])
                 plugins.append(plugin_info)
             except Exception as e:
                 print(f"[Plugins] Failed to load plugin {plugin_id}: {e}")

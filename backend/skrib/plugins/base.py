@@ -187,23 +187,6 @@ class Plugin(ABC):
         """
         pass
 
-    def get_frontend_assets(self) -> dict:
-        """Return frontend assets to inject into the client.
-
-        Used by: All plugins with UI components
-
-        Returns:
-            dict with keys:
-                - scripts: List of JS file paths
-                - styles: List of CSS file paths
-                - config: JSON-serializable config for frontend
-        """
-        return {
-            "scripts": [],
-            "styles": [],
-            "config": {}
-        }
-
     # Lifecycle hooks
 
     async def on_startup(self):

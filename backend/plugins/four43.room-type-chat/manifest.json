@@ -10,5 +10,6 @@
     "websocket.receive",
     "database.messages"
   ],
-  "hooks": {}
+  "hooks": {},
+  "styles": ["frontend/plugin.css"]
 }

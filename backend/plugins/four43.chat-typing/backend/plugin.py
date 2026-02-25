@@ -70,13 +70,3 @@ class ChatTypingPlugin(Plugin):
 
         return handle_typing
 
-    def get_frontend_assets(self) -> dict:
-        """Return frontend assets."""
-        return {
-            "scripts": ["/api/plugins/four43.chat-typing/file/frontend/plugin.js"],
-            "styles": [],
-            "config": {
-                "plugin_id": "four43.chat-typing",
-                "namespace": "four43.chat-typing"
-            }
-        }

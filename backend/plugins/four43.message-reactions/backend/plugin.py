@@ -64,16 +64,3 @@ class MessageReactionsPlugin(Plugin):
         """Return handler for four43.message-reactions:* namespace."""
         return handle_reaction
 
-    def get_frontend_assets(self) -> dict:
-        """Return frontend JavaScript and CSS files."""
-        return {
-            "scripts": [
-                "/api/plugins/four43.message-reactions/file/frontend/plugin.js"
-            ],
-            "styles": [
-                "/api/plugins/four43.message-reactions/file/frontend/plugin.css"
-            ],
-            "config": {
-                "common_emojis": ['👍', '❤️', '😂', '😮', '😢', '🎉', '🚀', '👀']
-            }
-        }

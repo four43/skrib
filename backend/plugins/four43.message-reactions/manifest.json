@@ -12,5 +12,6 @@
   ],
   "hooks": {
     "onRoomChange": true
-  }
+  },
+  "styles": ["frontend/plugin.css"]
 }
