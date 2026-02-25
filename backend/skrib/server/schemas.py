@@ -16,6 +16,7 @@ class ServerInfoResponse(BaseModel):
     default_theme: str
     name: str
     icon_custom: bool = False
+    dm_room_type: str = 'four43.room-type-chat'
 
 
 class ServerUpdateRequest(BaseModel):
@@ -23,6 +24,7 @@ class ServerUpdateRequest(BaseModel):
     registration_mode: Optional[RegistrationMode] = None
     default_theme: Optional[str] = None
     name: Optional[str] = None
+    dm_room_type: Optional[str] = None
 
 
 class UpdateRegistrationModeRequest(BaseModel):

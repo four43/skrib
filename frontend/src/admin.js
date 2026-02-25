@@ -8,6 +8,7 @@ let currentRole = null;
 let adminPollInterval = null;
 let currentRegMode = 'closed';
 let currentDefaultTheme = null;
+let currentDmRoomType = null;
 let currentSection = 'server';
 
 // Check session and redirect if not authenticated or not admin/mod
@@ -106,6 +107,10 @@ async function loadAdminSettings() {
         currentDefaultTheme = data.default_theme || 'four43.theme-default';
         loadAdminThemeList();
 
+        // DM room type
+        currentDmRoomType = data.dm_room_type || 'four43.room-type-chat';
+        loadDmRoomTypeList();
+
         // Users
         loadPendingUsers();
         loadAllUsers();
@@ -199,6 +204,76 @@ async function resetServerIcon() {
         }
     } catch (error) {
         console.error('[HTTP] Error resetting server icon:', error);
+    }
+}
+
+// DM room type
+
+async function loadDmRoomTypeList() {
+    const container = document.getElementById('dm-room-type-select');
+    if (!container) return;
+
+    try {
+        const resp = await fetch(`${API_URL}/plugins`, {
+            headers: { 'Authorization': `Bearer ${sessionToken}` }
+        });
+        const plugins = await resp.json();
+
+        // Filter to plugins that provide room types
+        const roomTypePlugins = plugins.filter(p => p.enabled && p.room_types && p.room_types.length > 0);
+        container.innerHTML = '';
+
+        if (roomTypePlugins.length === 0) {
+            container.innerHTML = '<p style="color: var(--text-muted); font-size: 14px;">No room type plugins available.</p>';
+            return;
+        }
+
+        for (const plugin of roomTypePlugins) {
+            const isSelected = plugin.id === currentDmRoomType;
+            const card = document.createElement('div');
+            card.className = 'theme-card' + (isSelected ? ' active' : '');
+            card.dataset.pluginId = plugin.id;
+
+            card.innerHTML = `
+                <div class="theme-card-info">
+                    <div class="theme-card-name">${escapeHtml(plugin.name)}</div>
+                    <div class="theme-card-meta">${escapeHtml(plugin.id)}</div>
+                    <div class="theme-card-meta">${escapeHtml(plugin.description)}</div>
+                </div>
+                <div class="theme-card-status">
+                    ${isSelected ? '<span class="theme-active-badge">Active</span>' : '<button class="btn-sm theme-select-btn" type="button">Select</button>'}
+                </div>
+            `;
+
+            card.addEventListener('click', () => selectDmRoomType(plugin.id));
+            container.appendChild(card);
+        }
+    } catch (error) {
+        console.error('[HTTP] Error loading room type plugins:', error);
+    }
+}
+
+async function selectDmRoomType(pluginId) {
+    if (pluginId === currentDmRoomType) return;
+
+    try {
+        const resp = await fetch(`${API_URL}/server`, {
+            method: 'PATCH',
+            headers: {
+                'Authorization': `Bearer ${sessionToken}`,
+                'Content-Type': 'application/json'
+            },
+            body: JSON.stringify({ dm_room_type: pluginId })
+        });
+        if (resp.ok) {
+            currentDmRoomType = pluginId;
+            loadDmRoomTypeList();
+        } else {
+            const data = await resp.json();
+            alert(`Failed: ${data.detail || 'Unknown error'}`);
+        }
+    } catch (error) {
+        console.error('[HTTP] Error updating DM room type:', error);
     }
 }
 

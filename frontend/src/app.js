@@ -2186,7 +2186,6 @@ async function deleteRoomAction() {
 function openDMModal() {
     const modal = document.getElementById('dm-modal');
     const userList = document.getElementById('dm-user-list');
-    renderRoomTypeList('dm-room-type-list', 'dm-room-type');
     modal.classList.add('open');
     document.getElementById('dm-start-btn').classList.add('hidden');
     renderUserCheckboxList(userList, {
@@ -2211,11 +2210,10 @@ async function startDMFromModal() {
     const checked = document.querySelectorAll('#dm-user-list .user-select-item input[type="checkbox"]:checked');
     const targets = Array.from(checked).map(cb => cb.value);
     if (targets.length === 0) return;
-    const roomType = document.querySelector('input[name="dm-room-type"]:checked')?.value || 'chat';
-    await startDM(targets, roomType);
+    await startDM(targets);
 }
 
-async function startDM(targetUsernames, roomType = 'chat') {
+async function startDM(targetUsernames) {
     // Accept a single string for backwards compat (e.g. from slash command)
     if (typeof targetUsernames === 'string') targetUsernames = [targetUsernames];
 
@@ -2226,7 +2224,7 @@ async function startDM(targetUsernames, roomType = 'chat') {
                 'Content-Type': 'application/json',
                 'Authorization': `Bearer ${sessionToken}`
             },
-            body: JSON.stringify({ usernames: targetUsernames, room_type: roomType })
+            body: JSON.stringify({ usernames: targetUsernames })
         });
 
         const data = await response.json();

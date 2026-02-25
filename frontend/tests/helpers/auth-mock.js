@@ -65,6 +65,7 @@ export async function setupAuthMocks(page, { role = 'admin' } = {}) {
                 registration_mode: 'open',
                 default_theme: 'four43.theme-default',
                 icon_custom: false,
+                dm_room_type: 'four43.room-type-chat',
             }),
         }),
     );
@@ -94,6 +95,26 @@ export async function setupAuthMocks(page, { role = 'admin' } = {}) {
             status: 200,
             contentType: 'application/json',
             body: JSON.stringify([]),
+        }),
+    );
+
+    await page.route('**/api/plugins', route =>
+        route.fulfill({
+            status: 200,
+            contentType: 'application/json',
+            body: JSON.stringify([{
+                id: 'four43.room-type-chat',
+                name: 'Chat',
+                version: '1.0.0',
+                description: 'Text chat',
+                author: 'four43',
+                entry: 'plugin.js',
+                permissions: [],
+                hooks: {},
+                enabled: true,
+                room_types: ['chat'],
+                styles: [],
+            }]),
         }),
     );
 

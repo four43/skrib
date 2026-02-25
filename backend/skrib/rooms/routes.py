@@ -37,6 +37,7 @@ from .services import (
 from ..ws import bus
 from ..dependencies import require_auth
 from ..permissions import check_room_access as _check_room_access, get_global_role as _get_global_role, require_room_op_or_global_mod as _require_room_op_or_global_mod
+from ..database import get_setting
 from ..plugins import registry
 
 router = APIRouter(prefix="/rooms", tags=["rooms"])
@@ -99,12 +100,15 @@ async def create_dm(
     if not targets:
         raise HTTPException(status_code=400, detail="At least one other user is required")
 
-    # Validate the room type is provided by an enabled plugin
-    if request.room_type not in registry.room_type_map:
+    # Resolve DM room type from server setting (plugin ID -> room type)
+    dm_plugin_id = get_setting('dm_room_type', 'four43.room-type-chat')
+    dm_plugin = registry.get_plugin(dm_plugin_id)
+    if not dm_plugin or not dm_plugin.room_types:
         raise HTTPException(
-            status_code=400,
-            detail=f"Unsupported room type: '{request.room_type}'"
+            status_code=500,
+            detail=f"DM room type plugin '{dm_plugin_id}' is not available"
         )
+    room_type = dm_plugin.room_types[0]
 
     # Verify all target users exist
     from ..database import get_db
@@ -117,7 +121,7 @@ async def create_dm(
             if not cursor.fetchone():
                 raise HTTPException(status_code=404, detail=f"User not found: {target}")
 
-    room = create_or_get_dm(username, targets, room_type=request.room_type)
+    room = create_or_get_dm(username, targets, room_type=room_type)
 
     # Notify all participants
     for participant in [username] + targets:

@@ -71,6 +71,7 @@ def get_system_status() -> Dict:
         'default_theme': get_setting('default_theme', 'four43.theme-default'),
         'name': get_setting('server_name', 'My Server'),
         'icon_custom': is_server_icon_custom(),
+        'dm_room_type': get_setting('dm_room_type', 'four43.room-type-chat'),
     }
 
 

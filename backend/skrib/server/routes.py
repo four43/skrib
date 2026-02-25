@@ -24,6 +24,7 @@ from .services import (
 )
 from ..database import set_setting
 from ..dependencies import require_admin
+from ..plugins import registry
 
 router = APIRouter(prefix="/server", tags=["server"])
 
@@ -53,6 +54,15 @@ async def update_server(
         # since it's based on the server name (no cached file when not custom)
         if not is_server_icon_custom():
             reset_server_icon()
+
+    if updates.dm_room_type is not None:
+        plugin = registry.get_plugin(updates.dm_room_type)
+        if not plugin or not plugin.room_types:
+            raise HTTPException(
+                status_code=400,
+                detail=f"Plugin '{updates.dm_room_type}' not found or does not provide a room type"
+            )
+        set_setting('dm_room_type', updates.dm_room_type)
 
     # Return updated server info
     status = get_system_status()
