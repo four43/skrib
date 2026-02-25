@@ -26,7 +26,7 @@ def validate_channel_name(name: str) -> bool:
 def load_rooms_from_db():
     """Load existing rooms from database."""
     with get_db() as conn:
-        cursor = conn.execute('SELECT room_id, room_type FROM rooms WHERE deleted = 0')
+        cursor = conn.execute('SELECT room_id, room_type FROM rooms')
         with ROOMS_LOCK:
             for row in cursor:
                 ROOMS[row['room_id']] = row['room_type']
@@ -44,7 +44,7 @@ def get_user_rooms(username: str) -> List[Dict]:
                    r.folder_id, r.sort_position
             FROM rooms r
             JOIN room_users rm ON r.room_id = rm.room_id
-            WHERE r.deleted = 0 AND rm.username = ?
+            WHERE rm.username = ?
         ''', (username,))
         rooms = []
         for row in cursor:
@@ -161,19 +161,25 @@ def get_room_type(room_id: str) -> Optional[str]:
 
 
 def delete_room(room_id: str, deleted_by: str) -> bool:
-    """Soft-delete a room."""
+    """Hard-delete a room and all associated data.
+
+    Removes the room row (CASCADE deletes room_users and room_keys),
+    then notifies plugins to clean up their own data.
+    """
     with ROOMS_LOCK:
         if room_id not in ROOMS:
             return False
-        del ROOMS[room_id]
+        room_type = ROOMS.pop(room_id)
 
-    now = datetime.now().isoformat()
+    # CASCADE handles room_users and room_keys
     with get_db() as conn:
-        conn.execute(
-            'UPDATE rooms SET deleted = 1, deleted_at = ?, deleted_by = ? WHERE room_id = ?',
-            (now, deleted_by, room_id)
-        )
+        conn.execute('DELETE FROM rooms WHERE room_id = ?', (room_id,))
         conn.commit()
+
+    # Let all plugins clean up their own databases (messages, reactions, etc.)
+    from ..plugins import registry
+    for plugin in registry.get_all_plugins():
+        plugin.on_room_deleted(room_id, room_type)
     return True
 
 
@@ -333,7 +339,7 @@ def get_room_info(room_id: str) -> Optional[Dict]:
     """Get full room details including topic and members with roles."""
     with get_db() as conn:
         cursor = conn.execute(
-            'SELECT room_id, room_type, topic, created_by FROM rooms WHERE room_id = ? AND deleted = 0',
+            'SELECT room_id, room_type, topic, created_by FROM rooms WHERE room_id = ?',
             (room_id,),
         )
         room = cursor.fetchone()
@@ -408,7 +414,7 @@ def get_unread_counts(username: str) -> Dict[str, int]:
         cursor = conn.execute('''
             SELECT rm.room_id, rm.last_read_message_id, r.room_type
             FROM room_users rm
-            JOIN rooms r ON rm.room_id = r.room_id AND r.deleted = 0
+            JOIN rooms r ON rm.room_id = r.room_id
             WHERE rm.username = ?
         ''', (username,))
         rooms = [

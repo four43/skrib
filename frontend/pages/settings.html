@@ -36,6 +36,10 @@
                     <span class="settings-nav-icon">&#x1F3A8;</span>
                     Appearance
                 </button>
+                <button class="settings-nav-item" data-section="servers">
+                    <span class="settings-nav-icon">&#x1F5A5;</span>
+                    Servers
+                </button>
             </nav>
 
             <div class="settings-content">
@@ -100,6 +104,29 @@
                     <div class="admin-section">
                         <h3>Preview</h3>
                         <div id="theme-preview-container"></div>
+                    </div>
+                </div>
+
+                <!-- Servers Section -->
+                <div class="settings-panel-section" id="section-servers">
+                    <div class="admin-section">
+                        <h3>Your Servers</h3>
+                        <p class="form-hint" style="margin-bottom: 12px;">Manage your list of Skrib servers. The current server is always pinned at the top.</p>
+                        <div id="settings-server-list"></div>
+                    </div>
+                    <div class="admin-section">
+                        <h3>Add Server</h3>
+                        <div class="preference-item">
+                            <label for="settings-add-server-url">Server URL</label>
+                            <div class="preference-input-group">
+                                <input type="text" id="settings-add-server-url" class="preference-input"
+                                       placeholder="https://chat.example.com"
+                                       autocapitalize="none" autocomplete="url" autocorrect="off" spellcheck="false">
+                                <button id="settings-add-server-btn" class="btn-sm" disabled>Add</button>
+                            </div>
+                            <p class="form-hint">Enter the full URL of a Skrib instance</p>
+                        </div>
+                        <div id="settings-add-server-status"></div>
                     </div>
                 </div>
             </div>

@@ -23,3 +23,9 @@ Direct message room creation with different room type plugins.
 
 - Create a chat DM and verify chat UI
 - Create a todo DM and verify todo UI
+
+
+Room stuff:
+
+- Send a message in a room
+- Create a new room and verify it appears in sidebar

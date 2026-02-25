@@ -57,6 +57,12 @@ class RoomTypeTodoPlugin(Plugin):
             )
         '''
 
+    def on_room_deleted(self, room_id: str, room_type: str):
+        """Delete all todo items for the room."""
+        with self.get_plugin_db() as conn:
+            conn.execute('DELETE FROM todo_items WHERE room_id = ?', (room_id,))
+            conn.commit()
+
     async def on_startup(self):
         """Create indexes on plugin database."""
         with self.get_plugin_db() as conn:

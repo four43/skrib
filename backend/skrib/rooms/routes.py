@@ -135,7 +135,7 @@ async def delete_room_endpoint(
     room_id: str,
     username: str = Depends(require_auth)
 ):
-    """Soft-delete a chat room. Requires room owner or global admin."""
+    """Delete a chat room and all associated data. Requires room owner or global admin."""
     room_role = get_room_role(room_id, username)
     global_role = _get_global_role(username)
     if room_role != 'owner' and global_role != 'admin':

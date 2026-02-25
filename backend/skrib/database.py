@@ -26,6 +26,7 @@ def get_db():
         thread_local.connection.row_factory = sqlite3.Row
         # Enable WAL mode for better concurrency
         thread_local.connection.execute('PRAGMA journal_mode=WAL')
+        thread_local.connection.execute('PRAGMA foreign_keys=ON')
 
     try:
         yield thread_local.connection
@@ -112,10 +113,7 @@ def init_db():
                 room_type TEXT NOT NULL DEFAULT 'chat',
                 topic TEXT NOT NULL DEFAULT '',
                 created_at TEXT NOT NULL,
-                created_by TEXT,
-                deleted BOOLEAN NOT NULL DEFAULT 0,
-                deleted_at TEXT,
-                deleted_by TEXT
+                created_by TEXT
             )
         ''')
 
@@ -129,7 +127,7 @@ def init_db():
                 last_read_message_id INTEGER NOT NULL DEFAULT 0,
                 notify_level TEXT NOT NULL DEFAULT 'all',
                 PRIMARY KEY (room_id, username),
-                FOREIGN KEY (room_id) REFERENCES rooms(room_id),
+                FOREIGN KEY (room_id) REFERENCES rooms(room_id) ON DELETE CASCADE,
                 FOREIGN KEY (username) REFERENCES users(username)
             )
         ''')
@@ -143,7 +141,7 @@ def init_db():
                 encrypted_key TEXT NOT NULL,
                 created_at TEXT NOT NULL,
                 PRIMARY KEY (room_id, key_epoch, username),
-                FOREIGN KEY (room_id) REFERENCES rooms(room_id),
+                FOREIGN KEY (room_id) REFERENCES rooms(room_id) ON DELETE CASCADE,
                 FOREIGN KEY (username) REFERENCES users(username)
             )
         ''')

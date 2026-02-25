@@ -21,10 +21,10 @@ def get_all_folders() -> List[Dict]:
 
 
 def get_room_positions() -> List[Dict]:
-    """Get folder_id and sort_position for all non-deleted rooms."""
+    """Get folder_id and sort_position for all rooms."""
     with get_db() as conn:
         cursor = conn.execute(
-            'SELECT room_id, folder_id, sort_position as position FROM rooms WHERE deleted = 0'
+            'SELECT room_id, folder_id, sort_position as position FROM rooms'
         )
         return [dict(row) for row in cursor]
 
@@ -253,7 +253,7 @@ def move_room(room_id: str, folder_id: Optional[str], position: float):
 
     with get_db() as conn:
         conn.execute(
-            'UPDATE rooms SET folder_id = ?, sort_position = ? WHERE room_id = ? AND deleted = 0',
+            'UPDATE rooms SET folder_id = ?, sort_position = ? WHERE room_id = ?',
             (folder_id, position, room_id)
         )
         conn.commit()
@@ -269,7 +269,7 @@ def batch_reorder(folders: list, rooms: list):
             )
         for r in rooms:
             conn.execute(
-                'UPDATE rooms SET folder_id = ?, sort_position = ? WHERE room_id = ? AND deleted = 0',
+                'UPDATE rooms SET folder_id = ?, sort_position = ? WHERE room_id = ?',
                 (r.get('folder_id'), r['position'], r['room_id'])
             )
         conn.commit()

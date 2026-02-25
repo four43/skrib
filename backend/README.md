@@ -64,7 +64,7 @@ backend/skrib/
 | GET | `/rooms` | List rooms visible to user (channels + own DMs) |
 | POST | `/rooms` | Create a room (supports plugin room types) |
 | POST | `/rooms/dm` | Create or get a DM with another user |
-| DELETE | `/rooms/{room_id}` | Soft-delete a room (admin only) |
+| DELETE | `/rooms/{room_id}` | Delete a room and all data (owner/admin) |
 | GET | `/rooms/{room_id}/messages` | Get messages in a room (supports `?since=id`) |
 | POST | `/rooms/{room_id}/messages` | Send message to a room |
 

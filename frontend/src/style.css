@@ -120,6 +120,10 @@ html[data-theme-dark] .members-panel-header {
     background: rgba(15, 23, 42, 0.6);
 }
 
+html[data-theme-dark] .server-strip {
+    background: rgba(15, 23, 42, 0.4);
+}
+
 html[data-theme-dark] .chat-area {
     background: rgba(15, 23, 42, 0.3);
 }
@@ -761,6 +765,52 @@ input:focus-visible {
 }
 
 /* ═══════════════════════════════════════════
+   Room Context Menu
+   ═══════════════════════════════════════════ */
+
+.room-context-menu {
+    position: fixed;
+    z-index: 1000;
+    min-width: 160px;
+    background: var(--bg-primary);
+    border: 1px solid rgba(var(--theme-rgb), 0.15);
+    border-radius: 8px;
+    padding: 4px;
+    box-shadow: 0 4px 16px rgba(0, 0, 0, 0.15);
+}
+
+.room-context-item {
+    display: block;
+    width: 100%;
+    padding: 8px 12px;
+    border: none;
+    background: none;
+    color: var(--text-primary);
+    font-size: 13px;
+    text-align: left;
+    border-radius: 6px;
+    cursor: pointer;
+}
+
+.room-context-item:hover {
+    background: rgba(var(--theme-rgb), 0.08);
+}
+
+.room-context-danger {
+    color: var(--color-error);
+}
+
+.room-context-danger:hover {
+    background: rgba(239, 68, 68, 0.1);
+}
+
+.room-context-divider {
+    height: 1px;
+    margin: 4px 8px;
+    background: rgba(var(--theme-rgb), 0.1);
+}
+
+/* ═══════════════════════════════════════════
    Room Folders
    ═══════════════════════════════════════════ */
 
@@ -927,6 +977,277 @@ input:focus-visible {
     color: var(--theme-color);
     transform: none;
     box-shadow: none;
+}
+
+/* ═══════════════════════════════════════════
+   Server Strip (multi-server selector)
+   ═══════════════════════════════════════════ */
+
+.server-strip {
+    width: 56px;
+    flex-shrink: 0;
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    padding: 8px 0;
+    gap: 4px;
+    border-right: 1px solid rgba(var(--theme-rgb), 0.08);
+    background: rgba(255, 255, 255, 0.2);
+    overflow-y: auto;
+    overflow-x: hidden;
+    scrollbar-width: none;
+}
+
+.server-strip.hidden {
+    display: none;
+}
+
+.server-strip::-webkit-scrollbar {
+    display: none;
+}
+
+.server-list {
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    gap: 4px;
+    flex: 1;
+}
+
+.server-strip-item {
+    position: relative;
+    width: 40px;
+    height: 40px;
+    border-radius: 50%;
+    cursor: pointer;
+    transition: border-radius 0.2s ease, transform 0.15s ease;
+    overflow: visible;
+    flex-shrink: 0;
+}
+
+.server-strip-item:hover {
+    border-radius: 12px;
+    transform: scale(1.05);
+}
+
+.server-strip-item.active {
+    border-radius: 12px;
+}
+
+.server-strip-item::before {
+    content: '';
+    position: absolute;
+    left: -8px;
+    top: 50%;
+    transform: translateY(-50%);
+    width: 4px;
+    height: 0;
+    background: var(--text-primary);
+    border-radius: 0 4px 4px 0;
+    transition: height 0.2s ease;
+}
+
+.server-strip-item:hover::before {
+    height: 20px;
+}
+
+.server-strip-item.active::before {
+    height: 32px;
+}
+
+.server-strip-item img {
+    width: 40px;
+    height: 40px;
+    object-fit: cover;
+    display: block;
+    border-radius: inherit;
+}
+
+.server-icon-fallback {
+    width: 40px;
+    height: 40px;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    background: rgba(var(--theme-rgb), 0.15);
+    color: var(--theme-color);
+    font-weight: 700;
+    font-size: 18px;
+    border-radius: inherit;
+}
+
+.server-strip-item .server-tooltip {
+    position: absolute;
+    left: calc(100% + 12px);
+    top: 50%;
+    transform: translateY(-50%);
+    background: var(--bg-surface-elevated);
+    color: var(--text-primary);
+    padding: 6px 12px;
+    border-radius: var(--radius-md);
+    font-size: 13px;
+    font-weight: 600;
+    white-space: nowrap;
+    pointer-events: none;
+    opacity: 0;
+    transition: opacity 0.15s ease;
+    z-index: 200;
+    box-shadow: 0 4px 12px rgba(0, 0, 0, 0.15);
+    border: 1px solid var(--border-subtle);
+}
+
+.server-strip-item:hover .server-tooltip {
+    opacity: 1;
+}
+
+.server-strip-item .server-remove-btn {
+    position: absolute;
+    top: -4px;
+    right: -4px;
+    width: 18px;
+    height: 18px;
+    border-radius: 50%;
+    background: var(--color-error);
+    color: white;
+    font-size: 12px;
+    line-height: 18px;
+    text-align: center;
+    cursor: pointer;
+    opacity: 0;
+    transition: opacity 0.15s ease;
+    z-index: 10;
+    padding: 0;
+    margin: 0;
+    border: 2px solid var(--bg-surface-elevated);
+    box-shadow: none;
+    min-width: auto;
+}
+
+.server-strip-item:hover .server-remove-btn {
+    opacity: 1;
+}
+
+.server-strip-item.active .server-remove-btn {
+    display: none;
+}
+
+.server-strip-add {
+    width: 40px;
+    height: 40px;
+    border-radius: 50%;
+    background: rgba(var(--theme-rgb), 0.08);
+    color: var(--text-tertiary);
+    font-size: 22px;
+    line-height: 40px;
+    text-align: center;
+    cursor: pointer;
+    border: 1px dashed rgba(var(--theme-rgb), 0.2);
+    padding: 0;
+    margin: 4px 0 0;
+    box-shadow: none;
+    transition: all 0.2s ease;
+    flex-shrink: 0;
+    min-width: auto;
+}
+
+.server-strip-add:hover {
+    background: rgba(var(--theme-rgb), 0.15);
+    color: var(--theme-color);
+    border-color: var(--theme-color);
+    border-radius: 12px;
+    transform: none;
+    box-shadow: none;
+}
+
+.add-server-preview {
+    display: flex;
+    align-items: center;
+    gap: 12px;
+    padding: 12px;
+    background: rgba(var(--theme-rgb), 0.04);
+    border-radius: var(--radius-md);
+    border: 1px solid rgba(var(--theme-rgb), 0.08);
+    margin-bottom: 16px;
+}
+
+.add-server-preview.hidden {
+    display: none;
+}
+
+.add-server-preview img {
+    border-radius: 8px;
+    flex-shrink: 0;
+}
+
+.add-server-preview span {
+    font-weight: 600;
+    font-size: 14px;
+    color: var(--text-primary);
+}
+
+/* Server list in settings page */
+.server-list-row {
+    display: flex;
+    align-items: center;
+    gap: 12px;
+    padding: 10px 12px;
+    border-bottom: 1px solid rgba(var(--theme-rgb), 0.06);
+}
+
+.server-list-row:last-child {
+    border-bottom: none;
+}
+
+.server-list-icon {
+    border-radius: 8px;
+    flex-shrink: 0;
+    object-fit: cover;
+}
+
+.server-list-icon-fallback {
+    width: 32px;
+    height: 32px;
+    border-radius: 8px;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    background: rgba(var(--theme-rgb), 0.15);
+    color: var(--theme-color);
+    font-weight: 700;
+    font-size: 15px;
+    flex-shrink: 0;
+}
+
+.server-list-info {
+    flex: 1;
+    min-width: 0;
+    display: flex;
+    flex-direction: column;
+    gap: 2px;
+}
+
+.server-list-name {
+    font-weight: 600;
+    font-size: 14px;
+    color: var(--text-primary);
+}
+
+.server-list-url {
+    font-size: 12px;
+    color: var(--text-muted);
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+}
+
+.server-list-badge {
+    font-size: 11px;
+    font-weight: 600;
+    color: var(--theme-color);
+    background: rgba(var(--theme-rgb), 0.1);
+    padding: 3px 8px;
+    border-radius: 10px;
+    flex-shrink: 0;
 }
 
 /* ═══════════════════════════════════════════
@@ -1918,6 +2239,29 @@ input:focus-visible {
     color: var(--color-error);
 }
 
+/* Leave Room Button */
+.leave-room-description {
+    color: var(--text-secondary);
+    font-size: 13px;
+    margin-bottom: 12px;
+}
+
+.leave-room-btn {
+    padding: 8px 16px;
+    border: 1px solid rgba(239, 68, 68, 0.3);
+    border-radius: 8px;
+    background: rgba(239, 68, 68, 0.08);
+    color: var(--color-error);
+    font-size: 13px;
+    font-weight: 600;
+    cursor: pointer;
+    transition: background 0.15s ease;
+}
+
+.leave-room-btn:hover {
+    background: rgba(239, 68, 68, 0.15);
+}
+
 /* Members Panel (inline, like sidebar) */
 .members-panel {
     display: none;
@@ -2158,6 +2502,10 @@ input:focus-visible {
    ═══════════════════════════════════════════ */
 
 @media (max-width: 768px) {
+    .server-strip {
+        display: none !important;
+    }
+
     .menu-toggle {
         display: block;
     }

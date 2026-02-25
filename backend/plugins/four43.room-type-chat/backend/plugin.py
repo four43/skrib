@@ -89,6 +89,12 @@ class RoomTypeChatPlugin(Plugin):
     def register_routes(self, app):
         return router
 
+    def on_room_deleted(self, room_id: str, room_type: str):
+        """Delete all messages for the room."""
+        with self.get_plugin_db() as conn:
+            conn.execute('DELETE FROM messages WHERE room_id = ?', (room_id,))
+            conn.commit()
+
     # --- Unread count API (called by core via registry) ---
 
     def get_unread_count(self, room_id: str, since_message_id: int) -> int:

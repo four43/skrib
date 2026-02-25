@@ -318,6 +318,32 @@ async function removeMember(username) {
     }
 }
 
+async function leaveRoom() {
+    if (!confirm(`Leave #${currentRoomId}? You will need to be re-invited to rejoin.`)) {
+        return;
+    }
+
+    try {
+        const response = await fetch(
+            `${API_URL}/rooms/${encodeURIComponent(currentRoomId)}/members/${encodeURIComponent(currentUsername)}`,
+            {
+                method: 'DELETE',
+                headers: { 'Authorization': `Bearer ${sessionToken}` },
+            }
+        );
+
+        if (response.ok) {
+            window.location.href = '/app.html';
+        } else {
+            const error = await response.json();
+            alert(`Failed to leave room: ${error.detail || 'Unknown error'}`);
+        }
+    } catch (error) {
+        console.error('[HTTP] Error leaving room:', error);
+        alert('Failed to leave room');
+    }
+}
+
 async function deleteRoom() {
     if (!confirm(`Are you sure you want to delete "${currentRoom.display_name || currentRoom.room_id}"? This action cannot be undone.`)) {
         return;
@@ -344,16 +370,26 @@ async function deleteRoom() {
 
 function updateDangerZone() {
     const dangerZone = document.getElementById('danger-zone');
-    if (!dangerZone) return;
+    if (dangerZone) {
+        // Show danger zone for admins, or room owners/ops for channels
+        const canDelete = currentRole === 'admin' ||
+                         (!currentRoom.is_dm && (userRole === 'owner' || userRole === 'op'));
 
-    // Show danger zone for admins, or room owners/ops for channels
-    const canDelete = currentRole === 'admin' ||
-                     (!currentRoom.is_dm && (userRole === 'owner' || userRole === 'op'));
+        if (canDelete) {
+            dangerZone.classList.remove('hidden');
+        } else {
+            dangerZone.classList.add('hidden');
+        }
+    }
 
-    if (canDelete) {
-        dangerZone.classList.remove('hidden');
-    } else {
-        dangerZone.classList.add('hidden');
+    // Show leave room section for channels only (not DMs)
+    const leaveSection = document.getElementById('leave-room-section');
+    if (leaveSection) {
+        if (!currentRoom.is_dm) {
+            leaveSection.classList.remove('hidden');
+        } else {
+            leaveSection.classList.add('hidden');
+        }
     }
 }
 
@@ -368,6 +404,12 @@ function updateTopicPermission() {
 }
 
 function setupEventListeners() {
+    // Leave room button
+    const leaveRoomBtn = document.getElementById('leave-room-btn');
+    if (leaveRoomBtn) {
+        leaveRoomBtn.addEventListener('click', leaveRoom);
+    }
+
     // Delete room button
     const deleteRoomBtn = document.getElementById('delete-room-btn');
     if (deleteRoomBtn) {

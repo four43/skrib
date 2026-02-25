@@ -1,5 +1,6 @@
 import { API_URL, escapeHtml } from './utils.js';
 import { loadTheme } from './theme-manager.js';
+import { registerCurrentServer, renderServerStrip, initAddServerModal } from './server-selector.js';
 import Sortable from 'sortablejs';
 import {
     loadPrivateKey,
@@ -873,7 +874,7 @@ async function initializeChatView() {
         sidebarAvatar.src = `${API_URL}/users/${encodeURIComponent(currentUsername)}/avatar`;
     }
 
-    // Fetch and display server title
+    // Fetch and display server title + register in server selector
     try {
         const response = await fetch(`${API_URL}/server`, {
             headers: { 'Authorization': `Bearer ${sessionToken}` }
@@ -884,6 +885,7 @@ async function initializeChatView() {
             if (serverTitleEl && serverInfo.name) {
                 serverTitleEl.textContent = serverInfo.name;
             }
+            registerCurrentServer(serverInfo.name);
         }
     } catch (error) {
         console.error('[HTTP] Failed to fetch server info:', error);
@@ -1509,8 +1511,123 @@ function createRoomItem(room) {
         item.appendChild(badge);
     }
 
+    // Right-click context menu
+    item.addEventListener('contextmenu', (e) => {
+        e.preventDefault();
+        showRoomContextMenu(e, room.room_id);
+    });
+
     return item;
 }
+
+// --- Room Context Menu ---
+
+let contextMenuRoomId = null;
+
+function showRoomContextMenu(e, roomId) {
+    const menu = document.getElementById('room-context-menu');
+    if (!menu) return;
+
+    contextMenuRoomId = roomId;
+    const meta = roomMeta[roomId];
+
+    // Hide "Leave Room" for DMs
+    const leaveBtn = document.getElementById('ctx-leave-room');
+    const divider = menu.querySelector('.room-context-divider');
+    if (meta && meta.is_dm) {
+        leaveBtn.classList.add('hidden');
+        divider.classList.add('hidden');
+    } else {
+        leaveBtn.classList.remove('hidden');
+        divider.classList.remove('hidden');
+    }
+
+    // Position the menu at the cursor
+    menu.style.top = `${e.clientY}px`;
+    menu.style.left = `${e.clientX}px`;
+    menu.classList.remove('hidden');
+
+    // Adjust if menu overflows viewport
+    requestAnimationFrame(() => {
+        const rect = menu.getBoundingClientRect();
+        if (rect.right > window.innerWidth) {
+            menu.style.left = `${window.innerWidth - rect.width - 4}px`;
+        }
+        if (rect.bottom > window.innerHeight) {
+            menu.style.top = `${window.innerHeight - rect.height - 4}px`;
+        }
+    });
+}
+
+function hideRoomContextMenu() {
+    const menu = document.getElementById('room-context-menu');
+    if (menu) menu.classList.add('hidden');
+    contextMenuRoomId = null;
+}
+
+// Close context menu on any click or Escape
+document.addEventListener('click', hideRoomContextMenu);
+document.addEventListener('keydown', (e) => {
+    if (e.key === 'Escape') hideRoomContextMenu();
+});
+
+// Context menu actions
+document.getElementById('ctx-open-room')?.addEventListener('click', () => {
+    if (contextMenuRoomId) selectRoom(contextMenuRoomId);
+});
+
+document.getElementById('ctx-room-settings')?.addEventListener('click', () => {
+    if (contextMenuRoomId) {
+        window.location.href = `/room-settings.html?room=${encodeURIComponent(contextMenuRoomId)}`;
+    }
+});
+
+document.getElementById('ctx-leave-room')?.addEventListener('click', async () => {
+    const roomId = contextMenuRoomId;
+    if (!roomId) return;
+
+    const meta = roomMeta[roomId];
+    if (meta && meta.is_dm) return;
+
+    if (!confirm(`Leave #${roomId}? You will need to be re-invited to rejoin.`)) {
+        return;
+    }
+
+    try {
+        const myUsername = localStorage.getItem('username');
+        const response = await fetch(
+            `${API_URL}/rooms/${encodeURIComponent(roomId)}/members/${encodeURIComponent(myUsername)}`,
+            {
+                method: 'DELETE',
+                headers: { 'Authorization': `Bearer ${sessionToken}` },
+            }
+        );
+
+        if (response.ok) {
+            if (ws && ws.readyState === WebSocket.OPEN) {
+                ws.send(JSON.stringify({ type: 'room:leave', room_id: roomId }));
+            }
+            const handler = getRoomTypeHandler(roomId);
+            if (handler && handler.onRoomLeft) {
+                handler.onRoomLeft(roomId);
+            }
+            if (currentRoom === roomId) {
+                currentRoom = null;
+                history.replaceState(null, '', window.location.pathname);
+                document.getElementById('chat-header-name').textContent = '[No room selected]';
+                document.getElementById('chat-header-topic').textContent = '';
+                document.getElementById('messages').innerHTML = '<div class="empty-state"><p>Select a chat room to start</p></div>';
+            }
+            await loadRooms();
+        } else {
+            const data = await response.json();
+            alert(`Failed to leave: ${data.detail || 'Unknown error'}`);
+        }
+    } catch (error) {
+        console.error('[HTTP] Error leaving room:', error);
+        alert('Failed to leave room. Please try again.');
+    }
+});
 
 function connectWebSocket() {
     // Don't create a new connection if one is already open or in progress
@@ -2377,6 +2494,10 @@ window.closeMembersPanel = closeMembersPanel;
 
 // Event listeners
 document.addEventListener('DOMContentLoaded', () => {
+    // Render any previously saved servers immediately (before auth check completes)
+    renderServerStrip();
+    initAddServerModal();
+
     // Note: #message-input and #send-button are now created dynamically
     // by room type plugins (e.g. chat plugin). Their event listeners are
     // bound by the plugin when the input area is created.

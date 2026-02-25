@@ -249,13 +249,14 @@ class Plugin(ABC):
         pass
 
     def on_room_deleted(self, room_id: str, room_type: str):
-        """Hook called when a room is soft-deleted.
+        """Hook called when a room is hard-deleted.
+
+        Called for ALL plugins so each can clean up its own data.
+        Core tables (room_users, room_keys) are already CASCADE-deleted.
 
         Args:
             room_id: The room identifier
-            room_type: The type of room
-
-        Used by: Event Listener Plugins, State Management Plugins (for cleanup)
+            room_type: The type of room that was deleted
         """
         pass
 

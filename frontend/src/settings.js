@@ -1,6 +1,10 @@
 import { API_URL } from './utils.js';
 import { loadTheme, fetchAvailableThemes, loadThemeCSS, applyColorScheme } from './theme-manager.js';
 import { createThemePreviewHTML } from './theme-preview.js';
+import {
+    getServers, getCurrentServerUrl, normalizeUrl,
+    validateServer, addServer, removeServer,
+} from './server-selector.js';
 
 let sessionToken = null;
 let currentUsername = null;
@@ -71,6 +75,10 @@ async function initializeSettingsPage() {
 
     // Load theme list after we know the current theme
     await loadThemeList();
+
+    // Render server list
+    renderSettingsServerList();
+    setupAddServerInSettings();
 
     // Set up event listeners
     setupEventListeners();
@@ -266,6 +274,150 @@ function switchSection(sectionId) {
     // Update content panels
     document.querySelectorAll('.settings-panel-section').forEach(panel => {
         panel.classList.toggle('active', panel.id === `section-${sectionId}`);
+    });
+}
+
+function renderSettingsServerList() {
+    const container = document.getElementById('settings-server-list');
+    if (!container) return;
+
+    const servers = getServers();
+    const currentUrl = normalizeUrl(getCurrentServerUrl());
+
+    container.innerHTML = '';
+
+    // Sort: current server first, then the rest in order
+    const sorted = [...servers].sort((a, b) => {
+        const aActive = normalizeUrl(a.url) === currentUrl;
+        const bActive = normalizeUrl(b.url) === currentUrl;
+        if (aActive && !bActive) return -1;
+        if (!aActive && bActive) return 1;
+        return 0;
+    });
+
+    sorted.forEach(server => {
+        const isActive = normalizeUrl(server.url) === currentUrl;
+
+        const row = document.createElement('div');
+        row.className = 'server-list-row';
+
+        const icon = document.createElement('img');
+        icon.src = `${server.iconUrl}?t=${Math.floor(Date.now() / 60000)}`;
+        icon.alt = server.name;
+        icon.width = 32;
+        icon.height = 32;
+        icon.className = 'server-list-icon';
+        icon.onerror = () => {
+            icon.style.display = 'none';
+            const fallback = document.createElement('div');
+            fallback.className = 'server-list-icon-fallback';
+            fallback.textContent = server.name.charAt(0).toUpperCase();
+            row.prepend(fallback);
+        };
+        row.appendChild(icon);
+
+        const info = document.createElement('div');
+        info.className = 'server-list-info';
+        const name = document.createElement('span');
+        name.className = 'server-list-name';
+        name.textContent = server.name;
+        info.appendChild(name);
+        const url = document.createElement('span');
+        url.className = 'server-list-url';
+        url.textContent = server.url;
+        info.appendChild(url);
+        row.appendChild(info);
+
+        if (isActive) {
+            const badge = document.createElement('span');
+            badge.className = 'server-list-badge';
+            badge.textContent = 'Current';
+            row.appendChild(badge);
+        } else {
+            const removeBtn = document.createElement('button');
+            removeBtn.className = 'reject-btn btn-sm';
+            removeBtn.textContent = 'Remove';
+            removeBtn.addEventListener('click', () => {
+                if (confirm(`Remove "${server.name}" from your server list?`)) {
+                    removeServer(server.url);
+                    renderSettingsServerList();
+                }
+            });
+            row.appendChild(removeBtn);
+        }
+
+        container.appendChild(row);
+    });
+
+    if (servers.length === 0) {
+        container.innerHTML = '<p style="color: var(--text-muted); font-size: 14px;">No servers saved yet. Add one below or visit your chat app to auto-register this server.</p>';
+    }
+}
+
+function setupAddServerInSettings() {
+    const urlInput = document.getElementById('settings-add-server-url');
+    const addBtn = document.getElementById('settings-add-server-btn');
+    const statusDiv = document.getElementById('settings-add-server-status');
+    if (!urlInput || !addBtn) return;
+
+    let validateTimeout = null;
+    let validatedServer = null;
+
+    urlInput.addEventListener('input', () => {
+        clearTimeout(validateTimeout);
+        addBtn.disabled = true;
+        statusDiv.innerHTML = '';
+        validatedServer = null;
+
+        const raw = urlInput.value.trim();
+        if (!raw) return;
+
+        let url = raw;
+        if (!url.match(/^https?:\/\//i)) {
+            url = 'https://' + url;
+        }
+
+        validateTimeout = setTimeout(async () => {
+            statusDiv.innerHTML = '<span class="status info">Checking server...</span>';
+            const result = await validateServer(url);
+            if (result.ok) {
+                const servers = getServers();
+                const normalized = normalizeUrl(url);
+                if (servers.some(s => normalizeUrl(s.url) === normalized)) {
+                    statusDiv.innerHTML = '<span class="status info">This server is already in your list.</span>';
+                    return;
+                }
+                validatedServer = {
+                    url: url.replace(/\/+$/, ''),
+                    name: result.name,
+                    iconUrl: result.iconUrl,
+                };
+                statusDiv.innerHTML = `<span class="status success">Found: ${result.name}</span>`;
+                addBtn.disabled = false;
+            } else {
+                statusDiv.innerHTML = `<span class="status error">${result.error}</span>`;
+            }
+        }, 600);
+    });
+
+    urlInput.addEventListener('keypress', (e) => {
+        if (e.key === 'Enter' && validatedServer) {
+            addBtn.click();
+        }
+    });
+
+    addBtn.addEventListener('click', () => {
+        if (!validatedServer) return;
+        const added = addServer(validatedServer);
+        if (added) {
+            urlInput.value = '';
+            addBtn.disabled = true;
+            statusDiv.innerHTML = '<span class="status success">Server added!</span>';
+            validatedServer = null;
+            renderSettingsServerList();
+        } else {
+            statusDiv.innerHTML = '<span class="status info">This server is already in your list.</span>';
+        }
     });
 }
 

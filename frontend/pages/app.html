@@ -32,6 +32,12 @@
         </div>
 
         <div class="main">
+            <!-- Server Strip (multi-server selector) -->
+            <div id="server-strip" class="server-strip hidden">
+                <div id="server-list" class="server-list"></div>
+                <button id="add-server-btn" class="server-strip-add" title="Add a server">+</button>
+            </div>
+
             <div id="sidebar" class="sidebar">
                 <div class="sidebar-section">
                     <div class="sidebar-section-header">
@@ -199,6 +205,43 @@
                 <button id="create-folder-submit-btn">Create</button>
             </div>
         </div>
+    </div>
+
+    <!-- Add Server Modal -->
+    <div id="add-server-modal" class="room-settings-modal">
+        <div id="add-server-backdrop" class="room-settings-backdrop"></div>
+        <div class="room-settings-content">
+            <div class="room-settings-header">
+                <h3>Add Server</h3>
+                <button id="add-server-close-btn" class="close-btn">&times;</button>
+            </div>
+            <div class="room-settings-body">
+                <div class="form-group">
+                    <label for="add-server-url-input">Server URL</label>
+                    <input type="text" id="add-server-url-input"
+                           placeholder="https://chat.example.com"
+                           autocapitalize="none"
+                           autocomplete="url"
+                           autocorrect="off"
+                           spellcheck="false">
+                    <p class="form-hint">Enter the full URL of a Skrib instance</p>
+                </div>
+                <div id="add-server-preview" class="add-server-preview hidden">
+                    <img id="add-server-preview-icon" class="server-icon-img" width="40" height="40" alt="">
+                    <span id="add-server-preview-name"></span>
+                </div>
+                <div id="add-server-status"></div>
+                <button id="add-server-submit-btn" disabled>Add Server</button>
+            </div>
+        </div>
+    </div>
+
+    <!-- Room Context Menu -->
+    <div id="room-context-menu" class="room-context-menu hidden">
+        <button id="ctx-open-room" class="room-context-item">Open</button>
+        <button id="ctx-room-settings" class="room-context-item">Settings</button>
+        <div class="room-context-divider"></div>
+        <button id="ctx-leave-room" class="room-context-item room-context-danger">Leave Room</button>
     </div>
 
     <script type="module" src="/src/app.js"></script>

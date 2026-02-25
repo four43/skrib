@@ -43,7 +43,7 @@ frontend/src/            # Vanilla JS (Vite build)
 - Auth: WebAuthn credentials, session tokens in `Authorization: Bearer {token}`
 - WebSocket auth via query param: `?token={sessionToken}`
 - Messages use `?since={lastMessageId}` for deduplication (exclusive, returns id > since)
-- Rooms use soft-delete (`deleted` flag)
+- Room deletion is a hard delete (removes room, memberships, keys, messages, etc.)
 - First registered user is auto-approved as admin
 
 ## Room Types
