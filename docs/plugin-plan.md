@@ -239,6 +239,133 @@ Minor additions for later:
 
 ---
 
+## Cross-Cutting Improvements
+
+Inspired by research into Discord, Slack, and Obsidian plugin systems (see [plugin-system-research.md](plugin-system-research.md)). These are independent of the phased decoupling work above and can be implemented alongside any phase.
+
+### Auto-Cleanup Registration Pattern (from Obsidian)
+
+**Priority: High | Effort: Low | Can start: Now**
+
+Obsidian's standout design decision is that everything registered via `register*` methods is automatically cleaned up when a plugin unloads. Developers never manually track resources. This eliminates an entire class of resource leak bugs across 2000+ community plugins.
+
+Skrib's `on_startup`/`on_shutdown` hooks exist, but plugins manually manage event listeners, routes, and other resources. Add registration methods to the `Plugin` base class that auto-clean on disable/shutdown:
+
+```python
+class Plugin:
+    def __init__(self):
+        self._registered_resources = []
+
+    def register_event(self, event_name, handler):
+        """Subscribe to a bus event. Auto-unsubscribed on plugin disable/shutdown."""
+        self._bus.on_event(event_name, handler)
+        self._registered_resources.append(("event", event_name, handler))
+
+    def register_interval(self, seconds, callback):
+        """Run a periodic task. Auto-cancelled on plugin disable/shutdown."""
+        task = asyncio.create_task(self._run_interval(seconds, callback))
+        self._registered_resources.append(("interval", task))
+
+    def register_cleanup(self, callback):
+        """Run arbitrary cleanup on disable/shutdown."""
+        self._registered_resources.append(("cleanup", callback))
+
+    async def _cleanup_all(self):
+        """Called by framework on disable/shutdown. Plugins should NOT override this."""
+        for resource in reversed(self._registered_resources):
+            match resource[0]:
+                case "event":
+                    self._bus.off_event(resource[1], resource[2])
+                case "interval":
+                    resource[1].cancel()
+                case "cleanup":
+                    await resource[1]() if asyncio.iscoroutinefunction(resource[1]) else resource[1]()
+        self._registered_resources.clear()
+```
+
+**Usage in plugins:**
+
+```python
+# Before (manual tracking, error-prone):
+class ChatTyping(Plugin):
+    async def on_startup(self):
+        self._bus.on_event("core:room_deleted", self.handle_delete)
+
+    async def on_shutdown(self):
+        self._bus.off_event("core:room_deleted", self.handle_delete)  # easy to forget
+
+# After (auto-cleanup):
+class ChatTyping(Plugin):
+    async def on_startup(self):
+        self.register_event("core:room_deleted", self.handle_delete)
+        # No on_shutdown needed — framework handles it
+```
+
+**Scope of `register_*` methods to add:**
+
+| Method | Manages |
+|--------|---------|
+| `register_event(name, handler)` | Bus event subscriptions |
+| `register_interval(seconds, cb)` | Periodic async tasks |
+| `register_cleanup(cb)` | Arbitrary teardown callbacks |
+
+Routes and WS handlers are already declarative (`register_routes()`, `get_ws_handler()`) and managed by the framework, so those don't need this pattern.
+
+### Declarative Permission Enforcement (from Slack)
+
+**Priority: High | Effort: Medium | Can start: Phase 1**
+
+Slack's core security model ties every API method to a specific OAuth scope. Plugins declare what they need, users see what they're granting, and the platform enforces it. Obsidian has no enforcement at all — plugins get full system access — and this is widely cited as its biggest weakness.
+
+Skrib's manifest already declares permissions (`"permissions": ["websocket.send", "dom.messages"]`) but they aren't enforced. The `PluginBus` wrapper is the natural enforcement point — it already scopes all outgoing messages to the plugin's namespace. Extend it to restrict capabilities based on declared permissions.
+
+**Proposed capability set:**
+
+| Permission | Grants | Enforcement Point |
+|------------|--------|-------------------|
+| `bus.send` | Send messages on the bus (broadcast to rooms, notify users) | `PluginBus` — disable `broadcast_to_room`, `notify_user`, `notify_all_users` |
+| `bus.receive` | Receive bus events from other namespaces | `PluginBus` — filter incoming events |
+| `bus.receive_room` | Receive room-scoped events (messages, joins, etc.) | `PluginBus` — filter room events |
+| `http.routes` | Register HTTP endpoints that clients can call | Plugin route registration |
+| `storage.read` | Read from plugin's isolated database | `get_plugin_db()` |
+| `storage.write` | Write to plugin's isolated database | `execute_write()` |
+| `core_api` | Call core REST API endpoints (plugin → core) | Internal HTTP client |
+
+**Enforcement in `PluginBus`:**
+
+```python
+class PluginBus:
+    def __init__(self, bus, plugin_id, permissions: list[str]):
+        self._bus = bus
+        self._plugin_id = plugin_id
+        self._permissions = set(permissions)
+
+    async def broadcast_to_room(self, room_id, action, **fields):
+        if "bus.send" not in self._permissions:
+            raise PermissionError(f"Plugin {self._plugin_id} lacks 'bus.send' permission")
+        await self._bus.broadcast_to_room(room_id, f"{self._plugin_id}:{action}", **fields)
+
+    async def notify_user(self, username, action, **fields):
+        if "bus.send" not in self._permissions:
+            raise PermissionError(f"Plugin {self._plugin_id} lacks 'bus.send' permission")
+        await self._bus.notify_user(username, f"{self._plugin_id}:{action}", **fields)
+```
+
+**Manifest change:**
+
+```json
+{
+  "id": "four43.chat-typing",
+  "permissions": ["bus.send", "bus.receive_room"]
+}
+```
+
+**Why start at Phase 1:** The proxy pre-auth work creates the `PluginBus` for each plugin with auth context. Adding permission checks to that same bus is a natural extension — the bus already knows the plugin's identity and manifest.
+
+**Why not wait:** Every phase that adds new capabilities (HTTP callbacks in Phase 4, transport abstraction in Phase 5) becomes harder to secure retroactively. Enforcing permissions early means new features are secure by default.
+
+---
+
 ## Summary
 
 The 3 pillars are the right framework. The key missing piece is making the HTTP API **bidirectional** — plugins call core's API for data, core calls plugin's API for callbacks. This avoids building a custom RPC protocol entirely. The bus stays simple (real-time events only).
