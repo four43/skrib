@@ -22,8 +22,13 @@
     <div id="auth-view" class="auth-container">
         <div class="auth-box">
             <div id="login-form">
-                <h1><iconify-icon icon="lucide:pen-tool" inline></iconify-icon> Skrīb</h1>
-                <p>Secure collaboration</p>
+                <div class="auth-server-branding">
+                    <img id="server-icon" class="auth-server-icon" src="/api/server/icon" alt="">
+                    <div>
+                        <h1 id="server-name"></h1>
+                        <p class="auth-powered-by">a <iconify-icon icon="lucide:pen-tool" inline></iconify-icon> Skrīb server</p>
+                    </div>
+                </div>
 
                 <div id="auth-status"></div>
 

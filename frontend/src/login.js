@@ -227,6 +227,12 @@ async function checkRegistrationMode() {
         const resp = await fetch(`${API_URL}/server`);
         if (!resp.ok) throw new Error(`HTTP ${resp.status}`);
         const data = await resp.json();
+        // Populate server name
+        const nameEl = document.getElementById('server-name');
+        if (nameEl && data.name) {
+            nameEl.textContent = data.name;
+            document.title = `Login - ${data.name}`;
+        }
         // Show register button for approval_required and open modes
         if (data.registration_mode === 'approval_required' || data.registration_mode === 'open') {
             document.getElementById('register-section').classList.remove('hidden');
