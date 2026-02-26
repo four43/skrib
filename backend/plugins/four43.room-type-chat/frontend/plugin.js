@@ -85,7 +85,7 @@ const RoomTypeChatPlugin = (function() {
         // Remove any existing input area first
         removeInputArea();
 
-        const chatArea = document.querySelector('.chat-area');
+        const chatArea = document.querySelector('.room-content');
         if (!chatArea) return;
 
         const inputArea = document.createElement('div');

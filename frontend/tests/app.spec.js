@@ -26,10 +26,10 @@ test.describe('App Page', () => {
       await expect(page.locator('#dm-list')).toBeVisible();
       await expect(page.locator('#sidebar-settings-btn')).toBeVisible();
 
-      // Chat area elements
-      await expect(page.locator('#chat-header')).toBeVisible();
-      await expect(page.locator('#chat-header-name')).toBeVisible();
-      await expect(page.locator('#chat-header-topic')).toBeAttached(); // empty span, hidden when no topic set
+      // Room content area elements
+      await expect(page.locator('#room-content-header')).toBeAttached(); // hidden when topic is empty
+      await expect(page.locator('#room-content-name')).toBeAttached(); // hidden when empty (no room selected)
+      await expect(page.locator('#room-content-topic')).toBeAttached(); // empty span, hidden when no topic set
       await expect(page.locator('#messages')).toBeVisible();
       // #message-input and #send-button are created dynamically by the room type plugin on room selection
     });
@@ -106,7 +106,7 @@ test.describe('App Page', () => {
     test('should have proper semantic classes', async ({ page }) => {
       await page.goto('/app.html');
 
-      await expect(page.locator('.header-brand')).toBeVisible();
+      await expect(page.locator('.sidebar-brand')).toBeVisible();
       await expect(page.locator('.mobile-hint')).toBeAttached(); // hidden on desktop viewport
     });
 

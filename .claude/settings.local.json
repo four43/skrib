@@ -29,7 +29,8 @@
       "Bash(grep:*)",
       "Bash(./frontend/util/test-e2e:*)",
       "Bash(util/test-e2e:*)",
-      "WebFetch(domain:docs.slack.dev)"
+      "WebFetch(domain:docs.slack.dev)",
+      "Bash(npm run build)"
     ]
   }
 }

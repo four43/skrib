@@ -475,8 +475,8 @@ registerCommand('leave', async () => {
             }
             currentRoom = null;
             history.replaceState(null, '', window.location.pathname);
-            document.getElementById('chat-header-name').textContent = '[No room selected]';
-            document.getElementById('chat-header-topic').textContent = '';
+            document.getElementById('room-content-name').textContent = '[No room selected]';
+            document.getElementById('room-content-topic').textContent = '';
             document.getElementById('messages').innerHTML = '<div class="empty-state"><p>Select a chat room to start</p></div>';
             await loadRooms();
         } else {
@@ -571,7 +571,7 @@ registerCommand('topic', async (args) => {
         if (response.ok) {
             // Update local cache and header
             if (meta) meta.topic = topic;
-            document.getElementById('chat-header-topic').textContent = topic;
+            document.getElementById('room-content-topic').textContent = topic;
             displaySystemMessage(`Topic set to: ${topic}`);
         } else {
             const data = await response.json();
@@ -1614,8 +1614,8 @@ document.getElementById('ctx-leave-room')?.addEventListener('click', async () =>
             if (currentRoom === roomId) {
                 currentRoom = null;
                 history.replaceState(null, '', window.location.pathname);
-                document.getElementById('chat-header-name').textContent = '[No room selected]';
-                document.getElementById('chat-header-topic').textContent = '';
+                document.getElementById('room-content-name').textContent = '[No room selected]';
+                document.getElementById('room-content-topic').textContent = '';
                 document.getElementById('messages').innerHTML = '<div class="empty-state"><p>Select a chat room to start</p></div>';
             }
             await loadRooms();
@@ -1778,7 +1778,7 @@ function handleRoomMessage(action, data) {
                 if (roomMeta[currentRoom]) {
                     roomMeta[currentRoom].topic = data.topic;
                 }
-                document.getElementById('chat-header-topic').textContent = data.topic || '';
+                document.getElementById('room-content-topic').textContent = data.topic || '';
                 displaySystemMessage(`${data.set_by} set the topic: ${data.topic}`);
             }
             break;
@@ -1934,15 +1934,13 @@ async function selectRoom(roomId) {
         const parts = displayName.split(', ');
         displayName = parts.map(u => getDisplayName(u)).join(', ');
     }
-    document.getElementById('chat-header-name').textContent = displayName;
-    const topicEl = document.getElementById('chat-header-topic');
+    document.getElementById('room-content-name').textContent = displayName;
+    const topicEl = document.getElementById('room-content-topic');
     topicEl.textContent = (meta && meta.topic) ? meta.topic : '';
 
     // Show header action buttons
     const membersBtn = document.getElementById('members-toggle-btn');
     if (membersBtn) membersBtn.classList.remove('hidden');
-    const roomSettingsBtn = document.getElementById('room-settings-header-btn');
-    if (roomSettingsBtn) roomSettingsBtn.classList.remove('hidden');
     closeMembersPanel();
     const membersPref = getUiPref('members_panel');
     if (membersPref === true || (membersPref === null && window.innerWidth > 1024)) {
@@ -2177,6 +2175,79 @@ function toggleMembersPanel() {
     }
 }
 
+// ---------------------------------------------------------------------------
+// Topbar scroll-hide + mobile tap-to-reveal
+// ---------------------------------------------------------------------------
+
+function setupTopbarScrollHide() {
+    const messagesEl = document.getElementById('messages');
+    const topbar = document.getElementById('room-content-topbar');
+    if (!messagesEl || !topbar) return;
+
+    let lastScrollTop = 0;
+    let ignoreScrollUntil = 0; // suppress hide during programmatic scrolls
+    const HIDE_THRESHOLD = 30; // px of downward scroll to hide
+    const SHOW_THRESHOLD = 8;  // px of upward scroll to reveal (very responsive)
+
+    messagesEl.addEventListener('scroll', () => {
+        const st = messagesEl.scrollTop;
+
+        // After room switch / message load, ignore scroll events briefly
+        // to prevent the auto-scroll-to-bottom from hiding the topbar
+        if (Date.now() < ignoreScrollUntil) {
+            lastScrollTop = st;
+            return;
+        }
+
+        const delta = st - lastScrollTop;
+
+        if (delta > HIDE_THRESHOLD && st > 60) {
+            // Scrolling down — hide topbar
+            topbar.classList.add('scrolled-away');
+        } else if (delta < -SHOW_THRESHOLD) {
+            // Scrolling up — show topbar immediately
+            topbar.classList.remove('scrolled-away');
+        }
+
+        // Also show when scrolled back to top
+        if (st <= 10) {
+            topbar.classList.remove('scrolled-away');
+        }
+
+        lastScrollTop = st;
+    }, { passive: true });
+
+    // Mobile: tap on messages area to reveal topbar
+    if ('ontouchstart' in window) {
+        let touchStartY = 0;
+        let touchMoved = false;
+
+        messagesEl.addEventListener('touchstart', (e) => {
+            touchStartY = e.touches[0].clientY;
+            touchMoved = false;
+        }, { passive: true });
+
+        messagesEl.addEventListener('touchmove', () => {
+            touchMoved = true;
+        }, { passive: true });
+
+        messagesEl.addEventListener('touchend', () => {
+            // Only reveal on tap (not scroll/swipe)
+            if (!touchMoved && topbar.classList.contains('scrolled-away')) {
+                topbar.classList.remove('scrolled-away');
+            }
+        }, { passive: true });
+    }
+
+    // Reset topbar visibility when switching rooms / messages change
+    const observer = new MutationObserver(() => {
+        topbar.classList.remove('scrolled-away');
+        lastScrollTop = messagesEl.scrollTop;
+        ignoreScrollUntil = Date.now() + 500;
+    });
+    observer.observe(messagesEl, { childList: true });
+}
+
 function handleSendInput() {
     const inputEl = document.getElementById('message-input');
     if (!inputEl) return;
@@ -2283,8 +2354,8 @@ async function deleteRoomAction() {
                 }
                 currentRoom = null;
                 history.replaceState(null, '', window.location.pathname);
-                document.getElementById('chat-header-name').textContent = '[No room selected]';
-            document.getElementById('chat-header-topic').textContent = '';
+                document.getElementById('room-content-name').textContent = '[No room selected]';
+            document.getElementById('room-content-topic').textContent = '';
                 document.getElementById('messages').innerHTML = '<div class="empty-state"><p>Select a chat room to start</p></div>';
             }
             loadRooms();
@@ -2626,14 +2697,15 @@ document.addEventListener('DOMContentLoaded', () => {
         dmStartBtn.addEventListener('click', startDMFromModal);
     }
 
-    // Members panel
-    const roomSettingsHeaderBtn = document.getElementById('room-settings-header-btn');
-    if (roomSettingsHeaderBtn) {
-        roomSettingsHeaderBtn.addEventListener('click', () => {
+    // Room name click → open room settings
+    const roomContentName = document.getElementById('room-content-name');
+    if (roomContentName) {
+        roomContentName.addEventListener('click', () => {
             if (currentRoom) openRoomSettings(currentRoom);
         });
     }
 
+    // Members panel
     const membersToggleBtn = document.getElementById('members-toggle-btn');
     if (membersToggleBtn) {
         membersToggleBtn.addEventListener('click', toggleMembersPanel);
@@ -2646,4 +2718,7 @@ document.addEventListener('DOMContentLoaded', () => {
             setUiPref('members_panel', false);
         });
     }
+
+    // Topbar scroll-hide behavior
+    setupTopbarScrollHide();
 });

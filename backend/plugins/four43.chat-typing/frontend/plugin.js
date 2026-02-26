@@ -230,7 +230,7 @@ const TypingPlugin = (function() {
         }
 
         // Find the chat area and input area
-        const chatArea = document.querySelector('.chat-area');
+        const chatArea = document.querySelector('.room-content');
         const inputArea = document.querySelector('.input-area');
 
         if (!chatArea || !inputArea) {

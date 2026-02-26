@@ -1,15 +1,6 @@
 /* Todo List Plugin Styles */
 
-/*
- * Layout overrides: the global CSS sets width:100% and margin-top:10px on
- * buttons and width:100% on text inputs. We only reset the layout-breaking
- * properties so the themed look (colors, border-radius, shadows) is preserved.
- */
-.todo-container button {
-    width: auto;
-    margin-top: 0;
-}
-
+/* Global input is width:100%; reset for inline forms */
 .todo-container input[type="text"] {
     width: auto;
 }
@@ -19,7 +10,7 @@
     flex-direction: column;
     height: 100%;
     overflow-y: auto;
-    padding: 0 !important;
+    padding: 64px 0 0 !important;
 }
 
 /* Filter Bar */
@@ -47,8 +38,6 @@
 
 .todo-filter-btn:hover {
     background: rgba(var(--theme-rgb), 0.06);
-    transform: none;
-    box-shadow: none;
 }
 
 .todo-filter-btn.active {
@@ -123,9 +112,6 @@
     background: rgba(var(--theme-rgb), 0.03);
 }
 
-.todo-item:hover .todo-item-actions {
-    opacity: 1;
-}
 
 .todo-item.done .todo-item-title {
     text-decoration: line-through;
@@ -186,13 +172,11 @@
     color: var(--text-secondary, #999);
 }
 
-/* Item Actions — small subtle buttons, not themed */
+/* Item Actions — always visible for task management */
 .todo-item-actions {
     display: flex;
     gap: 4px;
     flex-shrink: 0;
-    opacity: 0;
-    transition: opacity 0.15s;
 }
 
 .todo-action-btn {
@@ -210,8 +194,6 @@
 
 .todo-action-btn:hover {
     background: rgba(var(--theme-rgb), 0.06);
-    transform: none;
-    box-shadow: none;
 }
 
 .todo-delete-btn:hover {
@@ -241,6 +223,11 @@
     gap: 8px;
 }
 
+.todo-edit-label {
+    font-size: 0.78em;
+    color: var(--text-secondary, #999);
+}
+
 .todo-edit-title,
 .todo-edit-desc {
     /* Keep global input styling, just ensure full width within edit form */
@@ -265,9 +252,5 @@
 
     .todo-add-desc {
         flex: 1;
-    }
-
-    .todo-item-actions {
-        opacity: 1;
     }
 }

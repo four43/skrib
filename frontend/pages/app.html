@@ -21,18 +21,6 @@
 <body>
     <!-- Chat View -->
     <div id="chat-view" class="container">
-        <div class="header">
-            <div class="header-brand">
-                <button id="menu-toggle" class="menu-toggle"><iconify-icon icon="lucide:menu"></iconify-icon></button>
-                <img id="server-icon" class="server-header-icon" src="/api/server/icon" alt="" width="28" height="28" onerror="this.style.display='none'">
-                <h1 id="server-title">My Server</h1>
-                <a id="admin-panel-btn" class="admin-btn hidden" href="/admin.html" title="Admin Panel"><iconify-icon icon="lucide:settings"></iconify-icon></a>
-            </div>
-            <div class="header-actions">
-                <span class="header-app-name">Skrīb</span>
-            </div>
-        </div>
-
         <div class="main">
             <!-- Server Strip (multi-server selector) -->
             <div id="server-strip" class="server-strip hidden">
@@ -41,6 +29,13 @@
             </div>
 
             <div id="sidebar" class="sidebar">
+                <div class="sidebar-brand">
+                    <img id="server-icon" class="server-brand-icon" src="/api/server/icon" alt="" width="32" height="32" onerror="this.style.display='none'">
+                    <div class="sidebar-brand-info">
+                        <h1 id="server-title">My Server</h1>
+                    </div>
+                    <a id="admin-panel-btn" class="admin-btn hidden" href="/admin.html" title="Admin Panel"><iconify-icon icon="lucide:settings"></iconify-icon></a>
+                </div>
                 <div class="sidebar-section">
                     <div class="sidebar-section-header">
                         <span>Channels</span>
@@ -70,17 +65,18 @@
             <!-- Sidebar Overlay for Mobile -->
             <div id="sidebar-overlay" class="sidebar-overlay"></div>
 
-            <div class="chat-area">
-                <div class="chat-area-title" id="chat-area-title">
-                    <h2 id="chat-header-name"></h2>
-                </div>
-                <div class="chat-header" id="chat-header">
-                    <span id="chat-header-topic" class="chat-header-topic"></span>
-                    <div class="chat-header-actions">
-                        <button id="room-settings-header-btn" class="chat-header-btn hidden" title="Room settings"><iconify-icon icon="lucide:settings"></iconify-icon></button>
-                        <button id="members-toggle-btn" class="members-toggle-btn hidden" title="Members"><iconify-icon icon="lucide:users"></iconify-icon></button>
+            <div class="room-content">
+                <div class="room-content-topbar" id="room-content-topbar">
+                    <div class="topbar-blur"><div></div><div></div><div></div><div></div></div>
+                    <div class="room-content-topbar-row">
+                        <button id="menu-toggle" class="menu-toggle"><iconify-icon icon="lucide:menu"></iconify-icon></button>
+                        <button id="room-content-name" class="room-content-topbar-name"></button>
+                    </div>
+                    <div class="room-content-topbar-topic" id="room-content-header">
+                        <span id="room-content-topic" class="room-content-topic"></span>
                     </div>
                 </div>
+                <button id="members-toggle-btn" class="members-toggle-fab hidden" title="Members"><iconify-icon icon="lucide:users"></iconify-icon></button>
                 <div class="messages" id="messages">
                     <div class="empty-state">
                         <p>Select a chat room to start</p>

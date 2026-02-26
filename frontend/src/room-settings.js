@@ -117,11 +117,12 @@ async function initializeRoomSettings() {
             originalTopic = topicInput.value;
         }
 
+        // Set up event listeners early so handlers (e.g. back button save) are
+        // attached before async work or DOM updates that enable interactive elements.
+        setupEventListeners();
+
         // Display members (already included in room response)
         displayMembers(currentRoom.members || []);
-
-        // Set up event listeners
-        setupEventListeners();
 
         // Show/hide danger zone based on permissions
         updateDangerZone();

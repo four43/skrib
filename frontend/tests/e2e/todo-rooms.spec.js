@@ -18,7 +18,7 @@ async function createTodoRoom(page, roomName) {
     await page.locator('input[name="create-room-type"][value="todo"]').check();
 
     await page.locator('#create-room-submit-btn').click();
-    await expect(page.locator('#chat-header-name')).toHaveText(`#${roomName}`);
+    await expect(page.locator('#room-content-name')).toHaveText(`#${roomName}`);
 
     // Wait for the todo UI to render
     await page.locator('.todo-container').waitFor();
@@ -41,12 +41,12 @@ async function navigateToRoom(page, roomName) {
     await page.waitForLoadState('networkidle');
     await page.locator(`.room-item[data-room-id="${roomName}"]`).waitFor();
     await page.locator(`.room-item[data-room-id="${roomName}"]`).click();
-    await expect(page.locator('#chat-header-name')).toHaveText(`#${roomName}`);
+    await expect(page.locator('#room-content-name')).toHaveText(`#${roomName}`);
 }
 
 async function selectRoom(page, roomName) {
     await page.locator(`.room-item[data-room-id="${roomName}"]`).click();
-    await expect(page.locator('#chat-header-name')).toHaveText(`#${roomName}`);
+    await expect(page.locator('#room-content-name')).toHaveText(`#${roomName}`);
 }
 
 /** Add a todo item via the add form. */

@@ -24,7 +24,7 @@ async function createRoom(page, roomName) {
     await page.locator('#add-channel-btn').click();
     await page.locator('#new-room-input').fill(roomName);
     await page.locator('#create-room-submit-btn').click();
-    await expect(page.locator('#chat-header-name')).toHaveText(`#${roomName}`);
+    await expect(page.locator('#room-content-name')).toHaveText(`#${roomName}`);
     await page.locator('#message-input').waitFor();
 }
 
@@ -67,13 +67,13 @@ async function navigateToRoom(page, roomName) {
     await page.waitForLoadState('networkidle');
     await page.locator(`.room-item[data-room-id="${roomName}"]`).waitFor();
     await page.locator(`.room-item[data-room-id="${roomName}"]`).click();
-    await expect(page.locator('#chat-header-name')).toHaveText(`#${roomName}`);
+    await expect(page.locator('#room-content-name')).toHaveText(`#${roomName}`);
 }
 
 /** Click into a room without reloading (room must already be in sidebar). */
 async function selectRoom(page, roomName) {
     await page.locator(`.room-item[data-room-id="${roomName}"]`).click();
-    await expect(page.locator('#chat-header-name')).toHaveText(`#${roomName}`);
+    await expect(page.locator('#room-content-name')).toHaveText(`#${roomName}`);
 }
 
 // ── Tests ───────────────────────────────────────────────────────────────
@@ -127,7 +127,7 @@ test.describe('Core room management', () => {
         await userA.page.locator('.room-item[data-room-id="test-room-b"]').waitFor();
 
         await userA.page.locator('.room-item[data-room-id="test-room-b"]').click();
-        await expect(userA.page.locator('#chat-header-name')).toHaveText('#test-room-b');
+        await expect(userA.page.locator('#room-content-name')).toHaveText('#test-room-b');
 
         await sendMessage(userA.page, 'Hello User B');
         await expect(userB.page.locator('#messages')).toContainText('Hello User B');
@@ -148,10 +148,10 @@ test.describe('Topic management', () => {
         // User A sets topic via command
         await sendCommand(userA.page, '/topic Welcome to topic room');
         await expect(userA.page.locator('#messages')).toContainText('Topic set to: Welcome to topic room');
-        await expect(userA.page.locator('#chat-header-topic')).toHaveText('Welcome to topic room');
+        await expect(userA.page.locator('#room-content-topic')).toHaveText('Welcome to topic room');
 
         // User B sees the topic update in real-time
-        await expect(userB.page.locator('#chat-header-topic')).toHaveText('Welcome to topic room');
+        await expect(userB.page.locator('#room-content-topic')).toHaveText('Welcome to topic room');
 
         // User B (regular member) tries to set topic — gets permission error
         await sendCommand(userB.page, '/topic Unauthorized change');
@@ -168,7 +168,7 @@ test.describe('Topic management', () => {
         await navigateToRoom(userB.page, 'topic-ui-room');
 
         // User A clicks room settings gear in header
-        await userA.page.locator('#room-settings-header-btn').click();
+        await userA.page.locator('#room-content-name').click();
         await userA.page.waitForURL('**/room-settings.html**');
 
         // User A edits topic and clicks back — auto-saves on navigation
@@ -176,13 +176,13 @@ test.describe('Topic management', () => {
         await userA.page.locator('.admin-back-btn').click();
         await userA.page.waitForURL('**/app.html**');
         await selectRoom(userA.page, 'topic-ui-room');
-        await expect(userA.page.locator('#chat-header-topic')).toHaveText('Welcome to topic room');
+        await expect(userA.page.locator('#room-content-topic')).toHaveText('Welcome to topic room');
 
         // User B sees updated topic in real-time
-        await expect(userB.page.locator('#chat-header-topic')).toHaveText('Welcome to topic room');
+        await expect(userB.page.locator('#room-content-topic')).toHaveText('Welcome to topic room');
 
         // User B navigates to room settings — topic input is disabled
-        await userB.page.locator('#room-settings-header-btn').click();
+        await userB.page.locator('#room-content-name').click();
         await userB.page.waitForURL('**/room-settings.html**');
 
         await expect(userB.page.locator('#room-topic')).toBeDisabled();
@@ -213,7 +213,7 @@ test.describe('Leave and kick', () => {
         await expect(userB.page.locator('.room-item[data-room-id="leave-room"]')).toHaveCount(0);
 
         // User B no longer has the room selected
-        await expect(userB.page.locator('#chat-header-name')).toHaveText('[No room selected]');
+        await expect(userB.page.locator('#room-content-name')).toHaveText('[No room selected]');
     });
 
     test('User A kicks User B, room disappears from User B list, User C cannot kick User A', async ({ threeUsers }) => {
@@ -253,7 +253,7 @@ test.describe('Room deletion', () => {
         await navigateToRoom(userB.page, 'delete-room');
 
         // User A navigates to room settings and deletes the room
-        await userA.page.locator('#room-settings-header-btn').click();
+        await userA.page.locator('#room-content-name').click();
         await userA.page.waitForURL('**/room-settings.html**');
 
         // Accept both confirm and success alert dialogs
@@ -293,7 +293,7 @@ test.describe('Room deletion', () => {
         await userB.page.waitForLoadState('networkidle');
         await userB.page.locator('.room-item[data-room-id="admin-only-room"]').waitFor();
         await userB.page.locator('.room-item[data-room-id="admin-only-room"]').click();
-        await userB.page.locator('#room-settings-header-btn').click();
+        await userB.page.locator('#room-content-name').click();
         await userB.page.waitForURL('**/room-settings.html**');
 
         // Danger zone should be hidden for User B (regular member, not admin)
@@ -444,21 +444,21 @@ test.describe('Room persistence', () => {
         await createRoom(userA.page, 'persist-b');
 
         // User A is now in persist-b (last created)
-        await expect(userA.page.locator('#chat-header-name')).toHaveText('#persist-b');
+        await expect(userA.page.locator('#room-content-name')).toHaveText('#persist-b');
 
         // Navigate to persist-a
         await selectRoom(userA.page, 'persist-a');
-        await expect(userA.page.locator('#chat-header-name')).toHaveText('#persist-a');
+        await expect(userA.page.locator('#room-content-name')).toHaveText('#persist-a');
 
         // Navigate to persist-b
         await selectRoom(userA.page, 'persist-b');
-        await expect(userA.page.locator('#chat-header-name')).toHaveText('#persist-b');
+        await expect(userA.page.locator('#room-content-name')).toHaveText('#persist-b');
 
         // Refresh the page
         await userA.page.reload();
         await userA.page.waitForLoadState('networkidle');
 
         // Should still be viewing persist-b
-        await expect(userA.page.locator('#chat-header-name')).toHaveText('#persist-b');
+        await expect(userA.page.locator('#room-content-name')).toHaveText('#persist-b');
     });
 });

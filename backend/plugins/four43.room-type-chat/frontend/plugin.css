@@ -165,7 +165,6 @@
 .message-hover-btn:hover {
     background: rgba(var(--theme-rgb), 0.1);
     transform: scale(1.2);
-    box-shadow: none;
 }
 
 /* ── More menu (dropdown from "..." button) ────────────────────── */
@@ -206,8 +205,6 @@
 
 .message-more-menu-item:hover {
     background: rgba(var(--theme-rgb), 0.1);
-    box-shadow: none;
-    transform: none;
 }
 
 /* ── Edited indicator ──────────────────────────────────────────── */

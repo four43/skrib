@@ -13,7 +13,7 @@ async function createRoom(page, roomName) {
     await page.locator('#add-channel-btn').click();
     await page.locator('#new-room-input').fill(roomName);
     await page.locator('#create-room-submit-btn').click();
-    await expect(page.locator('#chat-header-name')).toHaveText(`#${roomName}`);
+    await expect(page.locator('#room-content-name')).toHaveText(`#${roomName}`);
     await page.locator('#message-input').waitFor();
 }
 
@@ -38,12 +38,12 @@ async function navigateToRoom(page, roomName) {
     await page.waitForLoadState('networkidle');
     await page.locator(`.room-item[data-room-id="${roomName}"]`).waitFor();
     await page.locator(`.room-item[data-room-id="${roomName}"]`).click();
-    await expect(page.locator('#chat-header-name')).toHaveText(`#${roomName}`);
+    await expect(page.locator('#room-content-name')).toHaveText(`#${roomName}`);
 }
 
 async function selectRoom(page, roomName) {
     await page.locator(`.room-item[data-room-id="${roomName}"]`).click();
-    await expect(page.locator('#chat-header-name')).toHaveText(`#${roomName}`);
+    await expect(page.locator('#room-content-name')).toHaveText(`#${roomName}`);
 }
 
 /**

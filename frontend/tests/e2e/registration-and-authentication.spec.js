@@ -20,7 +20,7 @@ async function createRoomAndSendHello(page) {
     await page.locator('#new-room-input').fill(roomName);
     await page.locator('#create-room-submit-btn').click();
 
-    await expect(page.locator('#chat-header-name')).toHaveText(`#${roomName}`, { timeout: 10_000 });
+    await expect(page.locator('#room-content-name')).toHaveText(`#${roomName}`, { timeout: 10_000 });
     await page.locator('#message-input').waitFor({ timeout: 10_000 });
 
     await page.locator('#message-input').fill('Hello World');

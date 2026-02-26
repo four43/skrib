@@ -13,7 +13,7 @@ const RoomTypeTodoPlugin = (function() {
 
     // State
     let items = [];         // Current room's todo items
-    let filter = 'active';  // 'all' | 'active' | 'done'
+    let filter = 'all';  // 'all' | 'active' | 'done'
     let editingItemId = null;
 
     async function init(pluginCtx) {
@@ -50,7 +50,7 @@ const RoomTypeTodoPlugin = (function() {
     async function onRoomSelected(roomId) {
         items = [];
         editingItemId = null;
-        filter = 'active';
+        filter = 'all';
         renderTodoUI();
         await loadItems(roomId);
     }
@@ -303,38 +303,41 @@ const RoomTypeTodoPlugin = (function() {
         meta.appendChild(date);
         content.appendChild(meta);
 
-        const actions = document.createElement('div');
-        actions.className = 'todo-item-actions';
-
-        const editBtn = document.createElement('button');
-        editBtn.className = 'todo-action-btn todo-edit-btn';
-        editBtn.textContent = 'Edit';
-        editBtn.title = 'Edit item';
-        editBtn.addEventListener('click', () => {
-            editingItemId = item.id;
-            renderItems();
-        });
-
-        const deleteBtn = document.createElement('button');
-        deleteBtn.className = 'todo-action-btn todo-delete-btn';
-        deleteBtn.textContent = 'Delete';
-        deleteBtn.title = 'Delete item';
-        deleteBtn.addEventListener('click', () => {
-            if (confirm('Delete this task?')) {
-                ctx.sendWs({
-                    type: 'room:todo_delete',
-                    room_id: ctx.currentRoom(),
-                    item_id: item.id,
-                });
-            }
-        });
-
-        actions.appendChild(editBtn);
-        actions.appendChild(deleteBtn);
-
         el.appendChild(checkbox);
         el.appendChild(content);
-        el.appendChild(actions);
+
+        // Only show edit/delete buttons for the item creator
+        if (item.username === ctx.currentUsername()) {
+            const actions = document.createElement('div');
+            actions.className = 'todo-item-actions';
+
+            const editBtn = document.createElement('button');
+            editBtn.className = 'todo-action-btn todo-edit-btn';
+            editBtn.textContent = 'Edit';
+            editBtn.title = 'Edit item';
+            editBtn.addEventListener('click', () => {
+                editingItemId = item.id;
+                renderItems();
+            });
+
+            const deleteBtn = document.createElement('button');
+            deleteBtn.className = 'todo-action-btn todo-delete-btn';
+            deleteBtn.textContent = 'Delete';
+            deleteBtn.title = 'Delete item';
+            deleteBtn.addEventListener('click', () => {
+                if (confirm('Delete this task?')) {
+                    ctx.sendWs({
+                        type: 'room:todo_delete',
+                        room_id: ctx.currentRoom(),
+                        item_id: item.id,
+                    });
+                }
+            });
+
+            actions.appendChild(editBtn);
+            actions.appendChild(deleteBtn);
+            el.appendChild(actions);
+        }
 
         return el;
     }
@@ -346,6 +349,7 @@ const RoomTypeTodoPlugin = (function() {
 
         el.innerHTML = `
             <div class="todo-edit-form">
+                <span class="todo-edit-label">Editing: ${escapeAttr(item.title)}</span>
                 <input type="text" class="todo-edit-title" value="${escapeAttr(item.title)}" placeholder="Title" />
                 <input type="text" class="todo-edit-desc" value="${escapeAttr(item.description)}" placeholder="Description (optional)" />
                 <div class="todo-edit-actions">

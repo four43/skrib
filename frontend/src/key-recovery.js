@@ -102,10 +102,7 @@ async function attemptRecovery() {
 
         console.log('[E2E] Private key recovered from server via passphrase');
 
-        // Redirect to app via form submit (triggers password manager save)
-        form.action = '/app.html';
-        form.method = 'GET';
-        form.submit();
+        window.location.href = '/app.html';
     } catch (err) {
         console.warn('[E2E] Passphrase recovery failed:', err);
         showStatus('recovery-status', '❌ Wrong password. Please try again.', 'error');

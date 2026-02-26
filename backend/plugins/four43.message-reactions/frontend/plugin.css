@@ -10,17 +10,14 @@
 /* ── Emoji buttons in hover bar ──────────────────────────────────── */
 
 .four43-hover-emoji-btn {
-    /* Reset global button styles */
     width: 28px;
     height: 28px;
     margin: 0;
     padding: 2px 4px;
-    border: none;
     background: transparent;
     color: inherit;
     font-size: 16px;
     font-weight: normal;
-    cursor: pointer;
     border-radius: var(--radius-sm);
     transition: background 0.1s ease, transform 0.1s ease;
     line-height: 1;
@@ -33,7 +30,6 @@
 .four43-hover-emoji-btn:hover {
     background: rgba(var(--theme-rgb), 0.1);
     transform: scale(1.2);
-    box-shadow: none;
 }
 
 /* ── Reaction pills (existing reactions below message) ──────────────── */
@@ -52,7 +48,6 @@
 }
 
 .four43-reaction-btn {
-    /* Reset global button styles */
     width: auto;
     margin: 0;
     display: inline-flex;
@@ -63,7 +58,6 @@
     border-radius: var(--radius-lg);
     background: var(--bg-surface-elevated);
     color: var(--text-secondary);
-    cursor: pointer;
     font-size: 12px;
     font-weight: normal;
     transition: all 0.15s ease;
@@ -75,8 +69,6 @@
 .four43-reaction-btn:hover {
     background: rgba(var(--theme-rgb), 0.08);
     border-color: rgba(var(--theme-rgb), 0.15);
-    transform: none;
-    box-shadow: none;
 }
 
 .four43-reaction-btn.reacted {

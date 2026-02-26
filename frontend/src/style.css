@@ -1,5 +1,5 @@
 /* ═══════════════════════════════════════════
-   Design System: Semantic CSS Custom Properties
+   Design System: CSS Custom Properties
    ═══════════════════════════════════════════ */
 
 :root {
@@ -27,6 +27,27 @@
     --bg-overlay: rgba(255, 255, 255, 0.3);
     --bg-overlay-dark: rgba(15, 23, 42, 0.3);
 
+    /* Surface opacities — cascade into dark mode automatically */
+    --bg-surface-strong: rgba(255, 255, 255, 0.9);
+    --bg-surface-opaque: rgba(255, 255, 255, 0.98);
+    --bg-surface-dim: rgba(255, 255, 255, 0.6);
+    --bg-surface-faint: rgba(255, 255, 255, 0.5);
+    --bg-surface-subtle: rgba(255, 255, 255, 0.4);
+
+    /* Section header backgrounds */
+    --bg-header: rgba(248, 250, 252, 0.8);
+    --bg-header-dim: rgba(248, 250, 252, 0.6);
+
+    /* Neutral tints (subtle bg for buttons, rows, hover states) */
+    --bg-tint: rgba(0, 0, 0, 0.04);
+    --bg-tint-hover: rgba(0, 0, 0, 0.06);
+    --bg-tint-strong: rgba(0, 0, 0, 0.08);
+
+    /* Contextual backgrounds */
+    --bg-strip: rgba(255, 255, 255, 0.2);
+    --bg-room-content: var(--bg-surface);
+    --bg-topbar-tint: rgba(255, 255, 255, 0.5);
+
     /* Border Colors */
     --border-subtle: rgba(0, 0, 0, 0.04);
     --border-normal: rgba(0, 0, 0, 0.06);
@@ -39,6 +60,16 @@
     --color-warning: #f59e0b;
     --color-info: #4338ca;
 
+    /* Status backgrounds & borders */
+    --color-success-bg: rgba(16, 185, 129, 0.1);
+    --color-success-border: rgba(16, 185, 129, 0.2);
+    --color-success-shadow: rgba(16, 185, 129, 0.25);
+    --color-error-bg: rgba(239, 68, 68, 0.1);
+    --color-error-border: rgba(239, 68, 68, 0.2);
+    --color-error-shadow: rgba(239, 68, 68, 0.25);
+    --color-warning-bg: rgba(245, 158, 11, 0.12);
+    --color-warning-border: rgba(245, 158, 11, 0.2);
+
     /* Disabled State */
     --color-disabled: #cbd5e1;
 
@@ -46,6 +77,10 @@
     --gray-500: #64748b;
     --gray-600: #475569;
     --gray-700: #999;
+
+    /* Scrollbar */
+    --scrollbar-thumb: rgba(0, 0, 0, 0.15);
+    --scrollbar-thumb-hover: rgba(0, 0, 0, 0.25);
 
     /* Glassmorphism Effects (disabled for clean look) */
     --blur-sm: 0px;
@@ -74,7 +109,6 @@
    or auto-detected from system preference).
    ═══════════════════════════════════════════ */
 
-/* Variable overrides */
 html[data-theme-dark] {
     --text-primary: #e2e8f0;
     --text-secondary: #94a3b8;
@@ -97,56 +131,33 @@ html[data-theme-dark] {
     --gray-500: #94a3b8;
     --gray-600: #64748b;
     --gray-700: #64748b;
+
+    /* Surface opacities — dark equivalents */
+    --bg-surface-strong: rgba(30, 41, 59, 0.5);
+    --bg-surface-opaque: rgba(15, 23, 42, 0.95);
+    --bg-surface-dim: rgba(30, 41, 59, 0.5);
+    --bg-surface-faint: rgba(30, 41, 59, 0.4);
+    --bg-surface-subtle: rgba(30, 41, 59, 0.3);
+    --bg-header: rgba(15, 23, 42, 0.6);
+    --bg-header-dim: rgba(15, 23, 42, 0.6);
+    --bg-tint: rgba(255, 255, 255, 0.04);
+    --bg-tint-hover: rgba(255, 255, 255, 0.06);
+    --bg-tint-strong: rgba(255, 255, 255, 0.08);
+    --bg-strip: rgba(15, 23, 42, 0.4);
+    --bg-room-content: rgba(15, 23, 42, 0.2);
+    --bg-topbar-tint: rgba(15, 23, 42, 0.5);
+    --scrollbar-thumb: rgba(255, 255, 255, 0.15);
+    --scrollbar-thumb-hover: rgba(255, 255, 255, 0.25);
 }
 
-/* Component overrides for hardcoded rgba backgrounds */
-html[data-theme-dark] .auth-box,
-html[data-theme-dark] .container,
-html[data-theme-dark] .admin-page,
-html[data-theme-dark] .settings-page,
-html[data-theme-dark] .invite-item,
-html[data-theme-dark] .pending-user,
-html[data-theme-dark] .user-item,
-html[data-theme-dark] .room-settings-content,
-html[data-theme-dark] .settings-panel {
+/* Minimal dark overrides for components that change variable references */
+html[data-theme-dark] .members-toggle-fab {
     background: var(--bg-surface-elevated);
-    border-color: var(--border-white);
+    border-color: var(--border-strong);
 }
 
-html[data-theme-dark] .sidebar,
-html[data-theme-dark] .members-panel,
-html[data-theme-dark] .chat-header,
-html[data-theme-dark] .header {
-    background: transparent;
-}
-
-html[data-theme-dark] .settings-nav,
-html[data-theme-dark] .settings-panel-header,
-html[data-theme-dark] .room-settings-header {
-    background: rgba(15, 23, 42, 0.6);
-}
-
-html[data-theme-dark] .server-strip {
-    background: rgba(15, 23, 42, 0.4);
-}
-
-html[data-theme-dark] .chat-area {
-    background: rgba(15, 23, 42, 0.2);
-}
-
-html[data-theme-dark] input[type="text"],
-html[data-theme-dark] input[type="password"],
-html[data-theme-dark] .preview-input {
-    background: rgba(15, 23, 42, 0.5);
-    color: var(--text-primary);
-    border-color: rgba(var(--theme-rgb), 0.2);
-}
-
-html[data-theme-dark] .color-scheme-option,
-html[data-theme-dark] .theme-card,
-html[data-theme-dark] .preview-section {
-    background: rgba(30, 41, 59, 0.5);
-    border-color: rgba(var(--theme-rgb), 0.1);
+html[data-theme-dark] .settings-nav {
+    background: var(--bg-header);
 }
 
 * {
@@ -184,12 +195,90 @@ body {
 }
 
 ::-webkit-scrollbar-thumb {
-    background: rgba(0, 0, 0, 0.15);
+    background: var(--scrollbar-thumb);
     border-radius: 3px;
 }
 
 ::-webkit-scrollbar-thumb:hover {
-    background: rgba(0, 0, 0, 0.25);
+    background: var(--scrollbar-thumb-hover);
+}
+
+/* ═══════════════════════════════════════════
+   Button Design System
+
+   Base `button` is a minimal reset.
+   :where(button) provides primary visual
+   defaults at zero specificity — any class
+   automatically overrides without needing
+   explicit resets.
+   ═══════════════════════════════════════════ */
+
+button {
+    border: none;
+    cursor: pointer;
+    font-family: inherit;
+}
+
+:where(button) {
+    width: 100%;
+    padding: 12px 20px;
+    background: var(--theme-color);
+    color: var(--text-inverse);
+    border-radius: 10px;
+    font-size: 15px;
+    font-weight: 600;
+    margin-top: 10px;
+    transition: filter 0.2s ease, box-shadow 0.2s ease;
+    box-shadow: 0 2px 8px rgba(var(--theme-rgb), 0.25);
+}
+
+:where(button:hover) {
+    filter: brightness(1.15);
+    box-shadow: 0 4px 12px color-mix(in oklab, var(--theme-color), rgba(0, 0, 0, 0.6) 30%);
+}
+
+:where(button:active) {
+    filter: brightness(0.95);
+}
+
+:where(button:disabled) {
+    background: var(--color-disabled);
+    cursor: not-allowed;
+    box-shadow: none;
+}
+
+button:focus-visible,
+input:focus-visible {
+    outline: 2px solid var(--theme-color);
+    outline-offset: 2px;
+}
+
+/* Small inline button */
+.btn-sm {
+    width: auto;
+    padding: 6px 12px;
+    margin: 0;
+    font-size: 12px;
+    border-radius: 6px;
+}
+
+/* Ghost/subtle button — for secondary actions */
+.btn-ghost {
+    width: auto;
+    padding: 6px 12px;
+    margin: 0;
+    background: rgba(var(--theme-rgb), 0.08);
+    color: var(--text-secondary);
+    border: 1px solid rgba(var(--theme-rgb), 0.15);
+    box-shadow: none;
+    font-size: 12px;
+    font-weight: 500;
+    border-radius: 6px;
+}
+
+.btn-ghost:hover {
+    background: rgba(var(--theme-rgb), 0.15);
+    color: var(--theme-color);
 }
 
 /* ═══════════════════════════════════════════
@@ -205,7 +294,7 @@ body {
 }
 
 .auth-box {
-    background: rgba(255, 255, 255, 0.9);
+    background: var(--bg-surface-strong);
     padding: 48px;
     border-radius: 20px;
     border: 1px solid var(--border-normal);
@@ -277,7 +366,7 @@ input[type="password"] {
     border: 1px solid rgba(var(--theme-rgb), 0.2);
     border-radius: 10px;
     font-size: 16px;
-    background: rgba(255, 255, 255, 0.6);
+    background: var(--bg-surface-dim);
     color: var(--text-primary);
     transition: border-color 0.2s ease, box-shadow 0.2s ease, background 0.2s ease;
 }
@@ -287,7 +376,7 @@ input[type="password"]:focus {
     outline: none;
     border-color: var(--theme-color);
     box-shadow: 0 0 0 3px rgba(var(--theme-rgb), 0.12);
-    background: rgba(255, 255, 255, 0.9);
+    background: var(--bg-surface-strong);
 }
 
 input[type="text"].invalid,
@@ -306,75 +395,6 @@ input[type="password"]::placeholder {
     color: var(--text-muted);
 }
 
-button {
-    width: 100%;
-    padding: 12px 20px;
-    background: var(--theme-color);
-    color: var(--text-inverse);
-    border: none;
-    border-radius: 10px;
-    cursor: pointer;
-    font-size: 15px;
-    font-weight: 600;
-    margin-top: 10px;
-    transition: filter 0.2s ease, transform 0.2s ease, box-shadow 0.2s ease;
-    box-shadow: 0 2px 8px rgba(var(--theme-rgb), 0.25);
-}
-
-button:hover {
-    filter: brightness(1.15);
-    transform: translateY(-1px);
-
-    box-shadow: 0 4px 12px color-mix(in oklab, var(--theme-color), rgba(0, 0, 0, 0.6) 30%);
-}
-
-button:active {
-    transform: translateY(0);
-}
-
-button:disabled {
-    background: var(--color-disabled);
-    cursor: not-allowed;
-    transform: none;
-    box-shadow: none;
-}
-
-button:focus-visible,
-input:focus-visible {
-    outline: 2px solid var(--theme-color);
-    outline-offset: 2px;
-}
-
-/* Small inline button — resets base button to compact size */
-.btn-sm {
-    width: auto;
-    padding: 6px 12px;
-    margin: 0;
-    font-size: 12px;
-    border-radius: 6px;
-}
-
-/* Ghost/subtle button — for secondary actions */
-.btn-ghost {
-    width: auto;
-    padding: 6px 12px;
-    margin: 0;
-    background: rgba(var(--theme-rgb), 0.08);
-    color: var(--text-secondary);
-    border: 1px solid rgba(var(--theme-rgb), 0.15);
-    box-shadow: none;
-    font-size: 12px;
-    font-weight: 500;
-    border-radius: 6px;
-}
-
-.btn-ghost:hover {
-    background: rgba(var(--theme-rgb), 0.15);
-    color: var(--theme-color);
-    transform: none;
-    box-shadow: none;
-}
-
 .link-button {
     background: none;
     color: var(--theme-color);
@@ -388,8 +408,6 @@ input:focus-visible {
 .link-button:hover {
     background: rgba(var(--theme-rgb), 0.06);
     color: var(--theme-color);
-    transform: none;
-    box-shadow: none;
 }
 
 .status {
@@ -401,15 +419,15 @@ input:focus-visible {
 }
 
 .success {
-    background: rgba(16, 185, 129, 0.1);
+    background: var(--color-success-bg);
     color: var(--color-success);
-    border: 1px solid rgba(16, 185, 129, 0.2);
+    border: 1px solid var(--color-success-border);
 }
 
 .error {
-    background: rgba(239, 68, 68, 0.1);
+    background: var(--color-error-bg);
     color: var(--color-error);
-    border: 1px solid rgba(239, 68, 68, 0.2);
+    border: 1px solid var(--color-error-border);
 }
 
 .info {
@@ -522,41 +540,7 @@ input:focus-visible {
     display: flex;
     flex-direction: column;
     padding-top: env(safe-area-inset-top, 0px);
-    background: rgba(255, 255, 255, 0.9);
-}
-
-.header {
-    background: transparent;
-    color: var(--text-primary);
-    padding: 16px 24px;
-    display: flex;
-    justify-content: space-between;
-    align-items: center;
-}
-
-.server-header-icon {
-    border-radius: 6px;
-    object-fit: cover;
-}
-
-.header h1 {
-    font-weight: 700;
-    font-size: 20px;
-    letter-spacing: -0.3px;
-    color: var(--text-primary);
-}
-
-.header-actions {
-    display: flex;
-    align-items: center;
-    gap: 12px;
-}
-
-.header-app-name {
-    font-size: 13px;
-    font-weight: 500;
-    color: var(--text-muted);
-    letter-spacing: 0.5px;
+    background: var(--bg-surface-strong);
 }
 
 .admin-badge {
@@ -570,35 +554,35 @@ input:focus-visible {
     border: 1px solid rgba(var(--theme-rgb), 0.15);
 }
 
-.logout-btn,
-.admin-btn {
+.logout-btn {
     width: auto;
     padding: 8px 16px;
     font-size: 13px;
     margin: 0;
     border-radius: 8px;
-    background: rgba(0, 0, 0, 0.04);
+    background: var(--bg-tint);
     border: 1px solid var(--border-normal);
     box-shadow: none;
     font-weight: 500;
+    color: var(--text-secondary);
 }
 
-.logout-btn:hover,
-.admin-btn:hover {
-    background: rgba(0, 0, 0, 0.06);
-    transform: none;
-    box-shadow: none;
+.logout-btn:hover {
+    background: var(--bg-tint-hover);
 }
 
 .admin-btn {
+    width: auto;
     background: none;
     border: none;
     padding: 0;
+    margin: 0;
     margin-left: 4px;
     font-size: 18px;
     opacity: 0.5;
     color: var(--text-secondary);
     text-decoration: none;
+    box-shadow: none;
 }
 
 .admin-btn:hover {
@@ -624,29 +608,45 @@ input:focus-visible {
     background: transparent;
 }
 
-.sidebar-header {
-    padding: 16px 16px;
-    font-weight: 700;
-    font-size: 14px;
-    color: var(--text-primary);
+.sidebar-brand {
     display: flex;
-    justify-content: space-between;
     align-items: center;
-    text-transform: uppercase;
-    letter-spacing: 0.5px;
+    gap: 10px;
+    padding: 16px 16px 12px;
+}
+
+.sidebar-brand h1 {
+    font-weight: 700;
+    font-size: 16px;
+    letter-spacing: -0.3px;
+    color: var(--text-primary);
+    margin: 0;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+}
+
+.sidebar-brand-info {
+    flex: 1;
+    min-width: 0;
+}
+
+.server-brand-icon {
+    border-radius: 8px;
+    object-fit: cover;
+    flex-shrink: 0;
 }
 
 .sidebar-section {
     display: flex;
     flex-direction: column;
     min-height: 0;
-}
-
-.sidebar-section:first-child {
     flex: 1;
+    margin-top: 25px;
 }
 
-.sidebar-section:last-of-type {
+/* DMs section: constrained height */
+.sidebar-section + .sidebar-section {
     flex: 0 0 auto;
     max-height: 40%;
 }
@@ -682,15 +682,11 @@ input:focus-visible {
     color: var(--sidebar-text);
     border: none;
     border-radius: 0;
-    cursor: pointer;
     box-shadow: none;
     opacity: 0.6;
 }
 
 .add-room-btn:hover {
-    filter: none;
-    transform: none;
-    box-shadow: none;
     opacity: 1;
 }
 
@@ -778,7 +774,8 @@ input:focus-visible {
     font-size: 13px;
     text-align: left;
     border-radius: 6px;
-    cursor: pointer;
+    margin: 0;
+    box-shadow: none;
 }
 
 .room-context-item:hover {
@@ -790,7 +787,7 @@ input:focus-visible {
 }
 
 .room-context-danger:hover {
-    background: rgba(239, 68, 68, 0.1);
+    background: var(--color-error-bg);
 }
 
 .room-context-divider {
@@ -868,7 +865,6 @@ input:focus-visible {
     font-size: 12px;
     padding: 2px 4px;
     margin: 0;
-    cursor: pointer;
     line-height: 1;
     border-radius: 4px;
     box-shadow: none;
@@ -878,8 +874,6 @@ input:focus-visible {
 .folder-action-btn:hover {
     color: var(--theme-color);
     background: rgba(var(--theme-rgb), 0.1);
-    transform: none;
-    box-shadow: none;
 }
 
 .folder-content {
@@ -932,7 +926,6 @@ input:focus-visible {
     border: none;
     border-radius: 8px;
     font-size: 14px;
-    cursor: pointer;
     text-align: left;
     font-weight: 500;
     transition: background 0.2s ease, color 0.2s ease;
@@ -962,8 +955,6 @@ input:focus-visible {
 .sidebar-settings-btn:hover {
     background: rgba(0, 0, 0, 0.03);
     color: var(--text-primary);
-    transform: none;
-    box-shadow: none;
 }
 
 /* ═══════════════════════════════════════════
@@ -978,7 +969,7 @@ input:focus-visible {
     align-items: center;
     padding: 8px 0;
     gap: 4px;
-    background: rgba(255, 255, 255, 0.2);
+    background: var(--bg-strip);
     overflow-y: auto;
     overflow-x: hidden;
     scrollbar-width: none;
@@ -1098,7 +1089,6 @@ input:focus-visible {
     font-size: 12px;
     line-height: 18px;
     text-align: center;
-    cursor: pointer;
     opacity: 0;
     transition: opacity 0.15s ease;
     z-index: 10;
@@ -1126,7 +1116,6 @@ input:focus-visible {
     font-size: 22px;
     line-height: 40px;
     text-align: center;
-    cursor: pointer;
     border: 1px dashed rgba(var(--theme-rgb), 0.2);
     padding: 0;
     margin: 4px 0 0;
@@ -1141,8 +1130,6 @@ input:focus-visible {
     color: var(--theme-color);
     border-color: var(--theme-color);
     border-radius: 12px;
-    transform: none;
-    box-shadow: none;
 }
 
 .add-server-preview {
@@ -1237,30 +1224,138 @@ input:focus-visible {
 }
 
 /* ═══════════════════════════════════════════
-   Chat Area
+   Room Content Area
    ═══════════════════════════════════════════ */
 
-.chat-area {
+.room-content {
     flex: 1;
     display: flex;
     flex-direction: column;
-    background: var(--bg-surface);
+    background: var(--bg-room-content);
+    position: relative;
+    min-width: 0;
+    overflow: hidden;
 }
 
-/* Prominent room name display */
-.chat-area-title {
-    text-align: center;
-    padding: 24px 20px 8px;
-    max-width: 800px;
-    margin: 0 auto;
-    width: 100%;
+/* ═══════════════════════════════════════════
+   Room Content Topbar (room name + topic, hides on scroll)
+   ═══════════════════════════════════════════ */
+
+.room-content-topbar {
+    position: absolute;
+    top: 0;
+    left: 0;
+    right: 0;
+    z-index: 10;
+    transition: transform 0.3s ease, opacity 0.3s ease;
 }
 
-.chat-area-title h2 {
-    font-size: 36px;
+/* Progressive blur: 4 layers with increasing blur, masked to fade top→bottom */
+.topbar-blur {
+    position: absolute;
+    inset: 0;
+    bottom: -24px;
+    pointer-events: none;
+    z-index: 0;
+}
+
+.topbar-blur > div {
+    position: absolute;
+    inset: 0;
+}
+
+.topbar-blur > div:nth-child(1) {
+    backdrop-filter: blur(1px);
+    -webkit-backdrop-filter: blur(1px);
+    mask-image: linear-gradient(to bottom, black, black 50%, transparent 100%);
+    -webkit-mask-image: linear-gradient(to bottom, black, black 50%, transparent 100%);
+}
+
+.topbar-blur > div:nth-child(2) {
+    backdrop-filter: blur(4px);
+    -webkit-backdrop-filter: blur(4px);
+    mask-image: linear-gradient(to bottom, black, black 30%, transparent 70%);
+    -webkit-mask-image: linear-gradient(to bottom, black, black 30%, transparent 70%);
+}
+
+.topbar-blur > div:nth-child(3) {
+    backdrop-filter: blur(8px);
+    -webkit-backdrop-filter: blur(8px);
+    mask-image: linear-gradient(to bottom, black, black 10%, transparent 50%);
+    -webkit-mask-image: linear-gradient(to bottom, black, black 10%, transparent 50%);
+}
+
+.topbar-blur > div:nth-child(4) {
+    backdrop-filter: blur(16px);
+    -webkit-backdrop-filter: blur(16px);
+    mask-image: linear-gradient(to bottom, black, transparent 40%);
+    -webkit-mask-image: linear-gradient(to bottom, black, transparent 40%);
+}
+
+/* Gradient overlay to smooth any banding + provide subtle tint */
+.topbar-blur::after {
+    content: '';
+    position: absolute;
+    inset: 0;
+    background: linear-gradient(to bottom, var(--bg-topbar-tint), transparent);
+    pointer-events: none;
+}
+
+/* Ensure topbar content stays above blur layers */
+.room-content-topbar-row,
+.room-content-topbar-topic {
+    position: relative;
+    z-index: 1;
+}
+
+.room-content-topbar.scrolled-away {
+    transform: translateY(-100%);
+    opacity: 0;
+    pointer-events: none;
+}
+
+.room-content-topbar-row {
+    display: flex;
+    align-items: center;
+    padding: 12px 16px 4px;
+    gap: 8px;
+}
+
+.room-content-topbar-name {
+    flex: 1;
+    min-width: 0;
+    background: none;
+    border: none;
+    padding: 4px 8px;
+    margin: 0;
+    font-size: 18px;
     font-weight: 700;
     color: var(--text-primary);
-    margin: 0;
+    text-align: center;
+    border-radius: 6px;
+    box-shadow: none;
+    transition: background 0.15s ease;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+    width: auto;
+}
+
+.room-content-topbar-name:hover {
+    text-decoration: underline;
+}
+
+.room-content-topbar-name:empty {
+    display: none;
+}
+
+.room-content-topbar-topic {
+    padding: 0 16px 10px;
+    text-align: center;
+}
+
+.room-content-topbar-topic:has(.room-content-topic:empty) {
+    display: none;
 }
 
 /* Iconify base styling */
@@ -1269,28 +1364,7 @@ iconify-icon {
     vertical-align: middle;
 }
 
-.chat-header {
-    padding: 8px 20px;
-    font-weight: 500;
-    font-size: 13px;
-    color: var(--text-tertiary);
-    background: transparent;
-    display: flex;
-    align-items: center;
-    gap: 12px;
-    max-width: 800px;
-    margin: 0 auto;
-    width: 100%;
-}
-
-.chat-header-actions {
-    display: flex;
-    align-items: center;
-    gap: 4px;
-    margin-left: auto;
-}
-
-.chat-header-topic {
+.room-content-topic {
     font-weight: 400;
     font-size: 13px;
     color: var(--text-tertiary);
@@ -1299,56 +1373,40 @@ iconify-icon {
     white-space: nowrap;
 }
 
-.chat-header-btn {
-    width: auto;
+/* Floating members toggle */
+.members-toggle-fab {
+    position: absolute;
+    top: 12px;
+    right: 12px;
+    z-index: 11;
+    width: 36px;
+    height: 36px;
+    padding: 0;
     margin: 0;
-    margin-left: auto;
-    padding: 4px 10px;
-    background: none;
-    border: none;
+    background: var(--bg-surface);
+    border: 1px solid var(--border-normal);
     color: var(--text-tertiary);
-    font-size: 16px;
-    cursor: pointer;
-    border-radius: 6px;
-    box-shadow: none;
-    flex-shrink: 0;
+    font-size: 18px;
+    border-radius: 50%;
+    box-shadow: 0 1px 4px rgba(0, 0, 0, 0.06);
+    display: flex;
+    align-items: center;
+    justify-content: center;
     line-height: 1;
     transition: all 0.15s ease;
 }
 
-.chat-header-btn:hover {
-    background: rgba(var(--theme-rgb), 0.1);
+.members-toggle-fab:hover {
+    background: rgba(var(--theme-rgb), 0.08);
     color: var(--theme-color);
-    transform: none;
-    box-shadow: none;
+    border-color: rgba(var(--theme-rgb), 0.2);
+    box-shadow: 0 2px 8px rgba(0, 0, 0, 0.1);
 }
 
-.members-toggle-btn {
-    width: auto;
-    margin: 0;
-    padding: 4px 10px;
-    background: none;
-    border: none;
-    color: var(--text-tertiary);
-    font-size: 16px;
-    cursor: pointer;
-    border-radius: 6px;
-    box-shadow: none;
-    flex-shrink: 0;
-    line-height: 1;
-    transition: all 0.15s ease;
-}
-
-.members-toggle-btn:hover {
-    background: rgba(var(--theme-rgb), 0.1);
-    color: var(--theme-color);
-    transform: none;
-    box-shadow: none;
-}
-
-.members-toggle-btn.active {
+.members-toggle-fab.active {
     background: rgba(var(--theme-rgb), 0.12);
     color: var(--theme-color);
+    border-color: rgba(var(--theme-rgb), 0.25);
 }
 
 .user-avatar {
@@ -1359,6 +1417,9 @@ iconify-icon {
 
 .mobile-hint {
     display: none;
+    font-size: 12px;
+    margin-top: 10px;
+    color: var(--gray-700);
 }
 
 /* ═══════════════════════════════════════════
@@ -1369,7 +1430,7 @@ iconify-icon {
     max-width: 720px;
     margin: 0 auto;
     min-height: 100vh;
-    background: rgba(255, 255, 255, 0.9);
+    background: var(--bg-surface-strong);
 }
 
 .admin-page-header {
@@ -1395,7 +1456,7 @@ iconify-icon {
     padding: 8px 16px;
     font-size: 13px;
     border-radius: 8px;
-    background: rgba(0, 0, 0, 0.04);
+    background: var(--bg-tint);
     border: 1px solid var(--border-normal);
     color: var(--text-secondary);
     text-decoration: none;
@@ -1404,7 +1465,7 @@ iconify-icon {
 }
 
 .admin-back-btn:hover {
-    background: rgba(0, 0, 0, 0.06);
+    background: var(--bg-tint-hover);
 }
 
 .admin-page-content {
@@ -1412,7 +1473,7 @@ iconify-icon {
 }
 
 .close-btn {
-    background: rgba(0, 0, 0, 0.05);
+    background: var(--bg-tint);
     color: var(--text-tertiary);
     width: auto;
     padding: 4px 10px;
@@ -1424,10 +1485,8 @@ iconify-icon {
 }
 
 .close-btn:hover {
-    background: rgba(0, 0, 0, 0.08);
+    background: var(--bg-tint-strong);
     color: var(--text-primary);
-    transform: none;
-    box-shadow: none;
 }
 
 .admin-section {
@@ -1566,11 +1625,11 @@ iconify-icon {
 }
 
 .invite-item {
-    background: rgba(255, 255, 255, 0.6);
+    background: var(--bg-surface-dim);
     padding: 12px;
     border-radius: 8px;
     margin-bottom: 8px;
-    border: 1px solid rgba(var(--theme-rgb), 0.08);
+    border: 1px solid var(--border-normal);
     display: flex;
     align-items: center;
     gap: 8px;
@@ -1621,7 +1680,7 @@ iconify-icon {
 }
 
 .pending-user {
-    background: rgba(255, 255, 255, 0.8);
+    background: var(--bg-surface-strong);
     padding: 16px;
     border-radius: 10px;
     margin-bottom: 10px;
@@ -1655,7 +1714,7 @@ iconify-icon {
 
 .approve-btn {
     background: var(--color-success);
-    box-shadow: 0 2px 6px rgba(16, 185, 129, 0.25);
+    box-shadow: 0 2px 6px var(--color-success-shadow);
 }
 
 .approve-btn:hover {
@@ -1664,7 +1723,7 @@ iconify-icon {
 
 .reject-btn {
     background: var(--color-error);
-    box-shadow: 0 2px 6px rgba(239, 68, 68, 0.25);
+    box-shadow: 0 2px 6px var(--color-error-shadow);
 }
 
 .reject-btn:hover {
@@ -1676,14 +1735,14 @@ iconify-icon {
    ═══════════════════════════════════════════ */
 
 .user-item {
-    background: rgba(255, 255, 255, 0.6);
+    background: var(--bg-surface-dim);
     padding: 12px 16px;
     border-radius: 10px;
     margin-bottom: 8px;
     display: flex;
     justify-content: space-between;
     align-items: center;
-    border: 1px solid rgba(var(--theme-rgb), 0.06);
+    border: 1px solid var(--border-normal);
 }
 
 .user-info {
@@ -1713,9 +1772,9 @@ iconify-icon {
 }
 
 .user-role.moderator {
-    background: rgba(245, 158, 11, 0.12);
+    background: var(--color-warning-bg);
     color: var(--color-warning);
-    border: 1px solid rgba(245, 158, 11, 0.2);
+    border: 1px solid var(--color-warning-border);
 }
 
 .user-role.user {
@@ -1758,7 +1817,7 @@ iconify-icon {
     right: -380px;
     width: 380px;
     height: 100dvh;
-    background: rgba(255, 255, 255, 0.98);
+    background: var(--bg-surface-opaque);
     border-left: 1px solid var(--border-normal);
     box-shadow: -4px 0 16px rgba(0, 0, 0, 0.06);
     transition: right 0.3s ease;
@@ -1776,7 +1835,7 @@ iconify-icon {
     display: flex;
     justify-content: space-between;
     align-items: center;
-    background: rgba(248, 250, 252, 0.8);
+    background: var(--bg-header);
 }
 
 .settings-panel-header h2 {
@@ -1810,8 +1869,6 @@ iconify-icon {
     color: var(--text-primary);
 }
 
-
-
 /* ═══════════════════════════════════════════
    Settings Page Layout
    ═══════════════════════════════════════════ */
@@ -1820,7 +1877,7 @@ iconify-icon {
     max-width: 960px;
     margin: 0 auto;
     min-height: 100vh;
-    background: rgba(255, 255, 255, 0.9);
+    background: var(--bg-surface-strong);
     display: flex;
     flex-direction: column;
 }
@@ -1855,7 +1912,6 @@ iconify-icon {
     color: var(--text-secondary);
     font-size: 14px;
     font-weight: 500;
-    cursor: pointer;
     text-align: left;
     box-shadow: none;
     transition: background 0.15s ease, color 0.15s ease;
@@ -1864,8 +1920,6 @@ iconify-icon {
 .settings-nav-item:hover {
     background: rgba(var(--theme-rgb), 0.06);
     color: var(--theme-color);
-    transform: none;
-    box-shadow: none;
 }
 
 .settings-nav-item.active {
@@ -1953,20 +2007,17 @@ iconify-icon {
     margin: 0;
     border: 1px solid rgba(var(--theme-rgb), 0.1);
     border-radius: 10px;
-    background: rgba(255, 255, 255, 0.4);
+    background: var(--bg-surface-subtle);
     color: var(--text-secondary);
     font-size: 13px;
     font-weight: 500;
-    cursor: pointer;
     box-shadow: none;
     transition: all 0.15s ease;
 }
 
 .color-scheme-option:hover {
     border-color: rgba(var(--theme-rgb), 0.25);
-    background: rgba(255, 255, 255, 0.6);
-    transform: none;
-    box-shadow: none;
+    background: var(--bg-surface-dim);
 }
 
 .color-scheme-option.active {
@@ -1999,14 +2050,14 @@ iconify-icon {
     padding: 14px 16px;
     border-radius: 10px;
     border: 1px solid rgba(var(--theme-rgb), 0.08);
-    background: rgba(255, 255, 255, 0.5);
+    background: var(--bg-surface-faint);
     cursor: pointer;
     transition: all 0.2s ease;
 }
 
 .theme-card:hover {
     border-color: rgba(var(--theme-rgb), 0.2);
-    background: rgba(255, 255, 255, 0.7);
+    background: var(--bg-surface-dim);
 }
 
 .theme-card.active {
@@ -2056,10 +2107,6 @@ iconify-icon {
     padding: 6px 14px;
 }
 
-.theme-select-btn:hover {
-    transform: none;
-}
-
 /* ═══════════════════════════════════════════
    Theme Preview
    ═══════════════════════════════════════════ */
@@ -2073,7 +2120,7 @@ iconify-icon {
 .preview-section {
     padding: 14px 16px;
     border-radius: 10px;
-    background: rgba(255, 255, 255, 0.4);
+    background: var(--bg-surface-subtle);
     border: 1px solid rgba(var(--theme-rgb), 0.06);
 }
 
@@ -2154,7 +2201,7 @@ iconify-icon {
     border: 1px solid rgba(var(--theme-rgb), 0.2);
     border-radius: 10px;
     font-size: 14px;
-    background: rgba(255, 255, 255, 0.6);
+    background: var(--bg-surface-dim);
     color: var(--text-primary);
 }
 
@@ -2232,9 +2279,9 @@ iconify-icon {
 }
 
 .member-remove-btn {
-    background: rgba(239, 68, 68, 0.1);
+    background: var(--color-error-bg);
     color: var(--color-error);
-    border-color: rgba(239, 68, 68, 0.2);
+    border-color: var(--color-error-border);
 }
 
 .member-remove-btn:hover {
@@ -2257,7 +2304,6 @@ iconify-icon {
     color: var(--color-error);
     font-size: 13px;
     font-weight: 600;
-    cursor: pointer;
     transition: background 0.15s ease;
 }
 
@@ -2272,6 +2318,7 @@ iconify-icon {
     flex-direction: column;
     background: transparent;
     flex-shrink: 0;
+    padding-top: 56px;
 }
 
 .members-panel.open {
@@ -2292,7 +2339,6 @@ iconify-icon {
     background: none;
     border: none;
     color: var(--text-muted);
-    cursor: pointer;
     box-shadow: none;
     line-height: 1;
     opacity: 0.6;
@@ -2300,8 +2346,6 @@ iconify-icon {
 
 .panel-close-btn:hover {
     opacity: 1;
-    transform: none;
-    box-shadow: none;
 }
 
 .members-panel-count {
@@ -2353,7 +2397,7 @@ iconify-icon {
 
 .room-settings-content {
     position: relative;
-    background: rgba(255, 255, 255, 0.98);
+    background: var(--bg-surface-opaque);
     border-radius: 16px;
     width: 400px;
     max-width: 90vw;
@@ -2368,7 +2412,7 @@ iconify-icon {
     align-items: center;
     padding: 18px 24px;
     border-bottom: 1px solid rgba(var(--theme-rgb), 0.08);
-    background: rgba(248, 250, 252, 0.6);
+    background: var(--bg-header-dim);
     border-radius: 16px 16px 0 0;
 }
 
@@ -2435,7 +2479,7 @@ iconify-icon {
 }
 
 .room-settings-danger {
-    border: 1px solid rgba(239, 68, 68, 0.2);
+    border: 1px solid var(--color-error-border);
     border-radius: 10px;
     padding: 18px;
     background: rgba(239, 68, 68, 0.04);
@@ -2474,16 +2518,13 @@ iconify-icon {
     font-size: 20px;
     margin: 0;
     border: none;
-    cursor: pointer;
     border-radius: 8px;
     box-shadow: none;
     transition: background 0.2s ease;
 }
 
 .menu-toggle:hover {
-    background: rgba(0, 0, 0, 0.05);
-    transform: none;
-    box-shadow: none;
+    background: var(--bg-tint);
 }
 
 /* ═══════════════════════════════════════════
@@ -2496,39 +2537,13 @@ iconify-icon {
     }
 
     .menu-toggle {
-        display: block;
+        display: flex;
     }
 
     .container {
         border-radius: 0;
         border-left: none;
         border-right: none;
-    }
-
-    .header {
-        padding: 14px 16px;
-        flex-wrap: wrap;
-        border-radius: 0;
-    }
-
-    .header h1 {
-        font-size: 18px;
-    }
-
-    .header-actions {
-        gap: 8px;
-        font-size: 13px;
-    }
-
-    .logout-btn,
-    .admin-btn {
-        padding: 6px 12px;
-        font-size: 12px;
-    }
-
-    .admin-badge {
-        font-size: 10px;
-        padding: 3px 6px;
     }
 
     .sidebar {
@@ -2538,7 +2553,7 @@ iconify-icon {
         width: 100%;
         height: 100dvh;
         z-index: 100;
-        background: rgba(255, 255, 255, 0.98);
+        background: var(--bg-surface-opaque);
         transition: left 0.3s ease;
         box-shadow: 4px 0 20px rgba(0, 0, 0, 0.08);
         overscroll-behavior-x: none;
@@ -2574,15 +2589,6 @@ iconify-icon {
         transition: none;
     }
 
-    .chat-header-btn {
-        min-width: 44px;
-        min-height: 44px;
-        display: flex;
-        align-items: center;
-        justify-content: center;
-        padding: 8px 12px;
-    }
-
     .sidebar-section-header {
         font-size: 16px;
         padding: 14px 16px 8px;
@@ -2611,13 +2617,11 @@ iconify-icon {
         padding: 8px 12px;
     }
 
-    .members-toggle-btn {
-        min-width: 44px;
-        min-height: 44px;
-        display: flex;
-        align-items: center;
-        justify-content: center;
-        padding: 8px 12px;
+    .members-toggle-fab {
+        width: 44px;
+        height: 44px;
+        top: 8px;
+        right: 8px;
     }
 
     .btn-sm {
@@ -2626,8 +2630,17 @@ iconify-icon {
         font-size: 13px;
     }
 
-    .chat-area {
+    .room-content {
         width: 100%;
+    }
+
+    /* Mobile topbar: slower fade for natural feel */
+    .room-content-topbar {
+        transition: transform 0.4s ease, opacity 0.4s ease;
+    }
+
+    .room-content-topbar-name {
+        font-size: 16px;
     }
 
     .preference-input {
@@ -2663,18 +2676,8 @@ iconify-icon {
         width: 260px;
         height: 100%;
         z-index: 100;
-        background: rgba(255, 255, 255, 0.98);
+        background: var(--bg-surface-opaque);
         box-shadow: -4px 0 20px rgba(0, 0, 0, 0.1);
-    }
-
-    .chat-header {
-        display: flex;
-        align-items: center;
-        justify-content: space-between;
-    }
-
-    .chat-area-title h2 {
-        font-size: 24px;
     }
 
     .mobile-hint {
@@ -2704,16 +2707,6 @@ iconify-icon {
         white-space: nowrap;
         padding: 8px 12px;
         font-size: 13px;
-    }
-}
-
-/* Dark mode mobile overrides */
-@media (max-width: 768px) {
-    html[data-theme-dark] .sidebar {
-        background: rgba(15, 23, 42, 0.98);
-    }
-    html[data-theme-dark] .members-panel.open {
-        background: rgba(15, 23, 42, 0.98);
     }
 }
 
@@ -2852,7 +2845,6 @@ iconify-icon {
     background: rgba(var(--theme-rgb), 0.06);
     border: 1px solid rgba(var(--theme-rgb), 0.12);
     border-radius: 6px;
-    cursor: pointer;
     transition: all 0.15s ease;
 }
 
@@ -2860,12 +2852,7 @@ iconify-icon {
     background: rgba(var(--theme-rgb), 0.12);
 }
 
-/* Additional classes for cleaned HTML */
-.header-brand {
-    display: flex;
-    align-items: center;
-    gap: 10px;
-}
+/* Additional form classes */
 
 .preference-input-group {
     display: flex;
@@ -2881,12 +2868,6 @@ iconify-icon {
     font-size: 14px;
     background: rgba(255, 255, 255, 0.1);
     color: inherit;
-}
-
-.mobile-hint {
-    font-size: 12px;
-    margin-top: 10px;
-    color: var(--gray-700);
 }
 
 .form-hint-small {
@@ -2913,6 +2894,11 @@ iconify-icon {
         transition-duration: 0.01ms !important;
         animation-duration: 0.01ms !important;
     }
+}
+
+/* Offset for absolutely-positioned topbar overlay */
+#messages {
+    padding-top: 64px;
 }
 
 .empty-state {
