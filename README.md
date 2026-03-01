@@ -1,302 +1,157 @@
-# Skrīb - FastAPI + Vite Application
+# Skrib
 
-A secure collaboration application built with FastAPI backend and Vite frontend, featuring WebAuthn authentication, role-based access control, and SQLite database.
+A self-hosted, end-to-end encrypted collaboration platform. Passwordless authentication via passkeys, a plugin-based room system, and installable as a Progressive Web App. Zero-knowledge server design means the server never sees plaintext message content.
 
-## Features
+## Feature Overview
 
-### Collaboration
+| Feature | Description | Spec |
+|---|---|---|
+| End-to-End Encryption | AES-GCM 256-bit per-room keys, RSA-OAEP key exchange, epoch-based rotation | [docs/end-to-end-encryption.md](docs/end-to-end-encryption.md) |
+| Plugin System | Sandboxed plugins with manifest permissions, isolated storage, lifecycle hooks | [docs/plugin-system.md](docs/plugin-system.md) |
+| Security & Authentication | WebAuthn/Passkey auth, PRF key wrapping, registration modes, role-based access | [docs/security.md](docs/security.md) |
+| Progressive Web App | Installable standalone app, offline caching, Web Push notifications | [docs/progressive-web-app.md](docs/progressive-web-app.md) |
+| WebSocket Bus | Single-connection multiplexed messaging with namespace routing | [docs/websocket-bus.md](docs/websocket-bus.md) |
+| Rooms & Membership | Plugin-typed rooms, nestable folders, roles, DMs, notification controls | [docs/rooms-and-membership.md](docs/rooms-and-membership.md) |
+| Admin & Moderation | User approval, invite tokens, server settings, theme management | [docs/admin-and-moderation.md](docs/admin-and-moderation.md) |
+| Architecture | FastAPI + Vanilla JS, SQLite WAL, module conventions, deployment | [docs/architecture.md](docs/architecture.md) |
 
-- **Multi-Room Chat** - Create and join multiple chat rooms
-- **Direct Messages** - Private conversations between users
+## Highlights
 
-### Security
+- **Zero-knowledge**: All message content is encrypted client-side before transmission. The server stores only ciphertext.
+- **No passwords**: Authentication uses platform passkeys (biometrics, security keys). No passwords to leak or phish.
+- **Key portability**: Private keys travel between devices via WebAuthn PRF wrapping (automatic) or passphrase recovery (manual).
+- **Plugin architecture**: Room behavior is defined by plugins. Ship with chat rooms, todo lists, typing indicators, emoji reactions, and Web Push. Add your own.
+- **Self-hosted**: Single SQLite database, single Docker container. No external dependencies.
 
-- **No spying** - End-to-end Encryption (E2EE) for all messages, 0 knowledge server design
-- **Simple Auth** - Passwordless Authentication using Passkeys(WebAuthn) for easy sign-up and usage
-  - The only info required for sign-up is a username and a compatible authenticator (e.g. phone biometrics, security key)
-- **Simple Moderation**  Role-based access controls for admin, mods, and regular users.
+## Quick Start
 
-- ✅ **Manual Approval** - Admins approve new registrations
-- 🔒 **Registration Control** - Toggle registration on/off from admin panel
-- 💬 **Multi-Room Chat** - Create and join multiple chat rooms
-- 📦 **Process Isolation** - Each room runs in its own process
-- 💾 **SQLite Backend** - Reliable database with proper locking
-- 🔄 **WAL Mode** - Write-Ahead Logging for better concurrency
-- ⚡ **Vite Frontend** - Modern build tooling with HMR
-
-## Project Structure
-
-```
-/workspace
-├── backend/              # FastAPI backend
-│   ├── skrib/       # Python package
-│   │   ├── chat_server_webauthn.py
-│   │   └── admin_cli.py
-│   ├── pyproject.toml
-│   └── util/
-├── frontend/            # Vite frontend
-│   ├── src/
-│   │   ├── main.js     # Main JavaScript entry point
-│   │   └── style.css   # Styles
-│   ├── index.html      # HTML template
-│   ├── package.json
-│   └── vite.config.js
-├── Dockerfile          # Multi-stage build
-└── docker-compose.yml
-```
-
-## Development
-
-### Prerequisites
-
-- Docker and Docker Compose (recommended)
-- OR Node.js 20+ and Python 3.13+ (for local development)
-
-### Quick Start with Docker
-
-Build and run the entire application:
+### Docker
 
 ```bash
 docker-compose up --build
 ```
 
-The application will be available at <http://localhost:8000>
+App available at http://localhost:8000. The first registered user is automatically approved as admin.
 
-### Development Mode with Hot Reload
-
-Run both backend and frontend with hot reload:
+### Local Development
 
 ```bash
-# Start backend with hot reload
-docker-compose up app
+# Backend
+cd backend && pip install -e . && uvicorn skrib.main:app --reload --host 0.0.0.0 --port 8000
 
-# In another terminal, start frontend dev server with HMR
-docker-compose --profile dev up frontend-dev
+# Frontend (separate terminal)
+cd frontend && npm install && npm run dev
 ```
 
-- Backend: <http://localhost:8000> (auto-reloads on Python file changes)
-- Frontend dev server: <http://localhost:5173> (with Hot Module Replacement)
+Backend runs on port 8000, frontend dev server on port 5173 with API proxying.
 
-During development, the Vite dev server proxies API requests to the backend.
+### First Run
 
-### Local Development (without Docker)
+1. Navigate to the app and register with a username + recovery passphrase
+2. Enroll a passkey using your platform authenticator (fingerprint, Face ID, security key)
+3. The first user is auto-approved and made admin
+4. Configure registration mode in the admin panel (Settings > Registration)
 
-#### Backend
+## Project Structure
 
-```bash
-cd backend
-pip install -e .
-python -m uvicorn skrib.chat_server_webauthn:app --reload --host 0.0.0.0 --port 8000
+```
+backend/
+  skrib/                    # FastAPI application
+    auth/                   # WebAuthn registration and login
+    rooms/                  # Room CRUD, member management, key endpoints
+    room_folders/           # Nestable folder system
+    ws/                     # Unified WebSocket bus
+    users/                  # User management, avatars
+    server/                 # Server settings, invites
+    themes/                 # Theme discovery and serving
+    plugins/                # Plugin framework (registry, bus, auth, callbacks)
+    database.py             # SQLite + WAL mode
+    dependencies.py         # Auth middleware
+    permissions.py          # Centralized permission checks
+    main.py                 # App entry, router registration
+  plugins/                  # Installed plugins
+    four43.room-type-chat/  # Chat room type
+    four43.room-type-todo/  # Todo list room type
+    four43.chat-typing/     # Typing indicators
+    four43.message-reactions/  # Emoji reactions
+    four43.web-push/        # Web Push notifications
+
+frontend/
+  src/
+    app.js                  # Main application (~2700 lines)
+    crypto.js               # E2E encryption (RSA-OAEP, AES-GCM, key wrapping)
+    login.js                # Passkey login + key recovery
+    register.js             # Registration flow
+    enroll-passkey.js       # Passkey enrollment + key generation
+    key-recovery.js         # Passphrase-based key recovery
+    admin.js                # Admin panel
+    settings.js             # User settings
+    room-settings.js        # Per-room settings
+    server-selector.js      # Multi-server support
+    theme-manager.js        # Theme loading and caching
+    utils.js                # Shared utilities
+  public/
+    sw.js                   # Service Worker (caching, push)
+    manifest.json           # PWA manifest
+
+data/                       # SQLite databases (gitignored)
+docs/                       # Feature specs (this directory)
 ```
 
-#### Frontend
+## Bundled Plugins
 
-```bash
-cd frontend
-npm install
-npm run dev
-```
+| Plugin | Type | Description |
+|---|---|---|
+| `four43.room-type-chat` | Room Type | Encrypted chat with message history, edit/delete, read receipts, desktop notifications |
+| `four43.room-type-todo` | Room Type | Collaborative todo lists with real-time sync, filtering, inline editing |
+| `four43.chat-typing` | Feature | Typing indicators with debounce and auto-timeout |
+| `four43.message-reactions` | Feature | Emoji reactions on messages with batch loading |
+| `four43.web-push` | Feature | Web Push notifications for offline users via VAPID |
 
-The Vite dev server will proxy `/api` requests to the backend at <http://localhost:8000>
+## Slash Commands
 
-## Building for Production
-
-### Build the Docker image
-
-```bash
-docker build -t skrib:latest .
-```
-
-This creates a multi-stage build that:
-
-1. Builds the frontend with Vite (optimized, minified bundles)
-2. Sets up the Python backend
-3. Copies the built frontend assets into the final image
-4. FastAPI serves the static files
-
-### Build frontend locally
-
-```bash
-cd frontend
-npm run build
-```
-
-The built files will be in `frontend/dist/` and will be served by FastAPI.
-
-## Initial Setup
-
-### Bootstrap First Admin
-
-Since there are no users initially, you need to:
-
-**Option A: Register normally then promote via CLI**
-
-1. Enable registration: `docker-compose exec app python skrib/admin_cli.py toggle-reg`
-2. Register through web interface (get approval code)
-3. Approve yourself: `docker-compose exec app python skrib/admin_cli.py approve <CODE>`
-4. Make yourself admin: `docker-compose exec app python skrib/admin_cli.py set-admin <USERNAME>`
-
-**Option B: Use CLI interactive mode**
-
-```bash
-docker-compose exec app python skrib/admin_cli.py
-
-admin> toggle-reg           # Enable registration
-admin> list                 # Check pending users
-admin> approve A1B2C3D4E5F6 # Approve user
-admin> set-admin alice      # Make them admin
-admin> toggle-reg           # Disable registration
-```
+| Command | Description |
+|---|---|
+| `/help` | List available commands |
+| `/invite <username>` | Invite a user to the current room (distributes encryption keys) |
+| `/nick <name>` | Set display nickname (`/nick clear` to reset) |
+| `/leave` or `/part` | Leave the current channel |
+| `/kick <username>` | Remove a user (requires room op or moderator) |
+| `/topic [text]` | View or set the channel topic |
 
 ## Environment Variables
 
-### Frontend (Vite)
-
-Create `frontend/.env.local` for local development:
-
-```env
-VITE_API_URL=http://localhost:8000/api
-```
-
-In production (Docker build), the API URL defaults to `/api` (relative).
-
-### Backend
-
-Environment variables can be set in `docker-compose.yml`:
-
-```env
-PYTHONUNBUFFERED=1
-```
+| Variable | Default | Description |
+|---|---|---|
+| `RP_ID` | `localhost` | WebAuthn Relying Party ID (your domain) |
+| `SKRIB_REGISTRATION_MODE` | (from DB) | Override registration mode: `open`, `closed`, `invite_only`, `approval_required` |
+| `VITE_API_URL` | `/api` | Frontend API base URL (set in `frontend/.env.local` for dev) |
 
 ## API Documentation
 
-Once running, visit:
+With the server running:
 
-- Swagger UI: <http://localhost:8000/docs>
-- ReDoc: <http://localhost:8000/redoc>
-
-## Technology Stack
-
-### Backend
-
-- **FastAPI** - Modern Python web framework
-- **SQLite** - Embedded database with WAL mode
-- **WebAuthn** - Passwordless authentication
-- **Uvicorn** - ASGI server
-- **Pydantic** - Data validation
-
-### Frontend
-
-- **Vite** - Build tool and dev server with HMR
-- **Vanilla JavaScript** - Modern ES modules, no framework overhead
-- **CSS3** - Modern styling
-
-## Best Practices Implemented
-
-1. **Separation of Concerns**: Backend and frontend are in separate directories
-2. **Multi-stage Docker Build**: Optimized image size, frontend built during Docker build
-3. **Development Experience**: Hot reload for both backend (uvicorn --reload) and frontend (Vite HMR)
-4. **Environment-based Configuration**: Different configs for dev/prod via environment variables
-5. **Static File Serving**: FastAPI serves pre-built Vite assets in production
-6. **API Proxying**: Vite dev server proxies `/api` requests to backend during development
-7. **Type Safety**: Pydantic models for request/response validation
-8. **Database Safety**: WAL mode, proper locking, 30s timeout
-
-## Database Schema
-
-The SQLite database (`chat.db`) contains:
-
-### Tables
-
-**users** - Approved users
-
-- username, credential_id, public_key, role, approved, approved_at, approved_by
-
-**pending_users** - Awaiting approval
-
-- username, credential_id, public_key, approval_code, registered_at
-
-**challenges** - WebAuthn challenges
-
-- challenge, type, username, timestamp
-
-**settings** - Server configuration
-
-- key, value (stores registration_enabled flag)
-
-**messages** - Chat messages
-
-- id, room_id, username, message, timestamp
-
-### SQLite Configuration
-
-The database uses:
-
-- **WAL Mode** (Write-Ahead Logging) - Allows concurrent reads with writes
-- **30 second timeout** - Handles busy database gracefully
-- **Proper locking** - Thread-safe operations
-- **Indices** - Fast message queries by room and timestamp
-
-## Admin CLI Commands
-
-```bash
-# Interactive mode
-docker-compose exec app python skrib/admin_cli.py
-
-# Or direct commands
-python skrib/admin_cli.py list                    # Show pending users
-python skrib/admin_cli.py approved                # Show all approved users
-python skrib/admin_cli.py approve <CODE>          # Approve by code
-python skrib/admin_cli.py reject <CODE>           # Reject registration
-python skrib/admin_cli.py revoke <USERNAME>       # Remove user access
-python skrib/admin_cli.py set-admin <USERNAME>    # Promote to admin
-python skrib/admin_cli.py remove-admin <USERNAME> # Demote from admin
-python skrib/admin_cli.py toggle-reg              # Toggle registration on/off
-python skrib/admin_cli.py status                  # Show system status
-```
-
-## Workflow
-
-### Registration Flow
-
-1. Admin enables registration (toggle in admin panel or CLI)
-2. Friend visits the site and registers with WebAuthn
-3. They receive an approval code (e.g., `A1B2C3D4E5F6`)
-4. Friend tells you the code
-5. You approve via admin panel or CLI
-6. Admin disables registration
-7. Friend can now login!
-
-### Daily Use
-
-- Registration stays **disabled** by default
-- Enable it briefly when friends are nearby
-- Disable immediately after they register
-- Approve their registration
-- They can now access the chat
-
-## Security Notes
-
-- Keep registration **disabled** by default
-- Each user gets a unique approval code
-- Private keys never leave the user's device
-- Admin role required for user management
-- Cannot delete the last admin user
-- Session tokens are simple (upgrade to JWT for production)
-- Database file permissions should be restricted
+- Swagger UI: http://localhost:8000/docs
+- ReDoc: http://localhost:8000/redoc
 
 ## Browser Compatibility
 
-WebAuthn requires:
+Requires WebAuthn Level 2 support:
 
 - Chrome/Edge 67+
 - Firefox 60+
-- Safari 13+
+- Safari 14+ (13+ partial)
 
-## Tips
+PRF extension (automatic key recovery) requires:
 
-- Use the admin panel toggle for quick registration control
-- Pending users show up in real-time in the admin panel
-- Database is automatically created on first run
-- Frontend HMR provides instant feedback during development
-- Build the Docker image for production deployment
+- Chrome/Edge 116+
+- Safari 18+
+- Firefox: not yet supported (falls back to passphrase recovery)
+
+## Technology Stack
+
+**Backend**: FastAPI, SQLite (WAL mode), py_webauthn, Pydantic, Uvicorn, Pillow (avatars)
+
+**Frontend**: Vanilla JavaScript (ES modules), Vite, Web Crypto API, IndexedDB, SortableJS
+
+**Infrastructure**: Docker, single-container deployment, no external services required
