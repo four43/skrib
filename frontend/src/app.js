@@ -897,10 +897,17 @@ async function initializeChatView() {
     }
 
     if (currentRole === 'admin' || currentRole === 'moderator') {
-        // Show admin panel button
-        document.getElementById('admin-panel-btn').classList.remove('hidden');
+        // Show admin settings icon in sidebar brand
+        document.querySelector('.admin-btn-icon')?.classList.remove('hidden');
         // Show folder management button
         document.getElementById('add-folder-btn').classList.remove('hidden');
+    } else {
+        // Non-admins: prevent the brand link from navigating
+        const brandLink = document.getElementById('admin-panel-btn');
+        if (brandLink) {
+            brandLink.removeAttribute('href');
+            brandLink.style.cursor = 'default';
+        }
     }
 
     await loadRooms();
@@ -1124,7 +1131,11 @@ function toggleFolder(folderId) {
     const toggle = document.querySelector(`.folder-toggle[data-folder-id="${folderId}"]`);
     const badge = document.querySelector(`.folder-badge[data-folder-id="${folderId}"]`);
     if (content) content.classList.toggle('collapsed');
-    if (toggle) toggle.innerHTML = content?.classList.contains('collapsed') ? '<iconify-icon icon="lucide:chevron-right"></iconify-icon>' : '<iconify-icon icon="lucide:chevron-down"></iconify-icon>';
+    if (toggle) {
+        const isCollapsed = content?.classList.contains('collapsed');
+        toggle.querySelector('.folder-icon-arrow').innerHTML = isCollapsed ? '<iconify-icon icon="lucide:chevron-right"></iconify-icon>' : '<iconify-icon icon="lucide:chevron-down"></iconify-icon>';
+        toggle.querySelector('.folder-icon-folder').innerHTML = isCollapsed ? '<iconify-icon icon="lucide:folder"></iconify-icon>' : '<iconify-icon icon="lucide:folder-open"></iconify-icon>';
+    }
     if (badge) updateFolderBadge(folderId);
 }
 
@@ -1210,7 +1221,9 @@ function createFolderElement(folder) {
     const toggle = document.createElement('span');
     toggle.className = 'folder-toggle';
     toggle.dataset.folderId = folder.folder_id;
-    toggle.innerHTML = isCollapsed ? '<iconify-icon icon="lucide:chevron-right"></iconify-icon>' : '<iconify-icon icon="lucide:chevron-down"></iconify-icon>';
+    const folderIcon = isCollapsed ? 'lucide:folder' : 'lucide:folder-open';
+    const arrowIcon = isCollapsed ? 'lucide:chevron-right' : 'lucide:chevron-down';
+    toggle.innerHTML = `<span class="folder-icon-folder"><iconify-icon icon="${folderIcon}"></iconify-icon></span><span class="folder-icon-arrow"><iconify-icon icon="${arrowIcon}"></iconify-icon></span>`;
     toggle.onclick = (e) => { e.stopPropagation(); toggleFolder(folder.folder_id); };
 
     const name = document.createElement('span');
@@ -2577,6 +2590,12 @@ document.addEventListener('DOMContentLoaded', () => {
     const menuToggle = document.getElementById('menu-toggle');
     if (menuToggle) {
         menuToggle.addEventListener('click', toggleSidebar);
+    }
+
+    // Sidebar close button (mobile)
+    const sidebarCloseBtn = document.getElementById('sidebar-close-btn');
+    if (sidebarCloseBtn) {
+        sidebarCloseBtn.addEventListener('click', hideSidebar);
     }
 
     // Sidebar overlay (mobile)

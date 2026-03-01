@@ -151,10 +151,6 @@ html[data-theme-dark] {
 }
 
 /* Minimal dark overrides for components that change variable references */
-html[data-theme-dark] .members-toggle-fab {
-    background: var(--bg-surface-elevated);
-    border-color: var(--border-strong);
-}
 
 html[data-theme-dark] .settings-nav {
     background: var(--bg-header);
@@ -599,23 +595,45 @@ input[type="password"]::placeholder {
     background: var(--bg-tint-hover);
 }
 
-.admin-btn {
-    width: auto;
-    background: none;
-    border: none;
-    padding: 0;
-    margin: 0;
-    margin-left: 4px;
+.sidebar-brand-link {
+    display: flex;
+    align-items: center;
+    gap: 10px;
+    flex: 1;
+    min-width: 0;
+    overflow: hidden;
+    text-decoration: none;
+    color: var(--text-primary);
+}
+
+.admin-btn-icon {
+    flex-shrink: 0;
     font-size: 18px;
     opacity: 0.5;
     color: var(--text-secondary);
-    text-decoration: none;
-    box-shadow: none;
 }
 
-.admin-btn:hover {
+.sidebar-brand-link:hover .admin-btn-icon {
     opacity: 0.85;
+}
+
+.sidebar-close-btn {
+    display: none;
+    width: auto;
     background: none;
+    border: none;
+    padding: 8px;
+    margin: 0;
+    font-size: 20px;
+    color: var(--text-secondary);
+    cursor: pointer;
+    flex-shrink: 0;
+    box-shadow: none;
+    border-radius: 0;
+}
+
+.sidebar-close-btn:hover {
+    color: var(--text-primary);
 }
 
 .main {
@@ -785,11 +803,11 @@ input[type="password"]::placeholder {
     position: fixed;
     z-index: 1000;
     min-width: 160px;
-    background: var(--bg-primary);
+    background: var(--bg-surface-opaque);
     border: 1px solid rgba(var(--theme-rgb), 0.15);
     border-radius: 8px;
     padding: 4px;
-    box-shadow: 0 4px 16px rgba(0, 0, 0, 0.15);
+    box-shadow: 0 4px 16px rgba(0, 0, 0, 0.25);
 }
 
 .room-context-item {
@@ -853,12 +871,25 @@ input[type="password"]::placeholder {
 }
 
 .folder-toggle {
-    font-size: 8px;
-    width: 14px;
+    font-size: 12px;
+    width: 16px;
     flex-shrink: 0;
     text-align: center;
-    color: var(--text-muted);
+    color: var(--text-secondary);
     user-select: none;
+}
+
+.folder-icon-arrow {
+    display: none;
+    font-size: 8px;
+}
+
+.folder-header:hover .folder-icon-folder {
+    display: none;
+}
+
+.folder-header:hover .folder-icon-arrow {
+    display: inline;
 }
 
 .folder-name {
@@ -867,7 +898,7 @@ input[type="password"]::placeholder {
     font-weight: 600;
     text-transform: uppercase;
     letter-spacing: 0.5px;
-    color: var(--text-muted);
+    color: var(--text-secondary);
     overflow: hidden;
     text-overflow: ellipsis;
     white-space: nowrap;
@@ -905,7 +936,7 @@ input[type="password"]::placeholder {
 }
 
 .folder-content {
-    padding-left: 8px;
+    padding-left: 16px;
     overflow: hidden;
     transition: max-height 0.2s ease;
 }
@@ -1325,7 +1356,7 @@ input[type="password"]::placeholder {
     content: '';
     position: absolute;
     inset: 0;
-    background: linear-gradient(to bottom, var(--bg-topbar-tint), transparent);
+    background: linear-gradient(to bottom, var(--bg-topbar-tint) 50%, transparent);
     pointer-events: none;
 }
 
@@ -1378,8 +1409,26 @@ input[type="password"]::placeholder {
 }
 
 .room-content-topbar-topic {
+    display: flex;
     padding: 0 16px 10px;
+    gap: 8px;
+}
+
+.room-content-topbar-topic::after {
+    content: '';
+    width: 44px;
+    flex-shrink: 0;
+}
+
+.room-content-topic {
+    flex: 1;
     text-align: center;
+    font-weight: 400;
+    font-size: 13px;
+    color: var(--text-secondary);
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
 }
 
 .room-content-topbar-topic:has(.room-content-topic:empty) {
@@ -1392,49 +1441,30 @@ iconify-icon {
     vertical-align: middle;
 }
 
-.room-content-topic {
-    font-weight: 400;
-    font-size: 13px;
-    color: var(--text-tertiary);
-    overflow: hidden;
-    text-overflow: ellipsis;
-    white-space: nowrap;
-}
-
-/* Floating members toggle */
-.members-toggle-fab {
-    position: absolute;
-    top: 12px;
-    right: 12px;
-    z-index: 11;
-    width: 36px;
-    height: 36px;
-    padding: 0;
+/* Members toggle in topbar */
+.members-toggle-btn {
+    width: auto;
+    background: none;
+    color: var(--text-secondary);
+    padding: 8px 12px;
+    font-size: 20px;
     margin: 0;
-    background: var(--bg-surface);
-    border: 1px solid var(--border-normal);
-    color: var(--text-tertiary);
-    font-size: 18px;
-    border-radius: 50%;
-    box-shadow: 0 1px 4px rgba(0, 0, 0, 0.06);
+    border: none;
+    border-radius: 8px;
+    box-shadow: none;
     display: flex;
     align-items: center;
     justify-content: center;
-    line-height: 1;
-    transition: all 0.15s ease;
+    transition: background 0.2s ease, color 0.2s ease;
+    flex-shrink: 0;
 }
 
-.members-toggle-fab:hover {
-    background: rgba(var(--theme-rgb), 0.08);
-    color: var(--theme-color);
-    border-color: rgba(var(--theme-rgb), 0.2);
-    box-shadow: 0 2px 8px rgba(0, 0, 0, 0.1);
+.members-toggle-btn:hover {
+    background: var(--bg-tint);
 }
 
-.members-toggle-fab.active {
-    background: rgba(var(--theme-rgb), 0.12);
+.members-toggle-btn.active {
     color: var(--theme-color);
-    border-color: rgba(var(--theme-rgb), 0.25);
 }
 
 .user-avatar {
@@ -2568,6 +2598,14 @@ iconify-icon {
         display: flex;
     }
 
+    .sidebar-close-btn {
+        display: flex;
+    }
+
+    .admin-btn-icon {
+        display: none;
+    }
+
     .container {
         border-radius: 0;
         border-left: none;
@@ -2645,13 +2683,6 @@ iconify-icon {
         padding: 8px 12px;
     }
 
-    .members-toggle-fab {
-        width: 44px;
-        height: 44px;
-        top: 8px;
-        right: 8px;
-    }
-
     .btn-sm {
         min-height: 44px;
         padding: 10px 16px;
@@ -2701,11 +2732,16 @@ iconify-icon {
         position: absolute;
         top: 0;
         right: 0;
-        width: 260px;
+        width: 100%;
         height: 100%;
         z-index: 100;
+        padding-top: 0;
         background: var(--bg-surface-opaque);
-        box-shadow: -4px 0 20px rgba(0, 0, 0, 0.1);
+        box-shadow: none;
+    }
+
+    .members-panel .sidebar-section {
+        margin-top: 0;
     }
 
     .mobile-hint {

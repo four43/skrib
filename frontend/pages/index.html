@@ -1,44 +1,7 @@
 <!DOCTYPE html>
-<html lang="en">
+<html>
 <head>
-    <meta charset="UTF-8">
-    <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover">
-    <title>Login - Skrīb</title>
-    <link rel="stylesheet" href="/src/style.css">
-    <link rel="manifest" href="/manifest.json">
-    <meta name="theme-color" content="#f1f5f9">
-    <script src="https://code.iconify.design/iconify-icon/2.3.0/iconify-icon.min.js"></script>
-    <meta name="mobile-web-app-capable" content="yes">
-    <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
-    <link rel="apple-touch-icon" href="/icons/icon-192.png">
-    <script>
-        // Apply dark mode before first paint to prevent white flash
-        // Apply dark mode + theme before first paint to prevent flash
-        (function(){var s=localStorage.getItem('skrib-color-scheme')||'auto';var d=s==='dark'||(s==='auto'&&matchMedia('(prefers-color-scheme:dark)').matches);if(d)document.documentElement.toggleAttribute('data-theme-dark',true);var t=localStorage.getItem('skrib-theme');if(t){var l=document.createElement('link');l.id='theme-stylesheet';l.rel='stylesheet';l.href='/api/themes/'+t;document.head.appendChild(l)}})();
-        if('serviceWorker' in navigator) navigator.serviceWorker.register('/sw.js');
-    </script>
+    <meta http-equiv="refresh" content="0;url=/login.html">
 </head>
-<body>
-    <!-- Login View -->
-    <div id="auth-view" class="auth-container">
-        <div class="auth-box">
-            <div id="login-form">
-                <h1><iconify-icon icon="lucide:pen-tool" inline></iconify-icon> Skrīb</h1>
-                <p>Secure collaboration</p>
-
-                <div id="auth-status"></div>
-
-                <button id="login-button"><iconify-icon icon="lucide:key-round" inline></iconify-icon> Sign In</button>
-                <div id="register-section" class="hidden">
-                    <div class="divider">
-                        <span>OR</span>
-                    </div>
-                    <button id="go-to-register-button"><iconify-icon icon="lucide:user" inline></iconify-icon> Register</button>
-                </div>
-            </div>
-        </div>
-    </div>
-
-    <script type="module" src="/src/login.js"></script>
-</body>
+<body></body>
 </html>

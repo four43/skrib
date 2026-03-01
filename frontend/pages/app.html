@@ -30,11 +30,14 @@
 
             <div id="sidebar" class="sidebar">
                 <div class="sidebar-brand">
-                    <img id="server-icon" class="server-brand-icon" src="/api/server/icon" alt="" width="32" height="32" onerror="this.style.display='none'">
-                    <div class="sidebar-brand-info">
-                        <h1 id="server-title">My Server</h1>
-                    </div>
-                    <a id="admin-panel-btn" class="admin-btn hidden" href="/admin.html" title="Admin Panel"><iconify-icon icon="lucide:settings"></iconify-icon></a>
+                    <a id="admin-panel-btn" class="sidebar-brand-link" href="/admin.html" title="Server Settings">
+                        <img id="server-icon" class="server-brand-icon" src="/api/server/icon" alt="" width="32" height="32" onerror="this.style.display='none'">
+                        <div class="sidebar-brand-info">
+                            <h1 id="server-title">My Server</h1>
+                        </div>
+                        <iconify-icon class="admin-btn-icon hidden" icon="lucide:settings"></iconify-icon>
+                    </a>
+                    <button id="sidebar-close-btn" class="sidebar-close-btn" title="Close sidebar"><iconify-icon icon="lucide:x"></iconify-icon></button>
                 </div>
                 <div class="sidebar-section">
                     <div class="sidebar-section-header">
@@ -71,12 +74,12 @@
                     <div class="room-content-topbar-row">
                         <button id="menu-toggle" class="menu-toggle"><iconify-icon icon="lucide:menu"></iconify-icon></button>
                         <button id="room-content-name" class="room-content-topbar-name"></button>
+                        <button id="members-toggle-btn" class="members-toggle-btn hidden" title="Members"><iconify-icon icon="lucide:users"></iconify-icon></button>
                     </div>
                     <div class="room-content-topbar-topic" id="room-content-header">
                         <span id="room-content-topic" class="room-content-topic"></span>
                     </div>
                 </div>
-                <button id="members-toggle-btn" class="members-toggle-fab hidden" title="Members"><iconify-icon icon="lucide:users"></iconify-icon></button>
                 <div class="messages" id="messages">
                     <div class="empty-state">
                         <p>Select a chat room to start</p>
