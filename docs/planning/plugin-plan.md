@@ -2,7 +2,7 @@
 
 ## Context
 
-The [plugin-overview.md](docs/plugin-overview.md) describes 3 things provided to plugins:
+The [plugin-overview.md](../docs/plugin-overview.md) describes 3 things provided to plugins:
 
 1. **Bus/Interface** — namespaced real-time messaging
 2. **Persistence Directory** — isolated DB
