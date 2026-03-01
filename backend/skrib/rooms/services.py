@@ -46,11 +46,25 @@ def get_user_rooms(username: str) -> List[Dict]:
             JOIN room_users rm ON r.room_id = rm.room_id
             WHERE rm.username = ?
         ''', (username,))
+        rows = cursor.fetchall()
+
+        # Batch-fetch members for all DM rooms in a single query
+        dm_room_ids = [row['room_id'] for row in rows if is_dm(row['room_id'])]
+        dm_members: Dict[str, List[str]] = {}
+        if dm_room_ids:
+            placeholders = ','.join('?' * len(dm_room_ids))
+            member_cursor = conn.execute(
+                f'SELECT room_id, username FROM room_users WHERE room_id IN ({placeholders})',
+                dm_room_ids,
+            )
+            for mrow in member_cursor:
+                dm_members.setdefault(mrow['room_id'], []).append(mrow['username'])
+
         rooms = []
-        for row in cursor:
+        for row in rows:
             room_id = row['room_id']
             if is_dm(room_id):
-                members = get_room_members(room_id)
+                members = dm_members.get(room_id, [])
                 display_name = dm_display_name(members, username)
             else:
                 members = []

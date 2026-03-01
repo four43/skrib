@@ -806,47 +806,46 @@ async function checkSession() {
             currentRole = data.role;
             localStorage.setItem('role', data.role);
 
-            // Load user's theme preferences
-            await loadTheme(username, sessionToken);
+            // Load theme, user colors, and E2E key in parallel
+            const [, , loadedKey] = await Promise.all([
+                loadTheme(username, sessionToken),
+                loadUserColors(),
+                loadPrivateKey(username).catch(e => {
+                    console.error('[E2E] Failed to load private key:', e);
+                    return null;
+                }),
+            ]);
 
-            // Load E2E encryption private key from IndexedDB
-            try {
-                console.log('[E2E] Loading private key from IndexedDB for user:', username);
-                privateKey = await loadPrivateKey(username);
-                if (privateKey) {
-                    console.log('[E2E] Private key loaded successfully');
-                } else {
-                    console.warn('[E2E] No private key found in IndexedDB for user:', username);
-                    // Check if server has a passphrase-wrapped key we can recover
-                    try {
-                        const ekResp = await fetch(
-                            `${API_URL}/auth/encryption-key/${encodeURIComponent(username)}`,
-                            { headers: { 'Authorization': `Bearer ${token}` } }
-                        );
-                        const ekData = ekResp.ok ? await ekResp.json() : null;
-                        if (ekData?.passphrase_encrypted_private_key || ekData?.encrypted_private_key) {
-                            // Key recovery is possible — redirect to dedicated recovery page
-                            console.log('[E2E] Server has recoverable key, redirecting to key-recovery...');
-                            window.location.href = '/key-recovery.html';
-                            return;
-                        }
-                    } catch (_) { /* best-effort check */ }
-                }
-            } catch (e) {
-                console.error('[E2E] Failed to load private key:', e);
+            // Handle E2E key result
+            privateKey = loadedKey;
+            if (privateKey) {
+                console.log('[E2E] Private key loaded successfully');
+            } else {
+                console.warn('[E2E] No private key found in IndexedDB for user:', username);
+                // Check if server has a passphrase-wrapped key we can recover
+                try {
+                    const ekResp = await fetch(
+                        `${API_URL}/auth/encryption-key/${encodeURIComponent(username)}`,
+                        { headers: { 'Authorization': `Bearer ${token}` } }
+                    );
+                    const ekData = ekResp.ok ? await ekResp.json() : null;
+                    if (ekData?.passphrase_encrypted_private_key || ekData?.encrypted_private_key) {
+                        console.log('[E2E] Server has recoverable key, redirecting to key-recovery...');
+                        window.location.href = '/key-recovery.html';
+                        return;
+                    }
+                } catch (_) { /* best-effort check */ }
             }
 
             // Check if key was regenerated during login (old messages will be unreadable)
             if (localStorage.getItem('e2e_key_regenerated')) {
                 localStorage.removeItem('e2e_key_regenerated');
                 console.warn('[E2E] Encryption key was regenerated. Previous messages may be unreadable.');
-                // Defer the system message until chat view is initialized
                 setTimeout(() => {
                     displaySystemMessage('Your encryption key was regenerated. Messages from before this session cannot be decrypted.');
                 }, 500);
             }
 
-            await loadUserColors();
             initializeChatView();
         } else {
             // Session invalid, clear and redirect
@@ -874,35 +873,15 @@ async function initializeChatView() {
         sidebarAvatar.src = `${API_URL}/users/${encodeURIComponent(currentUsername)}/avatar`;
     }
 
-    // Fetch and display server title + register in server selector
-    try {
-        const response = await fetch(`${API_URL}/server`, {
-            headers: { 'Authorization': `Bearer ${sessionToken}` }
-        });
-        if (response.ok) {
-            const serverInfo = await response.json();
-            const serverTitleEl = document.getElementById('server-title');
-            if (serverTitleEl && serverInfo.name) {
-                serverTitleEl.textContent = serverInfo.name;
-            }
-            registerCurrentServer(serverInfo.name);
-        }
-    } catch (error) {
-        console.error('[HTTP] Failed to fetch server info:', error);
-    }
-
     // Request notification permission
     if ('Notification' in window && Notification.permission === 'default') {
         Notification.requestPermission();
     }
 
     if (currentRole === 'admin' || currentRole === 'moderator') {
-        // Show admin settings icon in sidebar brand
         document.querySelector('.admin-btn-icon')?.classList.remove('hidden');
-        // Show folder management button
         document.getElementById('add-folder-btn').classList.remove('hidden');
     } else {
-        // Non-admins: prevent the brand link from navigating
         const brandLink = document.getElementById('admin-panel-btn');
         if (brandLink) {
             brandLink.removeAttribute('href');
@@ -910,8 +889,27 @@ async function initializeChatView() {
         }
     }
 
-    await loadRooms();
-    await loadPlugins();  // Load plugins before connecting WebSocket
+    // Load rooms, plugins, and server info in parallel
+    await Promise.all([
+        loadRooms(),
+        loadPlugins(),
+        fetch(`${API_URL}/server`, {
+            headers: { 'Authorization': `Bearer ${sessionToken}` }
+        }).then(response => {
+            if (response.ok) return response.json();
+        }).then(serverInfo => {
+            if (serverInfo) {
+                const serverTitleEl = document.getElementById('server-title');
+                if (serverTitleEl && serverInfo.name) {
+                    serverTitleEl.textContent = serverInfo.name;
+                }
+                registerCurrentServer(serverInfo.name);
+            }
+        }).catch(error => {
+            console.error('[HTTP] Failed to fetch server info:', error);
+        }),
+    ]);
+
     connectWebSocket();
 
     // Navigate to a room: hash > last visited > first available

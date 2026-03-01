@@ -2,15 +2,25 @@
  * Skrīb Service Worker
  *
  * Handles:
- * - Offline caching (network-first for navigations and assets)
+ * - Offline caching (cache-first for hashed assets, stale-while-revalidate for pages)
  * - Web Push notifications
  * - Notification click → focus/open app
  */
 
-const CACHE_NAME = 'skrib-v1';
+const CACHE_NAME = 'skrib-v2';
 
-// Install: activate immediately
-self.addEventListener('install', () => {
+// Pre-cache critical assets on install
+self.addEventListener('install', (event) => {
+  event.waitUntil(
+    caches.open(CACHE_NAME).then((cache) =>
+      cache.addAll([
+        '/app.html',
+        '/login.html',
+        '/manifest.json',
+        '/icons/icon-192.png',
+      ])
+    )
+  );
   self.skipWaiting();
 });
 
@@ -27,7 +37,7 @@ self.addEventListener('activate', (event) => {
   );
 });
 
-// Fetch: network-first for navigations and /assets/, skip /api/
+// Fetch handler with strategy per resource type
 self.addEventListener('fetch', (event) => {
   const url = new URL(event.request.url);
 
@@ -36,16 +46,34 @@ self.addEventListener('fetch', (event) => {
     return;
   }
 
-  // Network-first for navigations and static assets
-  if (event.request.mode === 'navigate' || url.pathname.startsWith('/assets/')) {
+  // Cache-first for /assets/* (Vite hashed filenames — immutable)
+  if (url.pathname.startsWith('/assets/')) {
     event.respondWith(
-      fetch(event.request)
-        .then((response) => {
+      caches.match(event.request).then((cached) => {
+        if (cached) return cached;
+        return fetch(event.request).then((response) => {
           const clone = response.clone();
           caches.open(CACHE_NAME).then((cache) => cache.put(event.request, clone));
           return response;
-        })
-        .catch(() => caches.match(event.request))
+        });
+      })
+    );
+    return;
+  }
+
+  // Stale-while-revalidate for navigations and other static files
+  // Return cached version immediately, then update cache in background
+  if (event.request.mode === 'navigate' || url.pathname.match(/\.(html|css|js|json|png|svg|ico)$/)) {
+    event.respondWith(
+      caches.match(event.request).then((cached) => {
+        const fetchPromise = fetch(event.request).then((response) => {
+          const clone = response.clone();
+          caches.open(CACHE_NAME).then((cache) => cache.put(event.request, clone));
+          return response;
+        }).catch(() => cached);
+
+        return cached || fetchPromise;
+      })
     );
   }
 });

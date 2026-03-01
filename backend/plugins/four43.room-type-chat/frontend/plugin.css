@@ -288,6 +288,13 @@
     border-radius: 10px;
     font-size: 14px;
     font-weight: 600;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+}
+
+.send-button .send-icon {
+    display: none;
 }
 
 .empty-state {
@@ -352,5 +359,19 @@ html[data-theme-dark] .deleted-text {
 
     .message-input {
         font-size: 16px;
+    }
+
+    .send-button {
+        padding: 8px;
+        min-width: 36px;
+        min-height: 36px;
+    }
+
+    .send-button .send-label {
+        display: none;
+    }
+
+    .send-button .send-icon {
+        display: block;
     }
 }

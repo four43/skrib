@@ -6,11 +6,40 @@ headers via the helpers in skrib.plugins.auth instead of importing
 core auth/permission functions directly.
 """
 import re
+import time
+import threading
 from urllib.parse import unquote
 
 # Match /rooms/{room_id} segment in plugin route paths
 _ROOM_ID_RE = re.compile(r'/rooms/([^/]+)')
 _SKRIB_HEADER_PREFIX = b'x-skrib-'
+
+# Short-lived cache for token→(username, role) lookups (30s TTL).
+# Avoids 2 DB queries per plugin request for the same session.
+_AUTH_CACHE_TTL = 30
+_auth_cache = {}  # token -> (username, role, expires_at)
+_auth_cache_lock = threading.Lock()
+
+
+def _get_cached_auth(token: str):
+    """Return (username, role) from cache if still valid, else None."""
+    with _auth_cache_lock:
+        entry = _auth_cache.get(token)
+        if entry and entry[2] > time.monotonic():
+            return entry[0], entry[1]
+        _auth_cache.pop(token, None)
+    return None
+
+
+def _set_cached_auth(token: str, username: str, role: str):
+    with _auth_cache_lock:
+        _auth_cache[token] = (username, role, time.monotonic() + _AUTH_CACHE_TTL)
+        # Evict expired entries periodically (keep cache bounded)
+        if len(_auth_cache) > 200:
+            now = time.monotonic()
+            expired = [k for k, v in _auth_cache.items() if v[2] <= now]
+            for k in expired:
+                del _auth_cache[k]
 
 
 class PluginAuthMiddleware:
@@ -49,12 +78,19 @@ class PluginAuthMiddleware:
             return dict(scope, headers=headers)
 
         token = auth_value[7:]
-        username = verify_token(token)
-        if not username:
-            return dict(scope, headers=headers)
+
+        # Check cache first to avoid DB queries
+        cached = _get_cached_auth(token)
+        if cached:
+            username, user_role = cached
+        else:
+            username = verify_token(token)
+            if not username:
+                return dict(scope, headers=headers)
+            user_role = get_global_role(username)
+            _set_cached_auth(token, username, user_role)
 
         # Inject authenticated user context
-        user_role = get_global_role(username)
         headers.append((b"x-skrib-username", username.encode()))
         headers.append((b"x-skrib-user-role", user_role.encode()))
 

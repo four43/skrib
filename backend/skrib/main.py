@@ -6,6 +6,7 @@ from fastapi import FastAPI, HTTPException
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import FileResponse
 from fastapi.staticfiles import StaticFiles
+from starlette.middleware.gzip import GZipMiddleware
 
 # Import routers
 from .auth.routes import router as auth_router
@@ -53,8 +54,33 @@ app.add_middleware(
     allow_headers=CORS_ALLOW_HEADERS,
 )
 
+# Compress responses (JSON, HTML, CSS, JS) — ~50-70% size reduction
+app.add_middleware(GZipMiddleware, minimum_size=500)
+
 # Pre-authenticate requests to plugin routes (injects x-skrib-* headers)
 app.add_middleware(PluginAuthMiddleware)
+
+# Cache-Control headers for slow-changing API endpoints and immutable assets
+_CACHEABLE_API_PATHS = {
+    "/api/server": "private, max-age=300",         # 5 min
+    "/api/plugins": "private, max-age=300",         # 5 min
+    "/api/users/preferences/colors": "private, max-age=60",  # 1 min
+}
+
+
+@app.middleware("http")
+async def add_cache_headers(request, call_next):
+    response = await call_next(request)
+    path = request.url.path
+
+    # Immutable hashed assets from Vite build
+    if path.startswith("/assets/"):
+        response.headers["Cache-Control"] = "public, max-age=31536000, immutable"
+    elif path in _CACHEABLE_API_PATHS:
+        response.headers.setdefault("Cache-Control", _CACHEABLE_API_PATHS[path])
+
+    return response
+
 
 # Mount static files from Vite build
 if STATIC_DIR.exists():

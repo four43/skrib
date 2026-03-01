@@ -104,7 +104,7 @@ const RoomTypeChatPlugin = (function() {
         const button = document.createElement('button');
         button.id = 'send-button';
         button.className = 'send-button';
-        button.textContent = 'Send';
+        button.innerHTML = '<span class="send-label">Send</span><svg class="send-icon" viewBox="0 0 24 24" width="20" height="20" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><line x1="12" y1="19" x2="12" y2="5"/><polyline points="5 12 12 5 19 12"/></svg>';
 
         inputArea.appendChild(input);
         inputArea.appendChild(button);
