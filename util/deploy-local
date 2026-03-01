@@ -27,6 +27,6 @@ ssh "$REMOTE_HOST" "mkdir -p $REMOTE_DIR"
 scp "$SCRIPT_DIR/docker-compose.prod.yml" "$REMOTE_HOST":"$REMOTE_DIR/docker-compose.yml"
 
 echo "Starting services on $REMOTE_HOST..."
-ssh "$REMOTE_HOST" "cd $REMOTE_DIR && docker compose up -d"
+ssh "$REMOTE_HOST" "cd $REMOTE_DIR && docker compose up -d --force-recreate"
 
 echo "Done. $IMAGE_NAME running on $REMOTE_HOST:8010."

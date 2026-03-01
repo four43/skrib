@@ -889,7 +889,7 @@ async function initializeChatView() {
         }
     }
 
-    // Load rooms, plugins, and server info in parallel
+    // Load rooms, plugins, server info, and WebSocket connection in parallel
     await Promise.all([
         loadRooms(),
         loadPlugins(),
@@ -908,9 +908,8 @@ async function initializeChatView() {
         }).catch(error => {
             console.error('[HTTP] Failed to fetch server info:', error);
         }),
+        connectWebSocket(),
     ]);
-
-    connectWebSocket();
 
     // Navigate to a room: hash > last visited > first available
     const roomFromHash = getRoomFromHash();
@@ -1643,7 +1642,7 @@ document.getElementById('ctx-leave-room')?.addEventListener('click', async () =>
 function connectWebSocket() {
     // Don't create a new connection if one is already open or in progress
     if (ws && (ws.readyState === WebSocket.CONNECTING || ws.readyState === WebSocket.OPEN)) {
-        return;
+        return Promise.resolve();
     }
 
     // Clear any pending reconnect to avoid duplicate attempts
@@ -1664,16 +1663,19 @@ function connectWebSocket() {
     console.log('[WS] Connecting...');
     ws = new WebSocket(wsUrl);
 
-    ws.onopen = async () => {
-        console.log('[WS] Connected');
-        reconnectAttempts = 0;
-        // Re-join current room if we're reconnecting
-        if (currentRoom) {
-            // Reload keys before rejoining to handle any new epochs created while disconnected
-            await loadRoomKeys(currentRoom);
-            ws.send(JSON.stringify({ type: 'room:join', room_id: currentRoom }));
-        }
-    };
+    const openPromise = new Promise((resolve) => {
+        ws.onopen = async () => {
+            console.log('[WS] Connected');
+            reconnectAttempts = 0;
+            // Re-join current room if we're reconnecting
+            if (currentRoom) {
+                // Reload keys before rejoining to handle any new epochs created while disconnected
+                await loadRoomKeys(currentRoom);
+                ws.send(JSON.stringify({ type: 'room:join', room_id: currentRoom }));
+            }
+            resolve();
+        };
+    });
 
     ws.onmessage = (event) => {
         try {
@@ -1698,7 +1700,22 @@ function connectWebSocket() {
     ws.onerror = (error) => {
         console.error('[WS] Error:', error);
     };
+
+    return openPromise;
 }
+
+// Reconnect immediately when the tab/app becomes visible again.
+// Mobile browsers suspend timers and kill WebSockets in the background,
+// so the normal backoff reconnect may not fire for a long time.
+document.addEventListener('visibilitychange', () => {
+    if (!document.hidden && sessionToken) {
+        if (!ws || ws.readyState === WebSocket.CLOSED || ws.readyState === WebSocket.CLOSING) {
+            console.log('[WS] Tab visible again, reconnecting immediately');
+            reconnectAttempts = 0;
+            connectWebSocket();
+        }
+    }
+});
 
 function dispatchMessage(data) {
     const type = data.type || '';

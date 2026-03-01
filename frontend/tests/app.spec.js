@@ -102,6 +102,75 @@ test.describe('App Page', () => {
     });
   });
 
+  test.describe('sendMessage guards', () => {
+    test('shows alert when WebSocket is still connecting', async ({ page }) => {
+      // Override WebSocket constructor BEFORE page loads so that
+      // connectWebSocket() in app.js creates our mock stuck at CONNECTING.
+      await page.addInitScript(() => {
+        window.WebSocket = function(url) {
+          this.readyState = 0; // CONNECTING
+          this.url = url;
+          this.send = function() {};
+          this.close = function() { this.readyState = 3; };
+        };
+        window.WebSocket.CONNECTING = 0;
+        window.WebSocket.OPEN = 1;
+        window.WebSocket.CLOSING = 2;
+        window.WebSocket.CLOSED = 3;
+      });
+
+      // Return a room from /api/rooms so the app auto-selects it,
+      // which sets the module-scoped `currentRoom`.
+      // Registered AFTER setupAuthMocks so it takes priority (LIFO).
+      await page.route('**/api/rooms', route =>
+        route.fulfill({
+          status: 200,
+          contentType: 'application/json',
+          body: JSON.stringify([{
+            room_id: 'test-room',
+            display_name: 'test-room',
+            room_type: 'four43.room-type-chat',
+            is_dm: false,
+            topic: '',
+            members: ['testadmin'],
+          }]),
+        }),
+      );
+
+      await page.route('**/api/room-folders', route =>
+        route.fulfill({
+          status: 200,
+          contentType: 'application/json',
+          body: JSON.stringify({ folders: [], room_positions: [] }),
+        }),
+      );
+
+      await page.goto('/app.html');
+      await page.waitForLoadState('networkidle');
+
+      // The room type plugin won't fully load in the mock environment,
+      // so #message-input won't exist. Inject it manually.
+      await page.evaluate(() => {
+        const input = document.createElement('input');
+        input.id = 'message-input';
+        input.value = 'hello world';
+        document.getElementById('messages').appendChild(input);
+      });
+
+      // Call window.sendMessage() and verify the "still connecting" alert.
+      // alert() blocks JS execution, so we must not await evaluate until
+      // the dialog is dismissed — otherwise it deadlocks.
+      const dialogPromise = page.waitForEvent('dialog');
+      const evalPromise = page.evaluate(() => window.sendMessage());
+      const dialog = await dialogPromise;
+
+      expect(dialog.type()).toBe('alert');
+      expect(dialog.message()).toBe('Still connecting, please try again in a moment.');
+      await dialog.accept();
+      await evalPromise;
+    });
+  });
+
   test.describe('CSS Classes', () => {
     test('should have proper semantic classes', async ({ page }) => {
       await page.goto('/app.html');
