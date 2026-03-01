@@ -10,12 +10,16 @@ router = APIRouter(tags=["ws"])
 @router.websocket("/ws")
 async def unified_ws(websocket: WebSocket, token: str | None = None):
     """Single WebSocket endpoint for all real-time communication."""
+    print(f"[WS] Connection attempt from {websocket.client}, token={'present' if token else 'missing'}")
+
     if not token:
+        print("[WS] Rejected: no token provided")
         await websocket.close(code=1008, reason="Authentication required")
         return
 
     username = verify_token(token)
     if not username:
+        print(f"[WS] Rejected: invalid token")
         await websocket.close(code=1008, reason="Invalid token")
         return
 

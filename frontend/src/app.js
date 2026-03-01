@@ -889,7 +889,14 @@ async function initializeChatView() {
         }
     }
 
-    // Load rooms, plugins, server info, and WebSocket connection in parallel
+    // Start WebSocket first — browsers limit concurrent HTTP/1.1 connections
+    // per host (~6), so if we fire HTTP requests first the WS handshake gets
+    // queued behind them, causing long delays on mobile.
+    const wsReady = connectWebSocket().catch(err => {
+        console.warn('[WS] Initial connection failed, will retry:', err);
+    });
+
+    // Then load rooms, plugins, and server info in parallel
     await Promise.all([
         loadRooms(),
         loadPlugins(),
@@ -908,7 +915,7 @@ async function initializeChatView() {
         }).catch(error => {
             console.error('[HTTP] Failed to fetch server info:', error);
         }),
-        connectWebSocket(),
+        wsReady,
     ]);
 
     // Navigate to a room: hash > last visited > first available
@@ -1639,6 +1646,11 @@ document.getElementById('ctx-leave-room')?.addEventListener('click', async () =>
     }
 });
 
+function showConnectionBanner(visible) {
+    const banner = document.getElementById('connection-banner');
+    if (banner) banner.classList.toggle('hidden', !visible);
+}
+
 function connectWebSocket() {
     // Don't create a new connection if one is already open or in progress
     if (ws && (ws.readyState === WebSocket.CONNECTING || ws.readyState === WebSocket.OPEN)) {
@@ -1662,11 +1674,15 @@ function connectWebSocket() {
 
     console.log('[WS] Connecting...');
     ws = new WebSocket(wsUrl);
+    showConnectionBanner(true);
 
-    const openPromise = new Promise((resolve) => {
+    let settled = false;
+    const openPromise = new Promise((resolve, reject) => {
         ws.onopen = async () => {
             console.log('[WS] Connected');
+            settled = true;
             reconnectAttempts = 0;
+            showConnectionBanner(false);
             // Re-join current room if we're reconnecting
             if (currentRoom) {
                 // Reload keys before rejoining to handle any new epochs created while disconnected
@@ -1674,6 +1690,14 @@ function connectWebSocket() {
                 ws.send(JSON.stringify({ type: 'room:join', room_id: currentRoom }));
             }
             resolve();
+        };
+
+        ws.onerror = (error) => {
+            console.error('[WS] Error:', error);
+            if (!settled) {
+                settled = true;
+                reject(new Error('WebSocket connection failed'));
+            }
         };
     });
 
@@ -1695,10 +1719,6 @@ function connectWebSocket() {
             console.log(`[WS] Reconnecting in ${delay}ms (attempt ${reconnectAttempts}/${maxReconnectAttempts})...`);
             reconnectTimeout = setTimeout(connectWebSocket, delay);
         }
-    };
-
-    ws.onerror = (error) => {
-        console.error('[WS] Error:', error);
     };
 
     return openPromise;
@@ -2282,6 +2302,17 @@ function handleSendInput() {
 
     const message = inputEl.value.trim();
 
+    // Check WebSocket state first — connection issues take priority
+    if (!ws || ws.readyState === WebSocket.CLOSED || ws.readyState === WebSocket.CLOSING) {
+        alert('Not connected to chat. Reconnecting...');
+        connectWebSocket();
+        return;
+    }
+    if (ws.readyState === WebSocket.CONNECTING) {
+        alert('Still connecting, please try again in a moment.');
+        return;
+    }
+
     if (!currentRoom) {
         alert('Please select a room first');
         return;
@@ -2293,17 +2324,6 @@ function handleSendInput() {
     if (message.startsWith('/')) {
         inputEl.value = '';
         parseAndExecuteCommand(message);
-        return;
-    }
-
-    // Check if WebSocket is connected
-    if (!ws || ws.readyState === WebSocket.CLOSED || ws.readyState === WebSocket.CLOSING) {
-        alert('Not connected to chat. Reconnecting...');
-        connectWebSocket();
-        return;
-    }
-    if (ws.readyState === WebSocket.CONNECTING) {
-        alert('Still connecting, please try again in a moment.');
         return;
     }
 
