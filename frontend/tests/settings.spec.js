@@ -79,9 +79,16 @@ test.describe('Settings Page', () => {
     test('should have no inline styles in HTML', async ({ page }) => {
       await page.goto('/settings.html');
 
+      // Count inline styles on our own elements, excluding third-party
+      // components (iconify-icon) and the theme preview (intentional demo styles)
       const elementsWithInlineStyles = await page.evaluate(() => {
         const elements = Array.from(document.querySelectorAll('*'));
-        return elements.filter(el => el.hasAttribute('style')).length;
+        return elements.filter(el =>
+          el.hasAttribute('style') &&
+          el.tagName !== 'ICONIFY-ICON' &&
+          !el.closest('iconify-icon') &&
+          !el.closest('.theme-preview')
+        ).length;
       });
 
       expect(elementsWithInlineStyles).toBeLessThan(5);

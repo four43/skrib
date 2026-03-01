@@ -182,9 +182,15 @@ test.describe('App Page', () => {
     test('should have no inline styles in HTML', async ({ page }) => {
       await page.goto('/app.html');
 
+      // Count inline styles on our own elements, excluding third-party
+      // components (iconify-icon injects inline styles at runtime)
       const elementsWithInlineStyles = await page.evaluate(() => {
         const elements = Array.from(document.querySelectorAll('*'));
-        return elements.filter(el => el.hasAttribute('style')).length;
+        return elements.filter(el =>
+          el.hasAttribute('style') &&
+          el.tagName !== 'ICONIFY-ICON' &&
+          !el.closest('iconify-icon')
+        ).length;
       });
 
       // Should be 0 or very minimal (only dynamic JS-set styles are OK)
