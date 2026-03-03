@@ -258,4 +258,60 @@ test.describe('Room folders - Permissions', () => {
             data: { role: 'user' },
         });
     });
+
+    test('regular user cannot move a room into a folder', async ({ threeUsers, baseURL }) => {
+        const { admin, userB } = threeUsers;
+
+        await createRoom(admin.page, 'perm-move-room');
+        await inviteUser(admin.page, userB.username);
+        const folder = await createFolder(admin.page, baseURL, admin.sessionToken, 'PermFolder');
+
+        const resp = await userB.page.request.put(`${baseURL}/api/room-folders/rooms/perm-move-room`, {
+            headers: {
+                'Content-Type': 'application/json',
+                'Authorization': `Bearer ${userB.sessionToken}`,
+            },
+            data: { folder_id: folder.folder_id, position: 0 },
+        });
+        expect(resp.status()).toBe(403);
+    });
+
+    test('moderator can move a room into a folder', async ({ threeUsers, baseURL }) => {
+        const { admin, userB } = threeUsers;
+
+        await createRoom(admin.page, 'mod-move-room');
+        const folder = await createFolder(admin.page, baseURL, admin.sessionToken, 'ModMoveFolder');
+
+        // Promote User B to moderator
+        await admin.page.request.patch(`${baseURL}/api/users/${userB.username}`, {
+            headers: {
+                'Content-Type': 'application/json',
+                'Authorization': `Bearer ${admin.sessionToken}`,
+            },
+            data: { role: 'moderator' },
+        });
+
+        const resp = await userB.page.request.put(`${baseURL}/api/room-folders/rooms/mod-move-room`, {
+            headers: {
+                'Content-Type': 'application/json',
+                'Authorization': `Bearer ${userB.sessionToken}`,
+            },
+            data: { folder_id: folder.folder_id, position: 0 },
+        });
+        expect(resp.ok()).toBeTruthy();
+
+        // Verify the room is now in the folder
+        const tree = await getFolders(admin.page, baseURL, admin.sessionToken);
+        const roomPos = tree.room_positions.find(r => r.room_id === 'mod-move-room');
+        expect(roomPos.folder_id).toBe(folder.folder_id);
+
+        // Clean up: demote back
+        await admin.page.request.patch(`${baseURL}/api/users/${userB.username}`, {
+            headers: {
+                'Content-Type': 'application/json',
+                'Authorization': `Bearer ${admin.sessionToken}`,
+            },
+            data: { role: 'user' },
+        });
+    });
 });
