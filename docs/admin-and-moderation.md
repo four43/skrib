@@ -6,9 +6,9 @@ Skrib provides admin and moderation tools for managing users, controlling access
 
 | Role | Scope | Description |
 |---|---|---|
-| `admin` | Global | Full server control: settings, user management, plugins, all room operations |
-| `moderator` | Global | User approval, room folder management, kick users |
-| `user` | Global | Standard access: join rooms, send messages, create rooms |
+| `admin` | Global | Full server control: settings, user management, plugins, all room operations, approve/deny join requests |
+| `moderator` | Global | User approval, room folder management, kick users, approve/deny join requests |
+| `user` | Global | Standard access: join rooms, send messages, create rooms, request to join public rooms |
 
 The first registered user is automatically approved and assigned the `admin` role. The last admin cannot be demoted.
 

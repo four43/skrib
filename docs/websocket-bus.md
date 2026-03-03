@@ -123,6 +123,9 @@ Core handlers are registered directly in `app.js` for events like `room:update`,
 | `room:new_message` | Server -> Client | User-scoped | Notification that a room has a new message (for unread badges) |
 | `room:deleted` | Server -> Client | User-scoped | Room was deleted |
 | `room:folders_updated` | Server -> Client | User-scoped | Room folder structure changed |
+| `room:join_request` | Server -> Client | User-scoped (to room ops) | New join request submitted for a public room |
+| `room:join_resolved` | Server -> Client | User-scoped (to requester) | Join request approved or denied |
+| `room:visibility_changed` | Server -> Client | User-scoped (to room members) | Room visibility toggled between public/private |
 
 ### Chat Plugin Events (`four43.room-type-chat`)
 

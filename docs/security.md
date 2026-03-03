@@ -64,8 +64,8 @@ Admins create invite tokens via `POST /api/server/invites`. Invite links include
 
 | Role | Capabilities |
 |---|---|
-| `owner` | Full room control: settings, topic, kick, delete, manage members |
-| `op` | Manage members, set topic, kick |
+| `owner` | Full room control: settings, topic, kick, delete, manage members, approve/deny join requests |
+| `op` | Manage members, set topic, kick, approve/deny join requests |
 | `voice` | Standard participation (reserved for future permission tiers) |
 | `member` | Read and send messages |
 
@@ -110,6 +110,7 @@ Permission checks are centralized in `backend/skrib/permissions.py`:
 | Rogue plugin accessing core data | Manifest permissions, namespace enforcement, isolated storage |
 | Header spoofing to plugin routes | PluginAuthMiddleware strips client `x-skrib-*` headers |
 | Unauthorized registration | Registration modes (closed/invite/approval), admin controls |
+| Unauthorized room access via join requests | Join requests only for public rooms; approval required by room ops/owners/admins |
 | Lost device | PRF-based automatic key recovery, passphrase manual fallback |
 | XSS via message content | Messages decrypted and HTML-escaped before rendering |
 

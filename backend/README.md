@@ -62,19 +62,26 @@ backend/skrib/
 | Method | Endpoint | Description |
 | --- | --- | --- |
 | GET | `/rooms` | List rooms visible to user (channels + own DMs) |
-| POST | `/rooms` | Create a room (supports plugin room types) |
+| POST | `/rooms` | Create a room (supports plugin room types, accepts `visibility`) |
 | POST | `/rooms/dm` | Create or get a DM with another user |
+| GET | `/rooms/search?q={query}` | Search public rooms by name (excludes user's rooms) |
+| GET | `/rooms/check-name?name={name}` | Check if a room name is available |
+| GET | `/rooms/{room_id}` | Get room details (includes `visibility`) |
+| PATCH | `/rooms/{room_id}` | Update room metadata (topic, visibility) |
 | DELETE | `/rooms/{room_id}` | Delete a room and all data (owner/admin) |
 | GET | `/rooms/{room_id}/messages` | Get messages in a room (supports `?since=id`) |
 | POST | `/rooms/{room_id}/messages` | Send message to a room |
+| POST | `/rooms/{room_id}/join-requests` | Submit a join request (public rooms only) |
+| GET | `/rooms/{room_id}/join-requests` | List pending join requests (ops/admins) |
+| PATCH | `/rooms/{room_id}/join-requests/{username}` | Approve or deny a join request |
 
 **Room Creation Body**:
 
 ```json
 {
   "room_id": "general",           // For channels: lowercase + hyphens
-  "room_type": "channel",         // "channel", "dm", or plugin-provided type
-  "name": "General Discussion"    // Optional display name
+  "room_type": "chat",            // "chat", or plugin-provided type
+  "visibility": "private"         // "private" (default) or "public"
 }
 ```
 

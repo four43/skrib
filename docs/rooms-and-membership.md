@@ -9,6 +9,7 @@ Rooms are the primary organizational unit in Skrib. All room behavior is defined
 | `room_id` | Primary key. DMs use format `dm\|user1\|user2` (sorted alphabetically) |
 | `room_type` | Plugin-registered type (e.g., `chat`, `todo`) |
 | `topic` | Optional room topic/description |
+| `visibility` | `private` (default) or `public`. Controls discoverability and join requests. |
 | `created_by` | Username of the room creator |
 | `is_dm` | Boolean flag for direct messages |
 | `folder_id` | Optional reference to a room folder |
@@ -16,6 +17,48 @@ Rooms are the primary organizational unit in Skrib. All room behavior is defined
 | `created_at` | Creation timestamp |
 
 Room creation validates `room_type` against currently enabled plugin room types. Attempting to create a room with an unregistered type is rejected.
+
+## Room Visibility
+
+Rooms have a `visibility` setting that controls discoverability:
+
+| Visibility | Behavior |
+|---|---|
+| `private` | Default. Not searchable. Members added only via invite. Shown with a lock icon in the sidebar. |
+| `public` | Searchable by all users via the "Add Channel" modal. Users can request to join. Shown with `#` prefix in the sidebar. |
+
+DM rooms are always private and cannot have their visibility changed.
+
+Visibility can be changed by room ops, owners, or global admins/moderators via room settings (`PATCH /rooms/{room_id}` with `{"visibility": "public"}`). Changing visibility broadcasts a `room:visibility_changed` WebSocket event to all room members.
+
+## Join Requests
+
+Public rooms use a request-to-join flow rather than open membership:
+
+1. User searches for public rooms via the "Add Channel" modal
+2. User clicks "Request to Join" on a search result
+3. Room ops/owners receive a real-time `room:join_request` WebSocket notification
+4. An op/owner approves or denies the request (from the members panel or room settings page)
+5. On approval, the requester is added as a `member` and receives `room:join_resolved`
+6. On denial, the requester is notified and can re-request later
+
+### Join Request Model
+
+| Field | Description |
+|---|---|
+| `room_id` + `username` | Composite primary key |
+| `status` | `pending`, `approved`, or `denied` |
+| `created_at` | When the request was submitted |
+| `resolved_by` | Username of the op who approved/denied |
+| `resolved_at` | When the request was resolved |
+
+Re-requesting after denial resets the status to `pending` and updates `created_at`.
+
+### Permissions
+
+- **Submit request**: Any authenticated user (room must be public, user must not already be a member)
+- **View requests**: Room ops, owners, global admins/moderators
+- **Approve/deny**: Room ops, owners, global admins/moderators
 
 ## Direct Messages
 
@@ -39,8 +82,8 @@ The `room_users` table tracks membership:
 
 | Role | Capabilities |
 |---|---|
-| `owner` | Full room control: settings, topic, members, delete. Assigned to room creator. |
-| `op` | Manage members, set topic, kick users |
+| `owner` | Full room control: settings, topic, members, delete, approve/deny join requests. Assigned to room creator. |
+| `op` | Manage members, set topic, kick users, approve/deny join requests |
 | `voice` | Standard participation (reserved for future use) |
 | `member` | Read and send messages |
 
@@ -137,6 +180,8 @@ Room deletion is a **hard delete**. When a room is deleted:
 Each room has a settings page (`/room-settings.html?room={room_id}`) accessible to room ops and owners:
 
 - View and edit room topic
+- Change room visibility (private/public) — ops/owners/admins only
+- View and manage pending join requests (approve/deny) — ops/owners/admins only
 - Manage member list (add, remove, change roles)
 - View room metadata (type, creator, creation date)
 - Delete room (owner or admin only)
@@ -146,13 +191,18 @@ Each room has a settings page (`/room-settings.html?room={room_id}`) accessible 
 | Method | Endpoint | Description |
 |---|---|---|
 | `GET` | `/api/rooms` | List rooms where the user is a member |
-| `POST` | `/api/rooms` | Create a new room |
-| `GET` | `/api/rooms/{room_id}` | Get room details |
-| `PATCH` | `/api/rooms/{room_id}` | Update room metadata |
+| `POST` | `/api/rooms` | Create a new room (accepts `visibility` field) |
+| `GET` | `/api/rooms/search?q={query}` | Search public rooms by name (excludes user's rooms) |
+| `GET` | `/api/rooms/check-name?name={name}` | Check if a room name is available |
+| `GET` | `/api/rooms/{room_id}` | Get room details (includes `visibility`) |
+| `PATCH` | `/api/rooms/{room_id}` | Update room metadata (topic, visibility) |
 | `DELETE` | `/api/rooms/{room_id}` | Delete a room |
 | `GET` | `/api/rooms/{room_id}/members` | List room members |
 | `POST` | `/api/rooms/{room_id}/members` | Add a member |
 | `DELETE` | `/api/rooms/{room_id}/members/{username}` | Remove a member |
+| `POST` | `/api/rooms/{room_id}/join-requests` | Submit a join request (public rooms only) |
+| `GET` | `/api/rooms/{room_id}/join-requests` | List pending join requests (ops/admins) |
+| `PATCH` | `/api/rooms/{room_id}/join-requests/{username}` | Approve or deny a join request |
 | `POST` | `/api/rooms/{room_id}/read` | Mark room as read |
 | `GET` | `/api/rooms/{room_id}/keys` | Get encrypted room keys for current user |
 | `POST` | `/api/rooms/{room_id}/keys` | Upload encrypted room keys |

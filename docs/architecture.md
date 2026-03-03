@@ -78,8 +78,9 @@ SQLite with WAL (Write-Ahead Logging) mode for concurrent read access. Configure
 | `users` | User accounts, credentials, encryption keys | `username` (PK) |
 | `challenges` | WebAuthn challenge storage | `challenge` (PK) |
 | `settings` | Server configuration (key-value) | `key` (PK) |
-| `rooms` | Room metadata | `room_id` (PK) |
+| `rooms` | Room metadata (includes `visibility`) | `room_id` (PK) |
 | `room_users` | Room membership, roles, read state | `room_id + username` |
+| `join_requests` | Join requests from users to public rooms | `room_id + username` |
 | `room_keys` | Encrypted per-user room keys | `room_id + key_epoch + username` |
 | `room_folders` | Nestable folder structure | `folder_id` (PK) |
 | `invite_tokens` | Registration invite tokens | `token` (PK) |
