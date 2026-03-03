@@ -372,9 +372,9 @@ async function deleteRoom() {
 function updateDangerZone() {
     const dangerZone = document.getElementById('danger-zone');
     if (dangerZone) {
-        // Show danger zone for admins, or room owners/ops for channels
+        // Show danger zone for global admins or the room owner only
         const canDelete = currentRole === 'admin' ||
-                         (!currentRoom.is_dm && (userRole === 'owner' || userRole === 'op'));
+                         (!currentRoom.is_dm && userRole === 'owner');
 
         if (canDelete) {
             dangerZone.classList.remove('hidden');

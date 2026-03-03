@@ -30,7 +30,9 @@
       "Bash(./frontend/util/test-e2e:*)",
       "Bash(util/test-e2e:*)",
       "WebFetch(domain:docs.slack.dev)",
-      "Bash(npm run build)"
+      "Bash(npm run build)",
+      "Bash(SKRIB_TEST_DATA_DIR=1 npx playwright test tests/e2e/register-link.spec.js --reporter=list)",
+      "Bash(SKRIB_TEST_DATA_DIR=/tmp/skrib-test-admin4 npx playwright test --project=e2e --workers=1 \"tests/e2e/admin-panel.spec.js\" -g \"view and update server name\" --reporter=line)"
     ]
   }
 }

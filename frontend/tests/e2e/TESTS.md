@@ -234,3 +234,134 @@ Tests for the typing indicator plugin (four43.chat-typing). Assumes 2 registered
   - User A is typing in "typing-room", then switches to a different room.
     - The typing indicator for User A disappears for User B (room switch sends stop).
   - User A opens "typing-room" again and types. The indicator reappears for User B.
+
+---
+
+## admin-panel.spec.js
+
+Tests for the admin panel UI and server management. Assumes 3 registered users (admin User A, User B, User C).
+
+- Admin server settings
+  - Admin can view and update the server name via admin panel
+  - Admin can change registration mode via the slider (open, approval_required, invite_only, closed)
+  - Invite section appears when registration mode is set to invite_only
+- User management
+  - Admin sees user list with roles and action buttons for all registered users
+  - Admin can promote a user to moderator and demote back to user
+  - Admin can promote a user to admin
+  - Admin can delete a user, user disappears from the user list
+  - Cannot delete the last admin (server protection)
+- Moderator access
+  - Moderator can access admin panel but only sees Users section (Server and Appearance hidden)
+  - Regular user navigating to admin panel is redirected to app.html
+
+---
+
+## user-settings.spec.js
+
+Tests for user settings page functionality. Assumes 3 registered users (admin User A, User B, User C).
+
+- Nickname management
+  - User sets nickname via settings page, verifies it persists via API
+  - User sets nickname via /nick slash command, other users see the display name in chat
+  - User clears nickname via settings page clear button
+- Appearance settings
+  - User can switch color scheme between auto, dark, and light
+  - Color scheme persists across page reload
+  - User color picker updates the username color
+- Session management
+  - Logout button clears session and redirects to login page
+
+---
+
+## room-folders.spec.js
+
+Tests for room folder organization system. Assumes 3 registered users (admin User A, User B, User C).
+
+- Folder CRUD
+  - Admin can create a folder via API and it appears in the sidebar
+  - Admin can rename a folder
+  - Admin can delete a folder
+  - Admin can create nested folders (parent → child)
+- Room organization
+  - Admin can move a room into a folder
+  - Deleting a folder moves rooms back to root
+  - Folder structure is visible to non-admin members after reload
+- Permissions
+  - Regular user cannot create folders (403)
+  - Regular user cannot delete folders (403)
+  - Moderator can create and delete folders
+
+---
+
+## encryption.spec.js
+
+Tests for end-to-end encryption and zero-knowledge verification. Assumes 3 registered users (admin User A, User B, User C).
+
+- Zero-knowledge encryption
+  - Messages stored on server are ciphertext (not plaintext), validated encrypted envelope format (v, epoch, iv, ct)
+  - Server stores key_epoch on messages
+- Key distribution
+  - Room creator has encrypted keys stored on server after room creation
+  - Invited user receives encrypted room keys after being invited
+  - Invited user can decrypt messages sent before they joined
+  - Each user has their own encrypted copy of room keys (different ciphertext, same epoch)
+- Public key management
+  - User public key is available via API after registration (base64-encoded SPKI)
+
+---
+
+## security-boundaries.spec.js
+
+Tests for authorization enforcement and security boundaries at the API level.
+
+- Unauthenticated access
+  - Unauthenticated API requests to protected endpoints return 401
+  - Invalid session token returns 401
+  - Unauthenticated user navigating to app.html is redirected to login
+- Admin-only endpoint protection
+  - Non-admin cannot update server settings (403)
+  - Non-admin cannot change user roles (403)
+  - Non-admin cannot delete users (403)
+  - Non-admin cannot create invite tokens (403)
+- Room access enforcement
+  - User cannot access rooms they are not a member of (403)
+  - User cannot send messages to rooms they are not a member of (403)
+  - Non-owner/non-admin cannot delete a room (403)
+  - User cannot fetch keys for rooms they are not a member of (403)
+- Registration mode enforcement
+  - Closed registration rejects new users (form disabled)
+- Server info
+  - GET /api/server is publicly accessible without auth
+
+---
+
+## websocket-reconnect.spec.js
+
+Tests for WebSocket reconnection behavior and multi-tab scoping.
+
+- WebSocket reconnection
+  - Client reconnects after WebSocket is forcibly closed and receives new messages
+  - Room selection persists through WebSocket reconnection
+- Multi-tab scoping
+  - room:update events reach all tabs for a user (new room visible in both tabs)
+
+---
+
+## pwa.spec.js
+
+Tests for Progressive Web App features, avatar generation, theme system, and plugin system.
+
+- PWA manifest and metadata
+  - app.html includes PWA manifest link
+  - manifest.json is valid and contains required PWA fields (name, display: standalone, icons)
+  - Service worker registers successfully
+- Avatar generation
+  - User avatar is auto-generated on registration (PNG image returned)
+  - Server icon is auto-generated (PNG image returned)
+- Theme system
+  - Themes API returns available themes with required fields
+  - Theme CSS is served correctly with text/css content type
+- Plugin system
+  - Plugins API returns list of plugins with manifests (chat and todo plugins present)
+  - Plugin frontend files are served correctly
