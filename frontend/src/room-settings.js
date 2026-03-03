@@ -121,6 +121,11 @@ async function initializeRoomSettings() {
         // attached before async work or DOM updates that enable interactive elements.
         setupEventListeners();
 
+        // Display visibility setting for channels
+        if (!currentRoom.is_dm) {
+            initVisibilitySection();
+        }
+
         // Display members (already included in room response)
         displayMembers(currentRoom.members || []);
 
@@ -157,6 +162,8 @@ function displayMembers(members) {
     // Update UI based on permissions now that we know the role
     updateDangerZone();
     updateTopicPermission();
+    updateVisibilityPermission();
+    loadJoinRequests();
 
     const membersList = document.getElementById('members-list');
     const memberCount = document.getElementById('member-count');
@@ -404,6 +411,157 @@ function updateTopicPermission() {
     topicInput.disabled = !canEdit;
 }
 
+function initVisibilitySection() {
+    const section = document.getElementById('visibility-section');
+    const select = document.getElementById('room-visibility');
+    if (!section || !select) return;
+
+    section.classList.remove('hidden');
+    select.value = currentRoom.visibility || 'private';
+}
+
+function updateVisibilityPermission() {
+    const select = document.getElementById('room-visibility');
+    if (!select) return;
+
+    const canEdit = currentRole === 'admin' ||
+                    userRole === 'owner' || userRole === 'op';
+    select.disabled = !canEdit;
+}
+
+async function saveVisibility() {
+    const select = document.getElementById('room-visibility');
+    if (!select || currentRoom.is_dm) return;
+
+    const newVisibility = select.value;
+    if (newVisibility === currentRoom.visibility) return;
+
+    try {
+        const response = await fetch(`${API_URL}/rooms/${encodeURIComponent(currentRoomId)}`, {
+            method: 'PATCH',
+            headers: {
+                'Authorization': `Bearer ${sessionToken}`,
+                'Content-Type': 'application/json'
+            },
+            body: JSON.stringify({ visibility: newVisibility })
+        });
+
+        if (response.ok) {
+            currentRoom.visibility = newVisibility;
+        } else {
+            const error = await response.json();
+            alert(`Failed to update visibility: ${error.detail || 'Unknown error'}`);
+            select.value = currentRoom.visibility || 'private';
+        }
+    } catch (error) {
+        console.error('[HTTP] Error updating visibility:', error);
+        select.value = currentRoom.visibility || 'private';
+    }
+}
+
+async function loadJoinRequests() {
+    const section = document.getElementById('join-requests-section');
+    const listEl = document.getElementById('join-requests-list');
+    const countEl = document.getElementById('join-request-count');
+    if (!section || !listEl || !countEl) return;
+
+    const canManage = currentRole === 'admin' ||
+                      userRole === 'owner' || userRole === 'op';
+    if (!canManage || currentRoom.is_dm) {
+        section.classList.add('hidden');
+        return;
+    }
+
+    try {
+        const response = await fetch(`${API_URL}/rooms/${encodeURIComponent(currentRoomId)}/join-requests`, {
+            headers: { 'Authorization': `Bearer ${sessionToken}` }
+        });
+
+        if (!response.ok) {
+            section.classList.add('hidden');
+            return;
+        }
+
+        const requests = await response.json();
+        countEl.textContent = requests.length;
+
+        if (requests.length === 0) {
+            section.classList.add('hidden');
+            return;
+        }
+
+        section.classList.remove('hidden');
+        listEl.innerHTML = '';
+
+        requests.forEach(req => {
+            const reqDiv = document.createElement('div');
+            reqDiv.className = 'member-item join-request-item';
+
+            const reqInfo = document.createElement('div');
+            reqInfo.className = 'member-info';
+
+            const reqName = document.createElement('span');
+            reqName.className = 'member-name';
+            reqName.style.color = req.color || '#1976d2';
+            reqName.textContent = req.nickname || req.username;
+            reqInfo.appendChild(reqName);
+            reqDiv.appendChild(reqInfo);
+
+            const actions = document.createElement('div');
+            actions.className = 'member-actions';
+
+            const approveBtn = document.createElement('button');
+            approveBtn.className = 'btn-ghost';
+            approveBtn.textContent = 'Approve';
+            approveBtn.onclick = async () => {
+                await handleJoinRequest(req.username, 'approve');
+            };
+
+            const denyBtn = document.createElement('button');
+            denyBtn.className = 'btn-ghost member-remove-btn';
+            denyBtn.textContent = 'Deny';
+            denyBtn.onclick = async () => {
+                await handleJoinRequest(req.username, 'deny');
+            };
+
+            actions.appendChild(approveBtn);
+            actions.appendChild(denyBtn);
+            reqDiv.appendChild(actions);
+            listEl.appendChild(reqDiv);
+        });
+    } catch (error) {
+        console.error('[HTTP] Error loading join requests:', error);
+        section.classList.add('hidden');
+    }
+}
+
+async function handleJoinRequest(username, action) {
+    try {
+        const response = await fetch(
+            `${API_URL}/rooms/${encodeURIComponent(currentRoomId)}/join-requests/${encodeURIComponent(username)}`,
+            {
+                method: 'PATCH',
+                headers: {
+                    'Authorization': `Bearer ${sessionToken}`,
+                    'Content-Type': 'application/json'
+                },
+                body: JSON.stringify({ action })
+            }
+        );
+
+        if (response.ok) {
+            // Reload both join requests and members
+            await loadJoinRequests();
+            await reloadRoomData();
+        } else {
+            const error = await response.json();
+            alert(`Failed to ${action} request: ${error.detail || 'Unknown error'}`);
+        }
+    } catch (error) {
+        console.error(`[HTTP] Error ${action}ing join request:`, error);
+    }
+}
+
 function setupEventListeners() {
     // Leave room button
     const leaveRoomBtn = document.getElementById('leave-room-btn');
@@ -427,6 +585,12 @@ function setupEventListeners() {
                 topicInput.blur();
             }
         });
+    }
+
+    // Visibility select — auto-save on change
+    const visibilitySelect = document.getElementById('room-visibility');
+    if (visibilitySelect) {
+        visibilitySelect.addEventListener('change', () => saveVisibility());
     }
 
     // Auto-save topic before navigating away via back button

@@ -112,8 +112,24 @@ def init_db():
                 room_id TEXT PRIMARY KEY,
                 room_type TEXT NOT NULL DEFAULT 'chat',
                 topic TEXT NOT NULL DEFAULT '',
+                visibility TEXT NOT NULL DEFAULT 'private',
                 created_at TEXT NOT NULL,
                 created_by TEXT
+            )
+        ''')
+
+        # Join requests table (users requesting to join public rooms)
+        conn.execute('''
+            CREATE TABLE IF NOT EXISTS join_requests (
+                room_id TEXT NOT NULL,
+                username TEXT NOT NULL,
+                status TEXT NOT NULL DEFAULT 'pending',
+                created_at TEXT NOT NULL,
+                resolved_by TEXT,
+                resolved_at TEXT,
+                PRIMARY KEY (room_id, username),
+                FOREIGN KEY (room_id) REFERENCES rooms(room_id) ON DELETE CASCADE,
+                FOREIGN KEY (username) REFERENCES users(username)
             )
         ''')
 

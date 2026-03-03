@@ -21,6 +21,7 @@ let ws = null;  // Single unified WebSocket connection
 let reconnectAttempts = 0;
 let maxReconnectAttempts = 10;
 let reconnectTimeout = null;
+let connectionBannerTimeout = null;
 let userColors = {};  // Cache of username -> color mappings
 let userNicknames = {};  // Cache of username -> nickname (null if not set)
 let serverColor = '#6366f1';  // Cached server color for theme reset
@@ -1514,7 +1515,16 @@ function createRoomItem(room) {
         const parts = room.display_name.split(', ');
         nameSpan.textContent = parts.map(u => getDisplayName(u)).join(', ');
     } else {
-        nameSpan.textContent = room.display_name;
+        // Show lock icon for private rooms, # for public
+        const prefix = document.createElement('span');
+        prefix.className = 'room-prefix';
+        if (room.visibility === 'public') {
+            prefix.textContent = '#';
+        } else {
+            prefix.innerHTML = '<iconify-icon icon="lucide:lock" class="room-visibility-icon" inline></iconify-icon>';
+        }
+        nameSpan.appendChild(prefix);
+        nameSpan.appendChild(document.createTextNode(room.room_id));
     }
     nameSpan.onclick = () => selectRoom(room.room_id);
 
@@ -1648,7 +1658,19 @@ document.getElementById('ctx-leave-room')?.addEventListener('click', async () =>
 
 function showConnectionBanner(visible) {
     const banner = document.getElementById('connection-banner');
-    if (banner) banner.classList.toggle('hidden', !visible);
+    if (!banner) return;
+    if (visible) {
+        // Delay showing the banner so brief reconnects don't flash it
+        if (!connectionBannerTimeout) {
+            connectionBannerTimeout = setTimeout(() => {
+                banner.classList.remove('hidden');
+            }, 10000);
+        }
+    } else {
+        clearTimeout(connectionBannerTimeout);
+        connectionBannerTimeout = null;
+        banner.classList.add('hidden');
+    }
 }
 
 function connectWebSocket() {
@@ -1831,6 +1853,47 @@ function handleRoomMessage(action, data) {
             }
             break;
 
+        case 'join_request':
+            console.log(`[WS] Join request for ${data.room_id} from ${data.username}`);
+            // Update pending count and badge
+            if (!pendingRequestCounts[data.room_id]) {
+                pendingRequestCounts[data.room_id] = 0;
+            }
+            pendingRequestCounts[data.room_id]++;
+            updateJoinRequestBadges(data.room_id);
+            // Refresh members panel if viewing this room
+            if (data.room_id === currentRoom) {
+                const panel = document.getElementById('members-panel');
+                if (panel && panel.classList.contains('open')) {
+                    openMembersPanel();
+                }
+            }
+            break;
+
+        case 'join_resolved':
+            console.log(`[WS] Join request for ${data.room_id}: ${data.action}`);
+            if (data.action === 'approved') {
+                loadRooms();
+            }
+            break;
+
+        case 'visibility_changed':
+            if (roomMeta[data.room_id]) {
+                roomMeta[data.room_id].visibility = data.visibility;
+            }
+            // Re-render the room item
+            const roomItem = document.querySelector(`.room-item[data-room-id="${data.room_id}"]`);
+            if (roomItem) {
+                const nameSpan = roomItem.querySelector('.room-name');
+                if (nameSpan) {
+                    const icon = data.visibility === 'private'
+                        ? '<iconify-icon icon="lucide:lock" class="room-visibility-icon" inline></iconify-icon>'
+                        : '#';
+                    nameSpan.innerHTML = `<span class="room-prefix">${icon}</span>${escapeHtml(data.room_id)}`;
+                }
+            }
+            break;
+
         case 'error':
             console.error(`[WS] Room error (${data.room_id}):`, data.message);
             break;
@@ -1838,6 +1901,42 @@ function handleRoomMessage(action, data) {
         default:
             console.warn('[WS] Unknown room action:', action);
             break;
+    }
+}
+
+function updateJoinRequestBadges(roomId) {
+    const count = pendingRequestCounts[roomId] || 0;
+    // Update room item badge in sidebar
+    const roomItem = document.querySelector(`.room-item[data-room-id="${roomId}"]`);
+    if (roomItem) {
+        let badge = roomItem.querySelector('.pending-badge');
+        if (count > 0) {
+            if (!badge) {
+                badge = document.createElement('span');
+                badge.className = 'pending-badge';
+                roomItem.appendChild(badge);
+            }
+            badge.textContent = count;
+        } else if (badge) {
+            badge.remove();
+        }
+    }
+    // Update members toggle button badge if this is the current room
+    if (roomId === currentRoom) {
+        const toggleBtn = document.getElementById('members-toggle-btn');
+        if (toggleBtn) {
+            let btnBadge = toggleBtn.querySelector('.pending-badge');
+            if (count > 0) {
+                if (!btnBadge) {
+                    btnBadge = document.createElement('span');
+                    btnBadge.className = 'pending-badge';
+                    toggleBtn.appendChild(btnBadge);
+                }
+                btnBadge.textContent = count;
+            } else if (btnBadge) {
+                btnBadge.remove();
+            }
+        }
     }
 }
 
@@ -1880,11 +1979,24 @@ function renderRoomTypeList(containerId, radioName) {
     });
 }
 
+let roomSearchTimeout = null;
+let pendingRequestCounts = {};
+
 function openCreateRoomModal() {
     const modal = document.getElementById('create-room-modal');
     const input = document.getElementById('new-room-input');
     input.value = '';
     renderRoomTypeList('room-type-list', 'create-room-type');
+    // Reset search state
+    document.getElementById('room-search-results').classList.add('hidden');
+    document.getElementById('room-search-results').innerHTML = '';
+    document.getElementById('create-room-form').classList.remove('hidden');
+    document.getElementById('name-status-icon').textContent = '';
+    input.classList.remove('name-available', 'name-taken');
+    document.getElementById('name-hint').textContent = 'Lowercase letters, numbers, and hyphens only';
+    // Reset visibility to private (default)
+    const privateRadio = document.querySelector('input[name="create-room-visibility"][value="private"]');
+    if (privateRadio) privateRadio.checked = true;
     modal.classList.add('open');
     setTimeout(() => input.focus(), 100);
 }
@@ -1892,7 +2004,152 @@ function openCreateRoomModal() {
 function closeCreateRoomModal() {
     const modal = document.getElementById('create-room-modal');
     modal.classList.remove('open');
+    if (roomSearchTimeout) {
+        clearTimeout(roomSearchTimeout);
+        roomSearchTimeout = null;
+    }
 }
+
+function onRoomNameInput() {
+    const input = document.getElementById('new-room-input');
+    const rawValue = input.value.trim().toLowerCase();
+
+    if (roomSearchTimeout) {
+        clearTimeout(roomSearchTimeout);
+    }
+
+    if (!rawValue) {
+        document.getElementById('room-search-results').classList.add('hidden');
+        document.getElementById('room-search-results').innerHTML = '';
+        document.getElementById('create-room-form').classList.remove('hidden');
+        document.getElementById('name-status-icon').textContent = '';
+        input.classList.remove('name-available', 'name-taken');
+        document.getElementById('name-hint').textContent = 'Lowercase letters, numbers, and hyphens only';
+        return;
+    }
+
+    roomSearchTimeout = setTimeout(() => searchRooms(rawValue), 300);
+}
+window.onRoomNameInput = onRoomNameInput;
+
+async function searchRooms(query) {
+    const input = document.getElementById('new-room-input');
+    const resultsEl = document.getElementById('room-search-results');
+    const createForm = document.getElementById('create-room-form');
+    const nameIcon = document.getElementById('name-status-icon');
+    const nameHint = document.getElementById('name-hint');
+
+    const isValidName = /^[a-z0-9]+(-[a-z0-9]+)*$/.test(query);
+
+    try {
+        const [searchResp, checkResp] = await Promise.all([
+            fetch(`${API_URL}/rooms/search?q=${encodeURIComponent(query)}`, {
+                headers: { 'Authorization': `Bearer ${sessionToken}` }
+            }),
+            isValidName ? fetch(`${API_URL}/rooms/check-name?name=${encodeURIComponent(query)}`, {
+                headers: { 'Authorization': `Bearer ${sessionToken}` }
+            }) : Promise.resolve(null),
+        ]);
+
+        const searchResults = await searchResp.json();
+        const nameCheck = checkResp ? await checkResp.json() : null;
+
+        // Check if input changed while fetching
+        if (input.value.trim().toLowerCase() !== query) return;
+
+        const exactMatch = searchResults.find(r => r.room_id === query);
+
+        // Render search results
+        if (searchResults.length > 0) {
+            resultsEl.classList.remove('hidden');
+            resultsEl.innerHTML = '';
+
+            searchResults.forEach(room => {
+                const item = document.createElement('div');
+                item.className = 'search-result-item';
+
+                const info = document.createElement('div');
+                info.className = 'search-result-info';
+                info.innerHTML = `<span class="search-result-name">#${escapeHtml(room.room_id)}</span>
+                    <span class="search-result-meta">${room.member_count} member${room.member_count !== 1 ? 's' : ''}${room.topic ? ' \u00b7 ' + escapeHtml(room.topic) : ''}</span>`;
+
+                item.appendChild(info);
+
+                if (roomMeta[room.room_id]) {
+                    const badge = document.createElement('span');
+                    badge.className = 'search-result-badge';
+                    badge.textContent = 'Joined';
+                    item.appendChild(badge);
+                } else {
+                    const btn = document.createElement('button');
+                    btn.className = 'search-result-join-btn';
+                    btn.textContent = 'Request to Join';
+                    btn.onclick = () => requestToJoin(room.room_id, btn);
+                    item.appendChild(btn);
+                }
+
+                resultsEl.appendChild(item);
+            });
+        } else {
+            resultsEl.classList.add('hidden');
+            resultsEl.innerHTML = '';
+        }
+
+        // Show/hide create form based on exact match
+        if (exactMatch && !roomMeta[query]) {
+            createForm.classList.add('hidden');
+        } else {
+            createForm.classList.remove('hidden');
+        }
+
+        // Name availability indicator
+        input.classList.remove('name-available', 'name-taken');
+        if (!isValidName) {
+            nameIcon.textContent = '';
+            nameHint.textContent = 'Lowercase letters, numbers, and hyphens only';
+        } else if (nameCheck && nameCheck.available) {
+            input.classList.add('name-available');
+            nameIcon.innerHTML = '<iconify-icon icon="lucide:check" style="color: var(--color-success, #16a34a)"></iconify-icon>';
+            nameHint.textContent = 'Name is available';
+        } else {
+            input.classList.add('name-taken');
+            nameIcon.innerHTML = '<iconify-icon icon="lucide:x" style="color: var(--color-error, #dc2626)"></iconify-icon>';
+            nameHint.textContent = 'Room name is already taken';
+        }
+    } catch (error) {
+        console.error('[HTTP] Room search failed:', error);
+    }
+}
+
+async function requestToJoin(roomId, btn) {
+    btn.disabled = true;
+    btn.textContent = 'Requesting...';
+    try {
+        const response = await fetch(`${API_URL}/rooms/${encodeURIComponent(roomId)}/join-requests`, {
+            method: 'POST',
+            headers: { 'Authorization': `Bearer ${sessionToken}` }
+        });
+        if (response.ok) {
+            btn.textContent = 'Request Sent';
+            btn.classList.add('request-sent');
+        } else {
+            const data = await response.json();
+            if (data.detail === 'You already have a pending request for this room') {
+                btn.textContent = 'Request Pending';
+                btn.classList.add('request-sent');
+            } else {
+                btn.textContent = 'Request to Join';
+                btn.disabled = false;
+                alert(data.detail || 'Failed to submit request');
+            }
+        }
+    } catch (error) {
+        console.error('[HTTP] Join request failed:', error);
+        btn.textContent = 'Request to Join';
+        btn.disabled = false;
+    }
+}
+window.requestToJoin = requestToJoin;
 
 async function createRoom() {
     const input = document.getElementById('new-room-input');
@@ -1908,6 +2165,8 @@ async function createRoom() {
         return;
     }
 
+    const visibility = document.querySelector('input[name="create-room-visibility"]:checked')?.value || 'private';
+
     try {
         const response = await fetch(`${API_URL}/rooms`, {
             method: 'POST',
@@ -1918,6 +2177,7 @@ async function createRoom() {
             body: JSON.stringify({
                 room_id: roomId,
                 room_type: document.querySelector('input[name="create-room-type"]:checked')?.value || 'chat',
+                visibility: visibility,
             })
         });
 
@@ -2142,8 +2402,10 @@ async function openMembersPanel() {
     if (btn) btn.classList.add('active');
 
     const listEl = document.getElementById('members-panel-list');
+    const joinReqListEl = document.getElementById('join-requests-panel-list');
     const countEl = document.getElementById('members-panel-count');
     listEl.innerHTML = '<p style="color: var(--text-muted); text-align: center; padding: 20px;">Loading...</p>';
+    joinReqListEl.innerHTML = '';
     countEl.textContent = '';
 
     try {
@@ -2159,6 +2421,78 @@ async function openMembersPanel() {
         const roomData = await response.json();
         const members = roomData.members || [];
         countEl.textContent = `(${members.length})`;
+
+        // Check if user is op/owner/admin for this room
+        const myMember = members.find(m => m.username === currentUsername);
+        const canManage = myMember && (myMember.room_role === 'op' || myMember.room_role === 'owner') || currentRole === 'admin';
+
+        // Fetch pending join requests if user can manage
+        if (canManage) {
+            try {
+                const jrResp = await fetch(`${API_URL}/rooms/${encodeURIComponent(currentRoom)}/join-requests`, {
+                    headers: { 'Authorization': `Bearer ${sessionToken}` }
+                });
+                if (jrResp.ok) {
+                    const joinRequests = await jrResp.json();
+                    pendingRequestCounts[currentRoom] = joinRequests.length;
+                    updateJoinRequestBadges(currentRoom);
+
+                    if (joinRequests.length > 0) {
+                        joinReqListEl.innerHTML = '';
+                        const header = document.createElement('div');
+                        header.className = 'join-requests-header';
+                        header.textContent = `Pending Requests (${joinRequests.length})`;
+                        joinReqListEl.appendChild(header);
+
+                        joinRequests.forEach(req => {
+                            const reqDiv = document.createElement('div');
+                            reqDiv.className = 'join-request-item';
+
+                            const reqInfo = document.createElement('div');
+                            reqInfo.className = 'member-info';
+
+                            const avatar = document.createElement('img');
+                            avatar.className = 'user-avatar';
+                            avatar.src = `${API_URL}/users/${encodeURIComponent(req.username)}/avatar`;
+                            avatar.width = 28;
+                            avatar.height = 28;
+                            avatar.alt = '';
+                            reqInfo.appendChild(avatar);
+
+                            const reqName = document.createElement('span');
+                            reqName.className = 'member-name';
+                            reqName.style.color = req.color || 'var(--theme-color)';
+                            reqName.textContent = req.nickname || req.username;
+                            reqName.title = req.username;
+                            reqInfo.appendChild(reqName);
+                            reqDiv.appendChild(reqInfo);
+
+                            const actions = document.createElement('div');
+                            actions.className = 'join-request-actions';
+
+                            const approveBtn = document.createElement('button');
+                            approveBtn.className = 'join-request-approve';
+                            approveBtn.innerHTML = '<iconify-icon icon="lucide:check" inline></iconify-icon>';
+                            approveBtn.title = 'Approve';
+                            approveBtn.onclick = () => resolveJoinRequest(currentRoom, req.username, 'approve', reqDiv);
+
+                            const denyBtn = document.createElement('button');
+                            denyBtn.className = 'join-request-deny';
+                            denyBtn.innerHTML = '<iconify-icon icon="lucide:x" inline></iconify-icon>';
+                            denyBtn.title = 'Deny';
+                            denyBtn.onclick = () => resolveJoinRequest(currentRoom, req.username, 'deny', reqDiv);
+
+                            actions.appendChild(approveBtn);
+                            actions.appendChild(denyBtn);
+                            reqDiv.appendChild(actions);
+                            joinReqListEl.appendChild(reqDiv);
+                        });
+                    }
+                }
+            } catch (err) {
+                console.error('[HTTP] Error loading join requests:', err);
+            }
+        }
 
         listEl.innerHTML = '';
         members.forEach(member => {
@@ -2203,6 +2537,41 @@ async function openMembersPanel() {
         listEl.innerHTML = '<p style="color: var(--text-muted); text-align: center; padding: 20px;">Failed to load members</p>';
     }
 }
+
+async function resolveJoinRequest(roomId, username, action, element) {
+    try {
+        const response = await fetch(`${API_URL}/rooms/${encodeURIComponent(roomId)}/join-requests/${encodeURIComponent(username)}`, {
+            method: 'PATCH',
+            headers: {
+                'Content-Type': 'application/json',
+                'Authorization': `Bearer ${sessionToken}`
+            },
+            body: JSON.stringify({ action })
+        });
+        if (response.ok) {
+            element.remove();
+            // Update count
+            if (pendingRequestCounts[roomId]) {
+                pendingRequestCounts[roomId]--;
+                if (pendingRequestCounts[roomId] <= 0) {
+                    delete pendingRequestCounts[roomId];
+                }
+            }
+            updateJoinRequestBadges(roomId);
+            // Refresh header count
+            const header = document.querySelector('#join-requests-panel-list .join-requests-header');
+            const count = pendingRequestCounts[roomId] || 0;
+            if (header && count > 0) {
+                header.textContent = `Pending Requests (${count})`;
+            } else if (header) {
+                header.remove();
+            }
+        }
+    } catch (error) {
+        console.error('[HTTP] Failed to resolve join request:', error);
+    }
+}
+window.resolveJoinRequest = resolveJoinRequest;
 
 function closeMembersPanel() {
     const panel = document.getElementById('members-panel');
@@ -2683,12 +3052,13 @@ document.addEventListener('DOMContentLoaded', () => {
     // Note: Settings panel has been moved to settings.html page
     // sidebar-settings-btn is now a link to /settings.html
 
-    // Create room modal - input enter key
+    // Create room modal - input enter key + search debounce
     const newRoomInput = document.getElementById('new-room-input');
     if (newRoomInput) {
         newRoomInput.addEventListener('keypress', (e) => {
             if (e.key === 'Enter') createRoom();
         });
+        newRoomInput.addEventListener('input', onRoomNameInput);
     }
 
     // Create room modal - close button

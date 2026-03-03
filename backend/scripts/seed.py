@@ -63,9 +63,9 @@ SEED_USERS = [
 ]
 
 SEED_ROOMS = [
-    {"room_id": "general", "topic": "General discussion for the team"},
-    {"room_id": "random", "topic": "Off-topic and fun stuff"},
-    {"room_id": "dev", "topic": "Development discussion and code reviews"},
+    {"room_id": "general", "topic": "General discussion for the team", "visibility": "public"},
+    {"room_id": "random", "topic": "Off-topic and fun stuff", "visibility": "public"},
+    {"room_id": "dev", "topic": "Development discussion and code reviews", "visibility": "private"},
 ]
 
 SEED_CONVERSATIONS = {
@@ -1116,7 +1116,7 @@ def create_seed_rooms(tokens: dict[str, str], base_url: str):
         # Create room
         resp = requests.post(
             f"{base_url}/api/rooms",
-            json={"room_id": room_id, "room_type": "chat"},
+            json={"room_id": room_id, "room_type": "chat", "visibility": room.get("visibility", "private")},
             headers=headers,
         )
         if resp.status_code == 200:

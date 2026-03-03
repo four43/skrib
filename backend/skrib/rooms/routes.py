@@ -15,6 +15,9 @@ from .schemas import (
     MemberInfo,
     RoomUpdateRequest,
     MemberUpdateRequest,
+    RoomSearchResult,
+    JoinRequestInfo,
+    JoinRequestAction,
 )
 from .services import (
     get_user_rooms,
@@ -33,6 +36,13 @@ from .services import (
     set_topic,
     get_room_info,
     set_room_role,
+    search_rooms,
+    check_room_name_available,
+    set_visibility,
+    create_join_request,
+    get_join_requests,
+    resolve_join_request,
+    get_room_ops,
 )
 from ..ws import bus
 from ..dependencies import require_auth
@@ -70,7 +80,7 @@ async def create_new_room(
             detail=f"Unsupported room type: '{request.room_type}'"
         )
 
-    if not create_room(request.room_id, room_type=request.room_type, created_by=username):
+    if not create_room(request.room_id, room_type=request.room_type, created_by=username, visibility=request.visibility):
         raise HTTPException(status_code=400, detail="Room already exists")
 
     # Add creator as owner
@@ -136,6 +146,29 @@ async def create_dm(
         await bus.notify_user(participant, {"type": "room:update"})
 
     return CreateDMResponse(room=RoomInfo(**room))
+
+
+@router.get("/search", response_model=list[RoomSearchResult])
+async def search_rooms_endpoint(
+    q: str = '',
+    username: str = Depends(require_auth),
+):
+    """Search for public rooms by name. Returns rooms the user is not already a member of."""
+    if not q.strip():
+        return []
+    results = search_rooms(q.strip().lower(), username)
+    return [RoomSearchResult(**r) for r in results]
+
+
+@router.get("/check-name")
+async def check_room_name(
+    name: str = '',
+    username: str = Depends(require_auth),
+):
+    """Check if a room name is available for creation."""
+    if not name.strip():
+        return {'available': False, 'reason': 'Name is required'}
+    return check_room_name_available(name.strip().lower())
 
 
 @router.delete("/{room_id}", response_model=DeleteRoomResponse)
@@ -289,6 +322,83 @@ async def get_room_keys_endpoint(
 
 
 
+@router.post("/{room_id}/join-requests")
+async def submit_join_request(
+    room_id: str,
+    username: str = Depends(require_auth),
+):
+    """Submit a request to join a public room."""
+    result = create_join_request(room_id, username)
+
+    if result['status'] == 'room_not_found':
+        raise HTTPException(status_code=404, detail="Room not found")
+    if result['status'] == 'not_public':
+        raise HTTPException(status_code=400, detail="Room is not public")
+    if result['status'] == 'already_member':
+        raise HTTPException(status_code=400, detail="You are already a member of this room")
+    if result['status'] == 'already_pending':
+        raise HTTPException(status_code=400, detail="You already have a pending request for this room")
+
+    # Notify room ops
+    ops = get_room_ops(room_id)
+    for op_username in ops:
+        await bus.notify_user(op_username, {
+            "type": "room:join_request",
+            "room_id": room_id,
+            "username": username,
+        })
+
+    return {"status": "created"}
+
+
+@router.get("/{room_id}/join-requests", response_model=list[JoinRequestInfo])
+async def list_join_requests(
+    room_id: str,
+    username: str = Depends(require_auth),
+):
+    """List pending join requests for a room. Requires op/owner or global admin/mod."""
+    _check_room_access(room_id, username)
+    _require_room_op_or_global_mod(room_id, username)
+
+    requests = get_join_requests(room_id)
+    return [JoinRequestInfo(**r) for r in requests]
+
+
+@router.patch("/{room_id}/join-requests/{target_username}")
+async def resolve_join_request_endpoint(
+    room_id: str,
+    target_username: str,
+    action: JoinRequestAction,
+    username: str = Depends(require_auth),
+):
+    """Approve or deny a join request. Requires op/owner or global admin/mod."""
+    _check_room_access(room_id, username)
+    _require_room_op_or_global_mod(room_id, username)
+
+    result = resolve_join_request(room_id, target_username, action.action, username)
+
+    if result['status'] == 'not_found':
+        raise HTTPException(status_code=404, detail="No pending join request found")
+
+    # Notify the requester of the decision
+    await bus.notify_user(target_username, {
+        "type": "room:join_resolved",
+        "room_id": room_id,
+        "action": result['status'],
+    })
+
+    if result['status'] == 'approved':
+        # Requester's room list changed
+        await bus.notify_user(target_username, {"type": "room:update"})
+        # Room members changed
+        await bus.broadcast_to_room(room_id, {
+            "type": "room:members_updated",
+            "room_id": room_id,
+        })
+
+    return {"status": result['status']}
+
+
 @router.get("/{room_id}/members/{target_username}")
 async def get_member_detail(
     room_id: str,
@@ -319,6 +429,7 @@ async def get_room_detail(
         room_id=info['room_id'],
         room_type=info['room_type'],
         topic=info['topic'],
+        visibility=info.get('visibility', 'private'),
         created_by=info['created_by'],
         members=[MemberInfo(**m) for m in info['members']],
         is_dm=info.get('is_dm', False),
@@ -331,7 +442,7 @@ async def update_room(
     updates: RoomUpdateRequest,
     username: str = Depends(require_auth),
 ):
-    """Update room properties (e.g., topic). Requires room owner/op or global admin."""
+    """Update room properties (e.g., topic, visibility). Requires room owner/op or global admin."""
     _check_room_access(room_id, username)
     _require_room_op_or_global_mod(room_id, username)
 
@@ -344,6 +455,18 @@ async def update_room(
             "room_id": room_id,
             "topic": updates.topic,
             "set_by": username,
+        })
+
+    if updates.visibility is not None:
+        if is_dm(room_id):
+            raise HTTPException(status_code=400, detail="Cannot change visibility of a DM")
+        if not set_visibility(room_id, updates.visibility):
+            raise HTTPException(status_code=404, detail="Room not found")
+
+        await bus.broadcast_to_room(room_id, {
+            "type": "room:visibility_changed",
+            "room_id": room_id,
+            "visibility": updates.visibility,
         })
 
     return {}

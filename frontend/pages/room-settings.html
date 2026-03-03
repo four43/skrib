@@ -40,6 +40,24 @@
                 </div>
             </div>
 
+            <!-- Visibility Section (channels only) -->
+            <div id="visibility-section" class="admin-section hidden">
+                <h3>Visibility</h3>
+                <div class="preference-item">
+                    <label for="room-visibility">Who can find this room:</label>
+                    <select id="room-visibility" class="preference-input" disabled>
+                        <option value="private">Private — Invite only, not searchable</option>
+                        <option value="public">Public — Searchable, users can request to join</option>
+                    </select>
+                </div>
+            </div>
+
+            <!-- Pending Join Requests (ops/owners only) -->
+            <div id="join-requests-section" class="admin-section hidden">
+                <h3>Pending Join Requests (<span id="join-request-count">0</span>)</h3>
+                <div id="join-requests-list" class="members-list"></div>
+            </div>
+
             <!-- Members Section -->
             <div class="admin-section">
                 <h3>Members (<span id="member-count">0</span>)</h3>

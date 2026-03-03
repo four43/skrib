@@ -40,7 +40,7 @@ def get_user_rooms(username: str) -> List[Dict]:
 
     with get_db() as conn:
         cursor = conn.execute('''
-            SELECT r.room_id, r.room_type, r.topic, rm.notify_level,
+            SELECT r.room_id, r.room_type, r.topic, r.visibility, rm.notify_level,
                    r.folder_id, r.sort_position
             FROM rooms r
             JOIN room_users rm ON r.room_id = rm.room_id
@@ -74,6 +74,7 @@ def get_user_rooms(username: str) -> List[Dict]:
                 'room_type': row['room_type'],
                 'display_name': display_name,
                 'topic': row['topic'] or '',
+                'visibility': row['visibility'] or 'private',
                 'members': members,
                 'unread_count': unread_counts.get(room_id, 0),
                 'notify_level': row['notify_level'],
@@ -101,7 +102,7 @@ def get_all_rooms() -> List[str]:
         return list(ROOMS.keys())
 
 
-def create_room(room_id: str, room_type: str = 'chat', created_by: str = None) -> bool:
+def create_room(room_id: str, room_type: str = 'chat', created_by: str = None, visibility: str = 'private') -> bool:
     """Create a new room."""
     with ROOMS_LOCK:
         if room_id in ROOMS:
@@ -111,8 +112,8 @@ def create_room(room_id: str, room_type: str = 'chat', created_by: str = None) -
     now = datetime.now().isoformat()
     with get_db() as conn:
         conn.execute(
-            'INSERT OR IGNORE INTO rooms (room_id, room_type, created_at, created_by) VALUES (?, ?, ?, ?)',
-            (room_id, room_type, now, created_by)
+            'INSERT OR IGNORE INTO rooms (room_id, room_type, visibility, created_at, created_by) VALUES (?, ?, ?, ?, ?)',
+            (room_id, room_type, visibility, now, created_by)
         )
         conn.commit()
     return True
@@ -350,7 +351,7 @@ def get_room_info(room_id: str) -> Optional[Dict]:
     """Get full room details including topic and members with roles."""
     with get_db() as conn:
         cursor = conn.execute(
-            'SELECT room_id, room_type, topic, created_by FROM rooms WHERE room_id = ?',
+            'SELECT room_id, room_type, topic, visibility, created_by FROM rooms WHERE room_id = ?',
             (room_id,),
         )
         room = cursor.fetchone()
@@ -383,6 +384,7 @@ def get_room_info(room_id: str) -> Optional[Dict]:
         'room_id': room['room_id'],
         'room_type': room['room_type'],
         'topic': room['topic'],
+        'visibility': room['visibility'] or 'private',
         'created_by': room['created_by'],
         'members': members,
         'is_dm': is_dm(room['room_id']),
@@ -458,6 +460,197 @@ def get_unread_counts(username: str) -> Dict[str, int]:
                 result[room_id] = 0
 
     return result
+
+
+def search_rooms(query: str, username: str) -> List[Dict]:
+    """Search public non-DM rooms by prefix/substring. Exclude rooms user is already in."""
+    with get_db() as conn:
+        cursor = conn.execute('''
+            SELECT r.room_id, r.room_type, r.topic, r.visibility,
+                   (SELECT COUNT(*) FROM room_users WHERE room_id = r.room_id) AS member_count
+            FROM rooms r
+            WHERE r.visibility = 'public'
+              AND r.room_id NOT LIKE 'dm|%'
+              AND r.room_id LIKE ?
+              AND r.room_id NOT IN (
+                  SELECT room_id FROM room_users WHERE username = ?
+              )
+            ORDER BY r.room_id
+            LIMIT 20
+        ''', (f'%{query}%', username))
+        return [
+            {
+                'room_id': row['room_id'],
+                'room_type': row['room_type'],
+                'topic': row['topic'] or '',
+                'visibility': row['visibility'],
+                'member_count': row['member_count'],
+            }
+            for row in cursor
+        ]
+
+
+def check_room_name_available(room_id: str) -> Dict:
+    """Check if a room name is available for creation."""
+    if room_exists(room_id):
+        return {'available': False, 'reason': 'Room name is already taken'}
+    return {'available': True, 'reason': ''}
+
+
+def get_room_visibility(room_id: str) -> Optional[str]:
+    """Get the visibility of a room."""
+    with get_db() as conn:
+        cursor = conn.execute(
+            'SELECT visibility FROM rooms WHERE room_id = ?', (room_id,)
+        )
+        row = cursor.fetchone()
+        return row['visibility'] if row else None
+
+
+def set_visibility(room_id: str, visibility: str) -> bool:
+    """Update a room's visibility. Returns False if room not found or is a DM."""
+    if not room_exists(room_id) or is_dm(room_id):
+        return False
+    with get_db() as conn:
+        conn.execute(
+            'UPDATE rooms SET visibility = ? WHERE room_id = ?',
+            (visibility, room_id),
+        )
+        conn.commit()
+    return True
+
+
+def create_join_request(room_id: str, username: str) -> Dict:
+    """Create a join request for a public room.
+
+    Returns dict with 'status': 'created', 'already_member', 'already_pending',
+    'room_not_found', or 'not_public'.
+    """
+    if not room_exists(room_id):
+        return {'status': 'room_not_found'}
+
+    visibility = get_room_visibility(room_id)
+    if visibility != 'public':
+        return {'status': 'not_public'}
+
+    with get_db() as conn:
+        # Check if already a member
+        cursor = conn.execute(
+            'SELECT 1 FROM room_users WHERE room_id = ? AND username = ?',
+            (room_id, username),
+        )
+        if cursor.fetchone():
+            return {'status': 'already_member'}
+
+        # Check for existing request
+        cursor = conn.execute(
+            'SELECT status FROM join_requests WHERE room_id = ? AND username = ?',
+            (room_id, username),
+        )
+        existing = cursor.fetchone()
+        if existing:
+            if existing['status'] == 'pending':
+                return {'status': 'already_pending'}
+            # Re-request after denial: reset to pending
+            now = datetime.now().isoformat()
+            conn.execute('''
+                UPDATE join_requests
+                SET status = 'pending', created_at = ?, resolved_by = NULL, resolved_at = NULL
+                WHERE room_id = ? AND username = ?
+            ''', (now, room_id, username))
+            conn.commit()
+            return {'status': 'created'}
+
+        now = datetime.now().isoformat()
+        conn.execute(
+            'INSERT INTO join_requests (room_id, username, status, created_at) VALUES (?, ?, ?, ?)',
+            (room_id, username, 'pending', now),
+        )
+        conn.commit()
+
+    return {'status': 'created'}
+
+
+def get_join_requests(room_id: str) -> List[Dict]:
+    """Get all pending join requests for a room with user info."""
+    with get_db() as conn:
+        cursor = conn.execute('''
+            SELECT jr.room_id, jr.username, jr.status, jr.created_at,
+                   u.nickname, u.color
+            FROM join_requests jr
+            LEFT JOIN users u ON jr.username = u.username
+            WHERE jr.room_id = ? AND jr.status = 'pending'
+            ORDER BY jr.created_at
+        ''', (room_id,))
+        return [
+            {
+                'room_id': row['room_id'],
+                'username': row['username'],
+                'status': row['status'],
+                'created_at': row['created_at'],
+                'nickname': row['nickname'],
+                'color': row['color'],
+            }
+            for row in cursor
+        ]
+
+
+def resolve_join_request(room_id: str, username: str, action: str, resolved_by: str) -> Dict:
+    """Approve or deny a join request.
+
+    On approve: adds user as member and updates request status.
+    Returns dict with 'status': 'approved', 'denied', or 'not_found'.
+    """
+    now = datetime.now().isoformat()
+    with get_db() as conn:
+        cursor = conn.execute(
+            'SELECT status FROM join_requests WHERE room_id = ? AND username = ? AND status = ?',
+            (room_id, username, 'pending'),
+        )
+        if not cursor.fetchone():
+            return {'status': 'not_found'}
+
+        if action == 'approve':
+            # Add as member
+            result = add_room_member(room_id, username)
+            if result['status'] not in ('ok', 'already_member'):
+                return result
+
+            conn.execute('''
+                UPDATE join_requests
+                SET status = 'approved', resolved_by = ?, resolved_at = ?
+                WHERE room_id = ? AND username = ?
+            ''', (resolved_by, now, room_id, username))
+            conn.commit()
+            return {'status': 'approved'}
+        else:
+            conn.execute('''
+                UPDATE join_requests
+                SET status = 'denied', resolved_by = ?, resolved_at = ?
+                WHERE room_id = ? AND username = ?
+            ''', (resolved_by, now, room_id, username))
+            conn.commit()
+            return {'status': 'denied'}
+
+
+def get_pending_request_count(room_id: str) -> int:
+    """Count pending join requests for a room."""
+    with get_db() as conn:
+        cursor = conn.execute(
+            'SELECT COUNT(*) as cnt FROM join_requests WHERE room_id = ? AND status = ?',
+            (room_id, 'pending'),
+        )
+        return cursor.fetchone()['cnt']
+
+
+def get_room_ops(room_id: str) -> List[str]:
+    """Get usernames of ops and owners for a room (for notifications)."""
+    with get_db() as conn:
+        cursor = conn.execute(
+            "SELECT username FROM room_users WHERE room_id = ? AND room_role IN ('op', 'owner')",
+            (room_id,),
+        )
+        return [row['username'] for row in cursor]
 
 
 def get_unread_count_for_room(room_id: str, username: str) -> int:

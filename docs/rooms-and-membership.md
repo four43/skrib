@@ -55,6 +55,7 @@ Members are added via:
 - Room creation (creator is auto-added as `owner`)
 
 When a member is invited via `/invite`, the inviter:
+
 1. Adds them to the room via the API
 2. Fetches their RSA public key
 3. Encrypts all room key epochs for the new member

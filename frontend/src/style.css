@@ -2986,9 +2986,242 @@ iconify-icon {
 
 /* Offset for absolutely-positioned topbar overlay */
 #messages {
-    padding-top: 64px;
+    padding-top: calc(64px + env(safe-area-inset-top));
 }
 
 .empty-state {
     margin: auto;
+}
+
+/* ═══════════════════════════════════════════
+   Room Joining & Discoverability
+   ═══════════════════════════════════════════ */
+
+/* Room prefix (# or lock icon) */
+.room-prefix {
+    margin-right: 2px;
+    opacity: 0.6;
+}
+
+.room-visibility-icon {
+    font-size: 12px;
+    vertical-align: middle;
+}
+
+/* Name input wrapper with status icon */
+.name-input-wrapper {
+    position: relative;
+    display: flex;
+    align-items: center;
+}
+
+.name-input-wrapper input {
+    flex: 1;
+    padding-right: 32px;
+}
+
+.name-status-icon {
+    position: absolute;
+    right: 10px;
+    font-size: 16px;
+    pointer-events: none;
+}
+
+/* Name validation states */
+input.name-available {
+    border-color: #16a34a;
+    outline-color: #16a34a;
+}
+
+input.name-available:focus {
+    box-shadow: 0 0 0 2px rgba(22, 163, 74, 0.2);
+}
+
+input.name-taken {
+    border-color: #dc2626;
+    outline-color: #dc2626;
+}
+
+input.name-taken:focus {
+    box-shadow: 0 0 0 2px rgba(220, 38, 38, 0.2);
+}
+
+/* Search results in Add Channel modal */
+.room-search-results {
+    margin-bottom: 12px;
+}
+
+.room-search-results.hidden {
+    display: none;
+}
+
+.search-result-item {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    padding: 10px 12px;
+    border: 1px solid var(--border-color, rgba(0, 0, 0, 0.08));
+    border-radius: 8px;
+    margin-bottom: 6px;
+    gap: 8px;
+}
+
+.search-result-info {
+    display: flex;
+    flex-direction: column;
+    min-width: 0;
+    flex: 1;
+}
+
+.search-result-name {
+    font-weight: 600;
+    font-size: 14px;
+    color: var(--text-primary);
+}
+
+.search-result-meta {
+    font-size: 12px;
+    color: var(--text-tertiary);
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+}
+
+.search-result-join-btn {
+    font-size: 12px;
+    padding: 4px 10px;
+    border-radius: 6px;
+    white-space: nowrap;
+    flex-shrink: 0;
+}
+
+.search-result-join-btn.request-sent {
+    opacity: 0.6;
+    cursor: default;
+}
+
+.search-result-badge {
+    font-size: 12px;
+    color: var(--text-tertiary);
+    padding: 4px 10px;
+    white-space: nowrap;
+    flex-shrink: 0;
+}
+
+/* Create form divider */
+.form-divider {
+    display: flex;
+    align-items: center;
+    text-align: center;
+    color: var(--text-tertiary);
+    font-size: 12px;
+    margin: 16px 0;
+}
+
+.form-divider::before,
+.form-divider::after {
+    content: '';
+    flex: 1;
+    border-bottom: 1px solid var(--border-color, rgba(0, 0, 0, 0.08));
+}
+
+.form-divider span {
+    padding: 0 12px;
+}
+
+/* Visibility options in create modal */
+.visibility-options {
+    display: flex;
+    flex-direction: column;
+    gap: 6px;
+}
+
+.visibility-options .room-type-info {
+    display: flex;
+    flex-direction: column;
+}
+
+.visibility-options .room-type-info small {
+    font-size: 11px;
+    color: var(--text-tertiary);
+    font-weight: normal;
+}
+
+.create-room-form.hidden {
+    display: none;
+}
+
+/* Pending request badges */
+.pending-badge {
+    background: #f59e0b;
+    color: white;
+    font-size: 10px;
+    font-weight: 700;
+    min-width: 16px;
+    height: 16px;
+    line-height: 16px;
+    text-align: center;
+    border-radius: 8px;
+    padding: 0 4px;
+    flex-shrink: 0;
+    margin-left: 4px;
+}
+
+/* Join request items in members panel */
+.join-requests-header {
+    font-size: 11px;
+    font-weight: 600;
+    text-transform: uppercase;
+    letter-spacing: 0.5px;
+    color: #f59e0b;
+    padding: 8px 12px 4px;
+}
+
+.join-request-item {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    padding: 6px 12px;
+    background: rgba(245, 158, 11, 0.05);
+    border-radius: 6px;
+    margin-bottom: 2px;
+}
+
+.join-request-actions {
+    display: flex;
+    gap: 4px;
+    flex-shrink: 0;
+}
+
+.join-request-approve,
+.join-request-deny {
+    width: 28px;
+    height: 28px;
+    padding: 0;
+    border-radius: 6px;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    font-size: 16px;
+    cursor: pointer;
+}
+
+.join-request-approve {
+    color: #16a34a;
+    background: rgba(22, 163, 74, 0.1);
+    border: 1px solid rgba(22, 163, 74, 0.2);
+}
+
+.join-request-approve:hover {
+    background: rgba(22, 163, 74, 0.2);
+}
+
+.join-request-deny {
+    color: #dc2626;
+    background: rgba(220, 38, 38, 0.1);
+    border: 1px solid rgba(220, 38, 38, 0.2);
+}
+
+.join-request-deny:hover {
+    background: rgba(220, 38, 38, 0.2);
 }

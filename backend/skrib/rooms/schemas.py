@@ -8,6 +8,7 @@ class RoomInfo(BaseModel):
     room_type: str  # "chat"
     display_name: str  # "#general" or "alice"
     topic: str = ''
+    visibility: str = 'private'
     members: List[str] = []
     unread_count: int = 0
     notify_level: str = 'all'  # "all", "mentions", "muted"
@@ -19,6 +20,7 @@ class RoomInfo(BaseModel):
 class CreateRoomRequest(BaseModel):
     room_id: str
     room_type: str = 'chat'
+    visibility: Literal['private', 'public'] = 'private'
 
 
 class CreateRoomResponse(BaseModel):
@@ -111,6 +113,7 @@ class RoomDetailResponse(BaseModel):
     room_id: str
     room_type: str
     topic: str
+    visibility: str = 'private'
     created_by: str | None
     members: List[MemberInfo]
     is_dm: bool = False
@@ -119,12 +122,34 @@ class RoomDetailResponse(BaseModel):
 class RoomUpdateRequest(BaseModel):
     """Request body for updating room properties via PATCH."""
     topic: Optional[str] = None
+    visibility: Optional[Literal['private', 'public']] = None
 
 
 class MemberUpdateRequest(BaseModel):
     """Request body for updating member properties via PATCH."""
     notify_level: Optional[Literal['all', 'mentions', 'muted']] = None
     room_role: Optional[Literal['op', 'voice', 'member']] = None
+
+
+class RoomSearchResult(BaseModel):
+    room_id: str
+    room_type: str
+    topic: str
+    visibility: str
+    member_count: int
+
+
+class JoinRequestInfo(BaseModel):
+    room_id: str
+    username: str
+    status: str
+    created_at: str
+    nickname: Optional[str] = None
+    color: Optional[str] = None
+
+
+class JoinRequestAction(BaseModel):
+    action: Literal['approve', 'deny']
 
 
 # Legacy schemas - deprecated
