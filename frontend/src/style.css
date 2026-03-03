@@ -586,7 +586,6 @@ input[type="password"]::placeholder {
     overflow: hidden;
     display: flex;
     flex-direction: column;
-    padding-top: env(safe-area-inset-top, 0px);
     background: var(--bg-surface-strong);
 }
 
@@ -682,6 +681,7 @@ input[type="password"]::placeholder {
     align-items: center;
     gap: 10px;
     padding: 16px 16px 12px;
+    padding-top: calc(16px + env(safe-area-inset-top));
 }
 
 .sidebar-brand h1 {
@@ -1400,6 +1400,7 @@ input[type="password"]::placeholder {
     display: flex;
     align-items: center;
     padding: 12px 16px 4px;
+    padding-top: calc(12px + env(safe-area-inset-top));
     gap: 8px;
 }
 
