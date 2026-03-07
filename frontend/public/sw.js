@@ -7,7 +7,7 @@
  * - Notification click → focus/open app
  */
 
-const CACHE_NAME = 'skrib-v2';
+const CACHE_NAME = 'skrib-v3';
 
 // Pre-cache critical assets on install
 self.addEventListener('install', (event) => {
