@@ -21,6 +21,10 @@ let ws = null;  // Single unified WebSocket connection
 let reconnectAttempts = 0;
 let maxReconnectAttempts = 10;
 let reconnectTimeout = null;
+let pingInterval = null;    // Client-side heartbeat interval
+let lastPongTime = 0;       // Timestamp of last pong received
+const PING_INTERVAL_MS = 30000;  // Send ping every 30s
+const PONG_TIMEOUT_MS = 10000;   // Reconnect if no pong within 10s
 let connectionBannerTimeout = null;
 let userColors = {};  // Cache of username -> color mappings
 let userNicknames = {};  // Cache of username -> nickname (null if not set)
@@ -1673,6 +1677,28 @@ function showConnectionBanner(visible) {
     }
 }
 
+function startHeartbeat() {
+    stopHeartbeat();
+    lastPongTime = Date.now();
+    pingInterval = setInterval(() => {
+        if (!ws || ws.readyState !== WebSocket.OPEN) return;
+        // Check if the last pong is overdue
+        if (Date.now() - lastPongTime > PING_INTERVAL_MS + PONG_TIMEOUT_MS) {
+            console.log('[WS] Pong timeout, closing connection');
+            ws.close();
+            return;
+        }
+        ws.send(JSON.stringify({ type: 'system:ping' }));
+    }, PING_INTERVAL_MS);
+}
+
+function stopHeartbeat() {
+    if (pingInterval) {
+        clearInterval(pingInterval);
+        pingInterval = null;
+    }
+}
+
 function connectWebSocket() {
     // Don't create a new connection if one is already open or in progress
     if (ws && (ws.readyState === WebSocket.CONNECTING || ws.readyState === WebSocket.OPEN)) {
@@ -1705,6 +1731,7 @@ function connectWebSocket() {
             settled = true;
             reconnectAttempts = 0;
             showConnectionBanner(false);
+            startHeartbeat();
             // Re-join current room if we're reconnecting
             if (currentRoom) {
                 // Reload keys before rejoining to handle any new epochs created while disconnected
@@ -1734,6 +1761,7 @@ function connectWebSocket() {
 
     ws.onclose = () => {
         console.log('[WS] Disconnected');
+        stopHeartbeat();
         ws = null;
         if (sessionToken && reconnectAttempts < maxReconnectAttempts) {
             reconnectAttempts++;
@@ -1804,7 +1832,13 @@ function handleSystemMessage(action, data) {
         case 'connected':
             console.log(`[WS] Authenticated as ${data.username}`);
             break;
+        case 'ping':
+            // Server is checking if we're alive — reply immediately
+            ws?.send(JSON.stringify({ type: 'system:pong' }));
+            break;
         case 'pong':
+            // Response to our client-side ping
+            lastPongTime = Date.now();
             break;
         case 'error':
             console.error('[WS] System error:', data.message);
@@ -2989,6 +3023,42 @@ document.addEventListener('DOMContentLoaded', () => {
     // Note: #message-input and #send-button are now created dynamically
     // by room type plugins (e.g. chat plugin). Their event listeners are
     // bound by the plugin when the input area is created.
+
+    // iOS standalone PWA: body can start with a scroll offset or drift
+    // after keyboard use, pushing the fixed container up. Always reset.
+    window.scrollTo(0, 0);
+    window.addEventListener('scroll', () => {
+        if (window.scrollY !== 0) window.scrollTo(0, 0);
+    });
+
+    // iOS PWA: position:fixed elements don't shrink when the virtual keyboard
+    // opens. Use visualViewport to resize the container so the input stays visible.
+    // Only override when keyboard is actually open (significant height reduction).
+    // Do NOT listen to visualViewport 'scroll' — it causes twitching feedback loops.
+    if (window.visualViewport) {
+        const container = document.getElementById('chat-view');
+        if (container) {
+            const KEYBOARD_THRESHOLD = 100;
+            const fullHeight = window.visualViewport.height;
+
+            window.visualViewport.addEventListener('resize', () => {
+                const vv = window.visualViewport;
+                if (!vv) return;
+                const keyboardOpen = (fullHeight - vv.height) > KEYBOARD_THRESHOLD;
+                if (keyboardOpen) {
+                    container.style.height = `${vv.height}px`;
+                    container.style.bottom = 'auto';
+                    const messagesDiv = document.getElementById('messages');
+                    if (messagesDiv) {
+                        messagesDiv.scrollTop = messagesDiv.scrollHeight;
+                    }
+                } else {
+                    container.style.height = '';
+                    container.style.bottom = '';
+                }
+            });
+        }
+    }
 
     // Menu toggle (mobile)
     const menuToggle = document.getElementById('menu-toggle');

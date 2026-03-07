@@ -191,12 +191,17 @@ async def startup_event():
         except Exception as e:
             print(f"[Plugins] Error in on_startup for {plugin.id}: {e}")
 
+    # Start WebSocket heartbeat (periodic ping to detect dead connections)
+    ws.bus.start_heartbeat()
+
     print()
 
 
 @app.on_event("shutdown")
 async def shutdown_event():
     """Call on_shutdown for all plugins, then auto-cleanup registered resources."""
+    from . import ws
+    ws.bus.stop_heartbeat()
     print("\n[Plugins] Shutting down plugins...")
     for plugin in registry.get_all_plugins():
         try:

@@ -3,10 +3,15 @@
 Replaces both ConnectionManager (per-room) and ListSubscriptionManager (per-user)
 with a single bus that handles namespaced message routing.
 """
+import asyncio
 import json
+import time
 import uuid
 from typing import Callable, Dict, Set, Awaitable
 from fastapi import WebSocket
+
+HEARTBEAT_INTERVAL = 30  # seconds between server pings
+HEARTBEAT_TIMEOUT = 90   # seconds before considering a client dead
 
 
 class UnifiedConnectionManager:
@@ -31,6 +36,9 @@ class UnifiedConnectionManager:
         self.event_listeners: Dict[str, list[Callable[[dict], Awaitable]]] = {}
         # reply_token -> WebSocket (for plugin reply-to pattern)
         self._reply_tokens: Dict[str, WebSocket] = {}
+        # heartbeat: track last pong time per socket
+        self._last_pong: Dict[WebSocket, float] = {}
+        self._heartbeat_task: asyncio.Task | None = None
 
     def register_namespace(self, namespace: str, handler: Callable[..., Awaitable]):
         """Register an async handler for a message namespace (e.g. 'system', 'room')."""
@@ -79,6 +87,7 @@ class UnifiedConnectionManager:
         """Register a new authenticated WebSocket connection."""
         self.ws_to_user[ws] = username
         self.ws_to_rooms[ws] = set()
+        self._last_pong[ws] = time.monotonic()
         if username not in self.user_connections:
             self.user_connections[username] = set()
         self.user_connections[username].add(ws)
@@ -86,6 +95,7 @@ class UnifiedConnectionManager:
 
     def disconnect(self, ws: WebSocket):
         """Clean up a disconnected WebSocket."""
+        self._last_pong.pop(ws, None)
         username = self.ws_to_user.pop(ws, None)
         if not username:
             return
@@ -191,6 +201,55 @@ class UnifiedConnectionManager:
                 await ws.send_json(message)
             except Exception:
                 self.disconnect(ws)
+
+    def record_pong(self, ws: WebSocket):
+        """Update the last pong timestamp for a WebSocket."""
+        self._last_pong[ws] = time.monotonic()
+
+    async def _heartbeat_loop(self):
+        """Periodically ping all clients and disconnect stale ones."""
+        while True:
+            await asyncio.sleep(HEARTBEAT_INTERVAL)
+            now = time.monotonic()
+
+            # Disconnect stale sockets (no pong within timeout)
+            stale = [
+                ws for ws, last in self._last_pong.items()
+                if now - last > HEARTBEAT_TIMEOUT
+            ]
+            for ws in stale:
+                username = self.ws_to_user.get(ws, "unknown")
+                print(f"[WS] Heartbeat timeout for {username}, disconnecting")
+                self.disconnect(ws)
+                try:
+                    await ws.close(code=1000, reason="Heartbeat timeout")
+                except Exception:
+                    pass
+
+            # Ping all remaining connected sockets
+            ping_msg = {"type": "system:ping"}
+            all_sockets = list(self.ws_to_user.keys())
+            disconnected = []
+            for ws in all_sockets:
+                try:
+                    await ws.send_json(ping_msg)
+                except Exception:
+                    disconnected.append(ws)
+            for ws in disconnected:
+                self.disconnect(ws)
+
+    def start_heartbeat(self):
+        """Start the background heartbeat task."""
+        if self._heartbeat_task is None:
+            self._heartbeat_task = asyncio.create_task(self._heartbeat_loop())
+            print(f"[WS] Heartbeat started (interval={HEARTBEAT_INTERVAL}s, timeout={HEARTBEAT_TIMEOUT}s)")
+
+    def stop_heartbeat(self):
+        """Stop the background heartbeat task."""
+        if self._heartbeat_task is not None:
+            self._heartbeat_task.cancel()
+            self._heartbeat_task = None
+            print("[WS] Heartbeat stopped")
 
     async def dispatch(self, ws: WebSocket, username: str, raw: str):
         """Parse incoming JSON and route to the appropriate namespace handler."""

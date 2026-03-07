@@ -35,6 +35,8 @@ async def handle_system(bus, ws: WebSocket, username: str, msg: dict):
 
     if action == "ping":
         await ws.send_json({"type": "system:pong"})
+    elif action == "pong":
+        bus.record_pong(ws)
     else:
         await ws.send_json({"type": "system:error", "message": f"Unknown system action: {action}"})
 
