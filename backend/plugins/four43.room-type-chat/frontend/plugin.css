@@ -69,7 +69,116 @@
     display: inline-block;
     color: var(--text-primary);
     line-height: 1.5;
+    word-break: break-word;
+    max-width: 100%;
+    min-width: 0;
 }
+
+/* ── Markdown in messages ─────────────────────────────────────── */
+
+.message-text > :first-child { margin-top: 0; }
+.message-text > :last-child { margin-bottom: 0; }
+
+/* Headings — scaled down for chat context */
+.message-text h1 { font-size: 1.15em; margin: 0.5em 0 0.25em; font-weight: 700; }
+.message-text h2 { font-size: 1.05em; margin: 0.5em 0 0.25em; font-weight: 700; }
+.message-text h3 { font-size: 1em;    margin: 0.4em 0 0.2em;  font-weight: 700; }
+.message-text h4,
+.message-text h5,
+.message-text h6 { font-size: 0.95em; margin: 0.4em 0 0.2em; font-weight: 600; }
+
+/* Paragraphs */
+.message-text p { margin: 0.3em 0; }
+
+/* Lists */
+.message-text ul,
+.message-text ol {
+    margin: 0.3em 0;
+    padding-left: 1.5em;
+}
+.message-text li { margin: 0.1em 0; }
+
+/* Blockquote */
+.message-text blockquote {
+    margin: 0.4em 0;
+    padding: 0.2em 0.8em;
+    border-left: 3px solid rgba(var(--theme-rgb), 0.4);
+    color: var(--text-secondary);
+    background: rgba(var(--theme-rgb), 0.04);
+    border-radius: 0 4px 4px 0;
+}
+.message-text blockquote p { margin: 0.15em 0; }
+
+/* Inline code */
+.message-text code:not(pre code) {
+    background: rgba(var(--theme-rgb), 0.08);
+    padding: 0.15em 0.35em;
+    border-radius: 4px;
+    font-size: 0.9em;
+    font-family: 'SF Mono', 'Fira Code', 'Cascadia Code', monospace;
+}
+
+/* Code blocks */
+.message-text pre {
+    margin: 0.4em 0;
+    padding: 0.6em 0.8em;
+    background: #1e1e2e;
+    border-radius: 6px;
+    overflow-x: auto;
+    font-size: 0.85em;
+    line-height: 1.45;
+}
+.message-text pre code {
+    background: none;
+    padding: 0;
+    border-radius: 0;
+    font-family: 'SF Mono', 'Fira Code', 'Cascadia Code', monospace;
+    color: #cdd6f4;
+}
+
+/* Tables */
+.message-text table {
+    border-collapse: collapse;
+    margin: 0.4em 0;
+    font-size: 0.9em;
+    width: auto;
+}
+.message-text th,
+.message-text td {
+    border: 1px solid rgba(var(--theme-rgb), 0.15);
+    padding: 0.3em 0.6em;
+    text-align: left;
+}
+.message-text th {
+    background: rgba(var(--theme-rgb), 0.08);
+    font-weight: 600;
+}
+.message-text tr:nth-child(even) {
+    background: rgba(var(--theme-rgb), 0.03);
+}
+
+/* Horizontal rule */
+.message-text hr {
+    border: none;
+    border-top: 1px solid rgba(var(--theme-rgb), 0.15);
+    margin: 0.5em 0;
+}
+
+/* Images in markdown */
+.message-text img {
+    max-width: 400px;
+    max-height: 300px;
+    border-radius: 6px;
+    display: block;
+    margin: 0.3em 0;
+}
+
+/* Strong & emphasis */
+.message-text strong { font-weight: 700; }
+.message-text em { font-style: italic; }
+
+/* Strikethrough */
+.message-text del { text-decoration: line-through; color: var(--text-muted); }
 
 .room-link {
     color: var(--theme-color);
@@ -239,6 +348,7 @@
 
 .message-edit-input {
     width: 100%;
+    box-sizing: border-box;
     padding: 10px 14px;
     border: 2px solid var(--theme-color);
     border-radius: 10px;
@@ -248,6 +358,10 @@
     line-height: 1.5;
     outline: none;
     box-shadow: 0 0 0 3px rgba(var(--theme-rgb), 0.1);
+    resize: none;
+    overflow-y: hidden;
+    font-family: inherit;
+    min-height: 40px;
 }
 
 /* ── Input area ─────────────────────────────────────────────────── */
@@ -278,6 +392,11 @@
     font-size: 14px;
     color: var(--text-primary);
     transition: border-color 0.2s ease, box-shadow 0.2s ease, background 0.2s ease;
+    resize: none;
+    overflow-y: hidden;
+    line-height: 1.5;
+    font-family: inherit;
+    min-height: 40px;
 }
 
 /* ── @ Mention autocomplete dropdown ───────────────────────────── */
@@ -580,6 +699,32 @@ html[data-theme-dark] .message-edit-input {
 
 html[data-theme-dark] .deleted-text {
     background: transparent;
+}
+
+html[data-theme-dark] .message-text code:not(pre code) {
+    background: rgba(255, 255, 255, 0.1);
+}
+
+html[data-theme-dark] .message-text blockquote {
+    border-left-color: rgba(255, 255, 255, 0.2);
+    background: rgba(255, 255, 255, 0.03);
+}
+
+html[data-theme-dark] .message-text th {
+    background: rgba(255, 255, 255, 0.06);
+}
+
+html[data-theme-dark] .message-text th,
+html[data-theme-dark] .message-text td {
+    border-color: rgba(255, 255, 255, 0.1);
+}
+
+html[data-theme-dark] .message-text tr:nth-child(even) {
+    background: rgba(255, 255, 255, 0.02);
+}
+
+html[data-theme-dark] .message-text hr {
+    border-top-color: rgba(255, 255, 255, 0.1);
 }
 
 html[data-theme-dark] .link-preview-card {

@@ -14,5 +14,5 @@
     "core_api"
   ],
   "hooks": {},
-  "styles": ["frontend/plugin.css"]
+  "styles": ["frontend/plugin.css", "frontend/plugin-hljs.css"]
 }

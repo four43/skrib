@@ -1,0 +1,17 @@
+{
+  "name": "four43-room-type-chat",
+  "version": "1.0.0",
+  "private": true,
+  "type": "module",
+  "scripts": {
+    "build": "vite build",
+    "watch": "vite build --watch"
+  },
+  "dependencies": {
+    "highlight.js": "^11.11.1",
+    "marked": "^15.0.12"
+  },
+  "devDependencies": {
+    "vite": "^6.0.7"
+  }
+}
