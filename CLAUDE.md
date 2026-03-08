@@ -71,14 +71,35 @@ frontend/src/            # Vanilla JS (Vite build)
 - Messages sent via `room.message` (from client) or HTTP `POST /rooms/{room_id}/messages`
 - Implementation in `backend/skrib/ws/` (manager.py, handlers.py, routes.py)
 
+## Plugins — Frontend Build
+
+Each plugin with a frontend is its own npm + Vite project under `backend/plugins/{id}/frontend/`:
+
+```
+frontend/
+  src/plugin.js          # Source entry point
+  vite.config.js         # Vite lib mode (IIFE output)
+  package.json           # Plugin-specific deps + build/watch scripts
+  dist/plugin.js         # Built output (gitignored)
+```
+
+Manifests reference the built output: `"entry": "frontend/dist/plugin.js"`.
+
+Build orchestration lives in `frontend/util/`:
+- `install-plugins` — runs `npm install` in each plugin frontend
+- `build` — builds all plugins, then the main frontend
+- `dev` — builds plugins once, starts `npm run watch` in each (background), then runs `vite` dev server
+
+These are wired into the main frontend `package.json` scripts (`npm run dev`, `npm run build`).
+
 ## Running
 
 ```bash
 # Backend
 cd backend && pip install -e . && uvicorn skrib.main:app --reload --host 0.0.0.0 --port 8000
 
-# Frontend
-cd frontend && npm install && npm run dev  # port 5173
+# Frontend (installs plugin deps, builds plugins, starts dev server)
+cd frontend && npm install && ./util/install-plugins && npm run dev  # port 5173
 
 # Docker
 docker-compose up --build

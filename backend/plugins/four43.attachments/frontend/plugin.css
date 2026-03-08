@@ -1,0 +1,217 @@
+/* four43.attachments — File attachment styles */
+
+/* ─── Attach Button Container ─────────────────────────────────────── */
+
+.four43-attach-container {
+    position: relative;
+    display: flex;
+    align-items: flex-end;
+}
+
+.four43-attach-btn {
+    width: 40px;
+    height: 40px;
+    min-width: 40px;
+    border-radius: 10px;
+    border: 1px solid rgba(var(--theme-rgb), 0.15);
+    background: rgba(255, 255, 255, 0.7);
+    color: var(--text-secondary, #64748b);
+    cursor: pointer;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    transition: border-color 0.2s ease, color 0.2s ease, background 0.2s ease;
+    padding: 0;
+}
+
+.four43-attach-btn:hover {
+    border-color: var(--theme-color);
+    color: var(--theme-color);
+    background: rgba(var(--theme-rgb), 0.05);
+}
+
+/* ─── Popup Menu ──────────────────────────────────────────────────── */
+
+.four43-attach-popup {
+    position: absolute;
+    bottom: calc(100% + 6px);
+    left: 0;
+    display: flex;
+    flex-direction: column;
+    background: var(--bg-surface-opaque, #fff);
+    border: 1px solid rgba(var(--theme-rgb), 0.12);
+    border-radius: 10px;
+    box-shadow: 0 4px 16px -2px rgba(0, 0, 0, 0.1);
+    backdrop-filter: blur(12px);
+    -webkit-backdrop-filter: blur(12px);
+    overflow: hidden;
+    z-index: 100;
+    min-width: 140px;
+}
+
+.four43-attach-popup-item {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    padding: 10px 14px;
+    border: none;
+    background: none;
+    color: var(--text-primary, #1e293b);
+    font-size: 14px;
+    cursor: pointer;
+    transition: background 0.15s ease;
+    white-space: nowrap;
+}
+
+.four43-attach-popup-item:hover {
+    background: rgba(var(--theme-rgb), 0.06);
+}
+
+.four43-attach-popup-item svg {
+    color: var(--text-secondary, #64748b);
+    flex-shrink: 0;
+}
+
+/* ─── Attachment Card (in messages) ───────────────────────────────── */
+
+.four43-attachment-card {
+    display: flex;
+    align-items: center;
+    gap: 12px;
+    padding: 12px 14px;
+    background: rgba(var(--theme-rgb), 0.04);
+    border: 1px solid rgba(var(--theme-rgb), 0.1);
+    border-radius: 10px;
+    max-width: 400px;
+}
+
+.four43-attachment-icon {
+    font-size: 24px;
+    line-height: 1;
+    flex-shrink: 0;
+}
+
+.four43-attachment-info {
+    display: flex;
+    flex-direction: column;
+    gap: 2px;
+    min-width: 0;
+    flex: 1;
+}
+
+.four43-attachment-filename {
+    font-size: 14px;
+    font-weight: 500;
+    color: var(--text-primary, #1e293b);
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+}
+
+.four43-attachment-size {
+    font-size: 12px;
+    color: var(--text-secondary, #64748b);
+}
+
+.four43-attachment-download-btn {
+    width: 36px;
+    height: 36px;
+    min-width: 36px;
+    border-radius: 8px;
+    border: 1px solid rgba(var(--theme-rgb), 0.15);
+    background: rgba(255, 255, 255, 0.8);
+    color: var(--theme-color);
+    cursor: pointer;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    padding: 0;
+    transition: background 0.2s ease, border-color 0.2s ease;
+    flex-shrink: 0;
+}
+
+.four43-attachment-download-btn:hover {
+    background: rgba(var(--theme-rgb), 0.1);
+    border-color: var(--theme-color);
+}
+
+/* ─── Upload Progress ─────────────────────────────────────────────── */
+
+.four43-upload-progress {
+    padding: 8px 20px;
+    max-width: 800px;
+    margin: 0 auto;
+    width: 100%;
+}
+
+.four43-upload-progress-info {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    margin-bottom: 4px;
+    font-size: 12px;
+    color: var(--text-secondary, #64748b);
+}
+
+.four43-upload-progress-filename {
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+    max-width: 200px;
+}
+
+.four43-upload-progress-bar-track {
+    height: 4px;
+    border-radius: 2px;
+    background: rgba(var(--theme-rgb), 0.1);
+    overflow: hidden;
+}
+
+.four43-upload-progress-bar-fill {
+    height: 100%;
+    border-radius: 2px;
+    background: var(--theme-color);
+    transition: width 0.3s ease;
+}
+
+/* ─── Responsive ──────────────────────────────────────────────────── */
+
+@media (max-width: 768px) {
+    .four43-attachment-card {
+        max-width: 100%;
+    }
+
+    .four43-attach-btn {
+        width: 36px;
+        height: 36px;
+        min-width: 36px;
+    }
+}
+
+/* ─── Dark mode support ───────────────────────────────────────────── */
+
+@media (prefers-color-scheme: dark) {
+    .four43-attach-btn {
+        background: rgba(255, 255, 255, 0.06);
+        border-color: rgba(255, 255, 255, 0.1);
+    }
+
+    .four43-attach-btn:hover {
+        background: rgba(var(--theme-rgb), 0.12);
+    }
+
+    .four43-attach-popup {
+        background: var(--bg-surface-opaque, #1e293b);
+        border-color: rgba(255, 255, 255, 0.1);
+    }
+
+    .four43-attachment-card {
+        background: rgba(255, 255, 255, 0.04);
+        border-color: rgba(255, 255, 255, 0.08);
+    }
+
+    .four43-attachment-download-btn {
+        background: rgba(255, 255, 255, 0.06);
+        border-color: rgba(255, 255, 255, 0.1);
+    }
+}

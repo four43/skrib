@@ -3,8 +3,8 @@
   "version": "0.0.1",
   "type": "module",
   "scripts": {
-    "dev": "vite",
-    "build": "vite build",
+    "dev": "./util/dev",
+    "build": "./util/build",
     "preview": "vite preview",
     "test": "playwright test --project=dom",
     "test:e2e": "playwright test --project=e2e",

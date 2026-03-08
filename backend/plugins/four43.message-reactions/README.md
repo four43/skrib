@@ -15,7 +15,10 @@ backend/
   routes.py             # REST API under /reactions (add, remove, get by message, get by room range)
   ws_handlers.py        # handle_reaction() — WS handler for add/remove with broadcast
 frontend/
-  plugin.js             # ReactionsPlugin IIFE — hover bar emoji buttons, reaction pills, batch loading
+  src/plugin.js         # ReactionsPlugin IIFE source — hover bar emoji buttons, reaction pills, batch loading
+  vite.config.js        # Vite lib mode build config (IIFE → dist/plugin.js)
+  package.json          # Build deps (vite) + build/watch scripts
+  dist/plugin.js        # Built output (gitignored)
   plugin.css            # Styles for hover-bar emoji buttons and reaction pill badges
 manifest.json           # Permissions: bus.send, bus.receive, http.routes, storage.read/write, dom.messages
 ```

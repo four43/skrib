@@ -4,7 +4,7 @@
   "version": "1.0.0",
   "description": "Sends Web Push notifications for new messages when the app is not in focus.",
   "author": "Four43",
-  "entry": "frontend/plugin.js",
+  "entry": "frontend/dist/plugin.js",
   "permissions": [
     "bus.receive",
     "http.routes",

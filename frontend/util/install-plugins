@@ -1,0 +1,12 @@
+#!/bin/bash
+set -euo pipefail
+DIR="$(dirname "$(readlink -f "$0")")"
+
+PLUGINS_DIR="$DIR/../../backend/plugins"
+
+for plugin_dir in "$PLUGINS_DIR"/*/frontend; do
+    [ -f "$plugin_dir/package.json" ] || continue
+    plugin_name="$(basename "$(dirname "$plugin_dir")")"
+    echo "Installing plugin dependencies: $plugin_name"
+    (cd "$plugin_dir" && npm install)
+done

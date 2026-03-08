@@ -1,8 +1,8 @@
 {
-  "id": "four43.room-type-todo",
-  "name": "Todo List",
+  "id": "four43.attachments",
+  "name": "File Attachments",
   "version": "1.0.0",
-  "description": "Collaborative todo lists. Create, assign, and track tasks together in real-time.",
+  "description": "Upload, encrypt, and share file attachments in chat rooms",
   "author": "Four43",
   "entry": "frontend/dist/plugin.js",
   "permissions": [
@@ -10,7 +10,9 @@
     "bus.receive",
     "http.routes",
     "storage.read",
-    "storage.write"
+    "storage.write",
+    "dom.input",
+    "dom.messages"
   ],
   "hooks": {},
   "styles": ["frontend/plugin.css"]

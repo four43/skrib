@@ -4,7 +4,7 @@
   "version": "1.0.0",
   "description": "Shows real-time typing indicators for users in chat rooms",
   "author": "Four43",
-  "entry": "frontend/plugin.js",
+  "entry": "frontend/dist/plugin.js",
   "permissions": [
     "bus.send",
     "bus.receive",

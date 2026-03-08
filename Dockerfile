@@ -1,5 +1,12 @@
 # syntax=docker/dockerfile:1
 
+# Extract just package.json/package-lock.json from plugin frontends (preserves directory structure)
+FROM busybox AS plugin-pkg
+COPY ./backend/plugins/ /plugins/
+RUN find /plugins -path '*/frontend/package*.json' -exec sh -c \
+    'mkdir -p "/out/$(dirname "$1")" && cp "$1" "/out/$1"' _ {} \; \
+    && find /plugins -path '*/frontend/package*.json' -prune -o -type f -print | xargs rm -f 2>/dev/null; true
+
 FROM python:3.13-slim AS base
 
 # Install Node.js from official image
@@ -14,9 +21,10 @@ WORKDIR /app
 COPY ./frontend/package*.json ./frontend/
 RUN cd frontend && npm install
 
-# Plugin dependencies
-COPY ./backend/plugins/four43.room-type-chat/frontend/package*.json ./backend/plugins/four43.room-type-chat/frontend/
-RUN cd backend/plugins/four43.room-type-chat/frontend && npm install
+# Plugin frontend dependencies (auto-discovers all plugins)
+COPY --from=plugin-pkg /out/plugins/ ./backend/plugins/
+COPY ./frontend/util/install-plugins ./frontend/util/install-plugins
+RUN ./frontend/util/install-plugins
 
 ARG INSTALL_DEV_DEPS=1
 
@@ -40,6 +48,7 @@ FROM base AS dev
 
 RUN apt-get update \
     && apt-get install -y --no-install-recommends \
+        curl \
         git \
         openssh-client \
     && rm -rf /var/lib/apt/lists/*
@@ -58,8 +67,6 @@ FROM base AS production
 
 # Build frontend for production
 RUN cd ./frontend && npm run build
-# Build plugins
-RUN cd ./backend/plugins/four43.room-type-chat/frontend && npm run build
 
 EXPOSE 8000 5173
 WORKDIR /app/backend

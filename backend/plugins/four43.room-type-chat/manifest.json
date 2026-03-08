@@ -4,7 +4,7 @@
   "version": "1.0.0",
   "description": "Provides text-based chat rooms. Handles message storage, delivery, and history.",
   "author": "Four43",
-  "entry": "frontend/plugin.js",
+  "entry": "frontend/dist/plugin.js",
   "permissions": [
     "bus.send",
     "bus.receive",
@@ -14,5 +14,5 @@
     "core_api"
   ],
   "hooks": {},
-  "styles": ["frontend/plugin.css", "frontend/plugin-hljs.css"]
+  "styles": ["frontend/plugin.css", "frontend/dist/plugin-hljs.css"]
 }

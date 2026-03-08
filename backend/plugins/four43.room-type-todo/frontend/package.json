@@ -1,0 +1,12 @@
+{
+  "name": "four43-room-type-todo-frontend",
+  "private": true,
+  "version": "1.0.0",
+  "scripts": {
+    "build": "vite build",
+    "watch": "vite build --watch"
+  },
+  "devDependencies": {
+    "vite": "^6.0.0"
+  }
+}

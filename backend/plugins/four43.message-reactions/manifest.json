@@ -4,7 +4,7 @@
   "version": "1.0.0",
   "description": "Add emoji reactions to messages with real-time updates",
   "author": "Four43",
-  "entry": "frontend/plugin.js",
+  "entry": "frontend/dist/plugin.js",
   "permissions": [
     "bus.send",
     "bus.receive",

@@ -1,0 +1,35 @@
+#!/bin/bash
+set -euo pipefail
+DIR="$(dirname "$(readlink -f "$0")")"
+cd "$DIR/.."
+
+PLUGINS_DIR="$DIR/../../backend/plugins"
+
+# Install and build all plugins, then watch for changes
+PIDS=()
+cleanup() {
+    for pid in "${PIDS[@]}"; do
+        kill "$pid" 2>/dev/null || true
+    done
+}
+trap cleanup EXIT
+
+for plugin_dir in "$PLUGINS_DIR"/*/frontend; do
+    [ -f "$plugin_dir/package.json" ] || continue
+    plugin_name="$(basename "$(dirname "$plugin_dir")")"
+
+    # Initial build
+    echo "Building plugin: $plugin_name"
+    (cd "$plugin_dir" && npm run build)
+
+    # Watch in background (if the plugin has a watch script)
+    if (cd "$plugin_dir" && grep -q '"watch"' package.json); then
+        (cd "$plugin_dir" && npm run watch) &
+        PIDS+=($!)
+        echo "Watching plugin: $plugin_name (pid $!)"
+    fi
+done
+
+# Run vite dev server (foreground)
+echo "Starting frontend dev server..."
+npx vite "$@"

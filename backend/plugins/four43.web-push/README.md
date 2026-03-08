@@ -14,7 +14,10 @@ backend/
   routes.py             # HTTP endpoints: VAPID key, subscribe, unsubscribe
   services.py           # VAPID key management, subscription CRUD, pywebpush sending
 frontend/
-  plugin.js             # WebPushPlugin IIFE — permission request, Push API subscription
+  src/plugin.js         # WebPushPlugin IIFE source — permission request, Push API subscription
+  vite.config.js        # Vite lib mode build config (IIFE → dist/plugin.js)
+  package.json          # Build deps (vite) + build/watch scripts
+  dist/plugin.js        # Built output (gitignored)
 manifest.json           # Permissions: bus.receive, http.routes, storage.read/write, core_api
 ```
 

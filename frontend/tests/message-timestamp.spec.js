@@ -39,7 +39,7 @@ const MOCK_PLUGINS = [
     name: 'Chat Room',
     version: '1.0.0',
     description: 'Chat rooms',
-    entry: 'frontend/plugin.js',
+    entry: 'frontend/dist/plugin.js',
     enabled: true,
     room_types: ['chat'],
     styles: ['/api/plugins/four43.room-type-chat/file/frontend/plugin.css'],
@@ -85,8 +85,8 @@ async function setupChatMocks(page) {
   });
 
   // Serve plugin JS from disk
-  await page.route('**/api/plugins/four43.room-type-chat/file/frontend/plugin.js', route =>
-    route.fulfill({ path: path.join(PLUGIN_DIR, 'plugin.js'), contentType: 'application/javascript' }),
+  await page.route('**/api/plugins/four43.room-type-chat/file/frontend/dist/plugin.js', route =>
+    route.fulfill({ path: path.join(PLUGIN_DIR, 'dist', 'plugin.js'), contentType: 'application/javascript' }),
   );
 
   // Serve plugin CSS from disk

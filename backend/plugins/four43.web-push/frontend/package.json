@@ -1,0 +1,12 @@
+{
+  "name": "four43-web-push-frontend",
+  "private": true,
+  "version": "1.0.0",
+  "scripts": {
+    "build": "vite build",
+    "watch": "vite build --watch"
+  },
+  "devDependencies": {
+    "vite": "^6.0.0"
+  }
+}

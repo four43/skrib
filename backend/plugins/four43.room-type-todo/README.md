@@ -14,7 +14,10 @@ backend/
   routes.py             # HTTP endpoints: CRUD for todo items
   services.py           # TodoList class (item CRUD with plugin-scoped DB)
 frontend/
-  plugin.js             # RoomTypeTodoPlugin IIFE — todo UI, filter bar, inline editing
+  src/plugin.js         # RoomTypeTodoPlugin IIFE source — todo UI, filter bar, inline editing
+  vite.config.js        # Vite lib mode build config (IIFE → dist/plugin.js)
+  package.json          # Build deps (vite) + build/watch scripts
+  dist/plugin.js        # Built output (gitignored)
   plugin.css            # Todo item styles, filter bar, add form, responsive layout
 manifest.json           # Permissions: bus.send/receive, http.routes, storage.read/write
 ```

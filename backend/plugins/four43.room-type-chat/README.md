@@ -14,10 +14,12 @@ backend/
   routes.py             # HTTP endpoints: messages CRUD, mark read, link preview
   services.py           # ChatRoom class (message CRUD), LinkPreviewService (OG tag fetcher/cache)
 frontend/
-  plugin.js             # Bundled JS (marked + highlight.js for markdown rendering)
+  src/plugin.js         # Source JS (marked + highlight.js for markdown rendering)
+  vite.config.js        # Vite lib mode build config (IIFE → dist/plugin.js)
+  package.json          # Build deps (marked, highlight.js, vite) + build/watch scripts
+  dist/plugin.js        # Built output (gitignored)
+  dist/plugin-hljs.css  # Built highlight.js theme (gitignored)
   plugin.css            # Chat message styles
-  plugin-hljs.css       # Highlight.js theme
-  package.json          # Frontend build deps (marked, highlight.js, vite)
 manifest.json           # Permissions: bus.send/receive, http.routes, storage.read/write, core_api
 ```
 
@@ -76,5 +78,5 @@ link_previews (
 - Soft delete: sets `deleted=1`, content returned as empty string
 - Only author can edit; author or admin can delete
 - LinkPreviewService: fetches HTML, parses OG meta tags, caches in `link_previews` table. Detects direct image URLs by extension.
-- Frontend is a Vite bundle (marked for markdown, highlight.js for code blocks)
+- Frontend is built via Vite lib mode to an IIFE bundle (marked for markdown, highlight.js for code blocks)
 - `room_types: ["chat"]`, `capabilities: ["chat_messages"]`

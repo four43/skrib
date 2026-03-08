@@ -1,0 +1,18 @@
+#!/bin/bash
+set -euo pipefail
+DIR="$(dirname "$(readlink -f "$0")")"
+cd "$DIR/.."
+
+PLUGINS_DIR="$DIR/../../backend/plugins"
+
+# Build all plugins that have a frontend/package.json
+for plugin_dir in "$PLUGINS_DIR"/*/frontend; do
+    [ -f "$plugin_dir/package.json" ] || continue
+    plugin_name="$(basename "$(dirname "$plugin_dir")")"
+    echo "Building plugin: $plugin_name"
+    (cd "$plugin_dir" && npm run build)
+done
+
+# Build main frontend
+echo "Building frontend..."
+npx vite build

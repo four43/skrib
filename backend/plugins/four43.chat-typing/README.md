@@ -10,7 +10,11 @@ Feature plugin (no room type, no database). Purely ephemeral WebSocket events.
 
 ```
 backend/plugin.py       # ChatTypingPlugin — in-memory typing state, WS handler
-frontend/plugin.js      # TypingPlugin IIFE — input listeners, indicator UI
+frontend/
+  src/plugin.js         # TypingPlugin IIFE source — input listeners, indicator UI
+  vite.config.js        # Vite lib mode build config (IIFE → dist/plugin.js)
+  package.json          # Build deps (vite) + build/watch scripts
+  dist/plugin.js        # Built output (gitignored)
 manifest.json           # Permissions: bus.send, bus.receive, dom.input, dom.message-area
 ```
 
