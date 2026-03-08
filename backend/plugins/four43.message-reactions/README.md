@@ -1,244 +1,64 @@
-# Message Reactions Plugin
+# four43.message-reactions — Message Reactions
 
-Add emoji reactions to messages with real-time synchronization across all connected users.
+Emoji reactions on chat messages with real-time sync and persistence.
 
-## Features
+## Plugin Type
 
-- 🎉 React to any message with emojis
-- ⚡ Real-time updates via WebSocket
-- 💾 Server-side persistence in SQLite
-- 👥 See who reacted to each message
-- 🎨 Clean, modern UI with animations
-- 🌙 Dark mode support
+Feature plugin (no room type). Has its own plugin-scoped SQLite database.
 
-## Installation
+## Structure
 
-This plugin is already installed in the standard Skrīb distribution.
-
-To install manually:
-
-```bash
-# Extract plugin to plugins directory
-cd backend/plugins
-unzip four43.message-reactions.zip
-
-# Restart backend (database tables are created automatically)
+```
+backend/
+  plugin.py             # MessageReactionsPlugin — schema, routes, WS handler registration
+  database.py           # CRUD: add/remove/get reactions, batch get by room+ID range
+  routes.py             # REST API under /reactions (add, remove, get by message, get by room range)
+  ws_handlers.py        # handle_reaction() — WS handler for add/remove with broadcast
+frontend/
+  plugin.js             # ReactionsPlugin IIFE — hover bar emoji buttons, reaction pills, batch loading
+  plugin.css            # Styles for hover-bar emoji buttons and reaction pill badges
+manifest.json           # Permissions: bus.send, bus.receive, http.routes, storage.read/write, dom.messages
 ```
 
-## Usage
+## Database Schema
 
-### For Users
-
-1. **Add Reaction**: Click the `+` button below any message
-2. **Choose Emoji**: Select from the emoji picker
-3. **Toggle Reaction**: Click an existing reaction to add/remove your reaction
-4. **See Who Reacted**: Hover over a reaction to see usernames
-
-### For Developers
-
-#### Database Schema
-
-The plugin creates a `message_reactions` table:
+Plugin-scoped DB (not core DB). Table: `message_reactions`
 
 ```sql
-CREATE TABLE message_reactions (
+message_reactions (
     message_id INTEGER NOT NULL,
+    room_id TEXT NOT NULL,
     username TEXT NOT NULL,
     emoji TEXT NOT NULL,
     created_at TEXT NOT NULL,
-    PRIMARY KEY (message_id, username, emoji),
-    FOREIGN KEY (message_id) REFERENCES messages(id) ON DELETE CASCADE,
-    FOREIGN KEY (username) REFERENCES users(username) ON DELETE CASCADE
+    PRIMARY KEY (message_id, username, emoji)
 )
+-- Indexes: idx_reactions_message_id, idx_reactions_room_message
 ```
 
-#### REST API Endpoints
+## HTTP Endpoints (under `/api/plugins/four43.message-reactions/reactions`)
 
-**Add Reaction:**
-```http
-POST /api/reactions/add
-Content-Type: application/json
-Authorization: Bearer {token}
+| Method | Path | Description |
+|--------|------|-------------|
+| POST | `/add` | Add reaction `{message_id, room_id, emoji}` |
+| POST | `/remove` | Remove reaction `{message_id, emoji}` |
+| GET | `/message/{message_id}` | Get reactions grouped by emoji |
+| GET | `/room/{room_id}?min_id=&max_id=` | Batch get reactions for message ID range |
 
-{
-  "message_id": 123,
-  "emoji": "👍"
-}
-```
+## WebSocket Events
 
-**Remove Reaction:**
-```http
-POST /api/reactions/remove
-Content-Type: application/json
-Authorization: Bearer {token}
+| Direction | Type | Payload |
+|-----------|------|---------|
+| Client -> Server | `four43.message-reactions:add` | `{room_id, message_id, emoji}` |
+| Client -> Server | `four43.message-reactions:remove` | `{room_id, message_id, emoji}` |
+| Server -> Client | `four43.message-reactions:added` | `{data: {message_id, emoji, username}}` |
+| Server -> Client | `four43.message-reactions:removed` | `{data: {message_id, emoji, username}}` |
 
-{
-  "message_id": 123,
-  "emoji": "👍"
-}
-```
+## Key Details
 
-**Get Message Reactions:**
-```http
-GET /api/reactions/message/123
-```
-
-Response:
-```json
-[
-  {
-    "emoji": "👍",
-    "usernames": ["alice", "bob"],
-    "count": 2
-  },
-  {
-    "emoji": "❤️",
-    "usernames": ["charlie"],
-    "count": 1
-  }
-]
-```
-
-**Get Multiple Messages' Reactions:**
-```http
-GET /api/reactions/messages?message_ids=123,124,125
-```
-
-Response:
-```json
-{
-  "123": [{"emoji": "👍", "usernames": ["alice"], "count": 1}],
-  "124": [{"emoji": "❤️", "usernames": ["bob", "charlie"], "count": 2}]
-}
-```
-
-#### WebSocket Events
-
-**Client → Server:**
-
-```javascript
-// Add reaction
-{
-  type: 'reactions.add',
-  room_id: 'general',
-  message_id: 123,
-  emoji: '👍'
-}
-
-// Remove reaction
-{
-  type: 'reactions.remove',
-  room_id: 'general',
-  message_id: 123,
-  emoji: '👍'
-}
-```
-
-**Server → Client:**
-
-```javascript
-// Reaction added
-{
-  type: 'reactions.added',
-  room_id: 'general',
-  data: {
-    message_id: 123,
-    emoji: '👍',
-    username: 'alice'
-  }
-}
-
-// Reaction removed
-{
-  type: 'reactions.removed',
-  room_id: 'general',
-  data: {
-    message_id: 123,
-    emoji: '👍',
-    username: 'alice'
-  }
-}
-```
-
-## Architecture
-
-### Backend Components
-
-- **`database.py`**: Database schema and CRUD operations
-- **`routes.py`**: REST API endpoints
-- **`ws_handlers.py`**: WebSocket real-time event handlers
-- **`__init__.py`**: Plugin initialization and registration
-
-### Frontend Components
-
-- **`plugin.js`**: React UI logic and WebSocket integration
-- **`plugin.css`**: Styling with dark mode support
-
-### Data Flow
-
-1. User clicks emoji → WebSocket message sent
-2. Server validates and persists to database
-3. Server broadcasts to all users in room
-4. All clients update UI in real-time
-5. On page load, reactions fetched via REST API
-
-## Customization
-
-### Add More Emojis
-
-Edit `frontend/plugin.js`:
-
-```javascript
-const COMMON_EMOJIS = ['👍', '❤️', '😂', '😮', '😢', '🎉', '🚀', '👀', '🔥', '💯'];
-```
-
-### Styling
-
-Modify `frontend/plugin.css` to match your theme:
-
-```css
-.four43-reaction-btn {
-    /* Customize appearance */
-    border-radius: 16px;
-    padding: 4px 10px;
-}
-```
-
-## Performance
-
-- Reactions are loaded once per message on initial render
-- WebSocket updates are instantaneous (no polling)
-- Database queries use indexes for fast lookups
-- Batch API available for loading reactions for multiple messages
-
-## Security
-
-- All endpoints require authentication
-- Users can only add/remove their own reactions
-- SQL injection prevented via parameterized queries
-- WebSocket messages validated before processing
-
-## Troubleshooting
-
-**Reactions not appearing:**
-- Check browser console for errors
-- Verify WebSocket connection is active
-- Check backend logs for database errors
-
-**Reactions not syncing:**
-- Ensure you're connected to the same room
-- Check WebSocket namespace is registered
-- Verify database table was created
-
-**Database errors:**
-- Check that `message_id` exists in messages table
-- Verify user is authenticated
-- Check database file permissions
-
-## License
-
-Same as Skrīb core (check root LICENSE file)
-
-## Credits
-
-Developed by Four43 for Skrīb
+- Frontend injects emoji buttons into the `.message-hover-bar` created by room-type-chat
+- Batch loading: MutationObserver tracks new `.message` elements, debounces 50ms, then fetches reactions for the min/max ID range via the room endpoint
+- Reaction pills below messages show emoji + count, highlighted if current user reacted
+- Click toggles own reaction (add if not reacted, remove if reacted)
+- `onRoomChange` hook registered but is a no-op
+- Frontend exports as `window["Four43.message-reactionsPlugin"]`

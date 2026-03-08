@@ -1,33 +1,35 @@
-# Typing Indicators Plugin
+# four43.chat-typing — Typing Indicators
 
-Shows real-time typing indicators when users are typing in chat rooms.
+Real-time typing indicators showing who's typing in chat rooms.
 
-## Features
+## Plugin Type
 
-- Real-time typing notifications via WebSocket
-- Debounced typing events (500ms)
-- Auto-stop after 3 seconds of inactivity
-- Supports multiple simultaneous typers
-- Display names integration
+Feature plugin (no room type, no database). Purely ephemeral WebSocket events.
 
-## Installation
+## Structure
 
-1. Extract the plugin to `backend/plugins/four43.chat-typing/`
-2. Restart the backend server
-3. The plugin will be automatically loaded by the frontend
+```
+backend/plugin.py       # ChatTypingPlugin — in-memory typing state, WS handler
+frontend/plugin.js      # TypingPlugin IIFE — input listeners, indicator UI
+manifest.json           # Permissions: bus.send, bus.receive, dom.input, dom.message-area
+```
 
-## Permissions
+## How It Works
 
-- `websocket.send` - Send typing events to server
-- `websocket.receive` - Receive typing events from other users
-- `dom.input` - Attach listeners to message input
-- `dom.message-area` - Insert typing indicator UI
+- **Backend**: Tracks `typing_state` dict (`room_id -> {username: timestamp}`) in memory. Registers a WS handler for the `four43.chat-typing:*` namespace. On `start`/`stop` actions, broadcasts `user_typing` events to other users in the room via `bus.broadcast_to_room()`.
+- **Frontend**: Uses a MutationObserver to detect when `#message-input` appears/disappears (since room-type plugins create it dynamically). Attaches `input`/`blur` listeners. Sends `four43.chat-typing:start` on input (debounced 500ms) and `four43.chat-typing:stop` after 3s idle or blur. Displays a typing indicator div above the input area.
+- **No database**: All state is ephemeral. No `get_table_schema()`.
 
 ## WebSocket Events
 
-### Outgoing
-- `typing.start` - User started typing
-- `typing.stop` - User stopped typing
+| Direction | Type | Payload |
+|-----------|------|---------|
+| Client -> Server | `four43.chat-typing:start` | `{room_id}` |
+| Client -> Server | `four43.chat-typing:stop` | `{room_id}` |
+| Server -> Client | `four43.chat-typing:user_typing` | `{room_id, username, is_typing}` |
 
-### Incoming
-- `typing.user_typing` - Another user's typing status changed
+## Key Details
+
+- Hooks: `onRoomChange` — clears typing users and stops own typing on room switch
+- Frontend exports as `window["Four43.chat-typingPlugin"]`
+- No HTTP routes

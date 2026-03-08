@@ -11,6 +11,12 @@ Read these files on demand when working on specific areas:
   - **WebAuthn testing via Playwright**: `docs/playwright-webauthn-testing.md`
 - **Feature planning**: `docs/planning-feature-list.md`
 - **E2E encryption design**: `docs/end-to-end-encryption.md`
+- **Plugins**: Each plugin has a `README.md` — read on demand when working on a specific plugin:
+  - `backend/plugins/four43.room-type-chat/README.md` — Chat messaging (room type)
+  - `backend/plugins/four43.room-type-todo/README.md` — Todo lists (room type)
+  - `backend/plugins/four43.chat-typing/README.md` — Typing indicators (feature)
+  - `backend/plugins/four43.message-reactions/README.md` — Emoji reactions (feature)
+  - `backend/plugins/four43.web-push/README.md` — Web Push notifications (feature)
 
 **IMPORTANT**: You MUST NOT create migration functions, we are in early development and will reset the database as needed. Just modify the schema and delete the `data/*` files to reset.
 
