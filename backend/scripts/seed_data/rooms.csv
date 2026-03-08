@@ -1,0 +1,4 @@
+room_id,topic,visibility
+general,General discussion for the team,public
+random,Off-topic and fun stuff,public
+dev,Development discussion and code reviews,private

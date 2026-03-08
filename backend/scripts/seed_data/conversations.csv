@@ -1,0 +1,469 @@
+room_id,username,content
+general,alice_dev,Hey everyone! Good morning.
+general,bob_tester,Morning! Anyone up for a standup?
+general,charlie_ops,I'm in. Just finished deploying the latest build.
+general,dana_design,Morning all. I pushed some new mockups to the shared folder.
+general,alice_dev,Nice! I'll take a look after lunch.
+general,bob_tester,The test suite is green on main btw
+general,charlie_ops,"Great, I'll promote to staging then"
+general,dana_design,Quick question — should we use the new design system tokens for the dashboard?
+general,alice_dev,Yes absolutely. I already started migrating the sidebar.
+general,bob_tester,Make sure to update the snapshot tests if you change the sidebar
+general,charlie_ops,Heads up: I'm rotating the API keys at 2pm. There might be a brief blip.
+general,dana_design,Noted. I'll pause my E2E tests around then.
+general,alice_dev,Should we document the key rotation process somewhere?
+general,charlie_ops,Good call. I'll add it to the runbook after lunch.
+general,bob_tester,Anyone else having trouble with the staging DB? Queries are super slow.
+general,charlie_ops,Yeah I noticed that too. Looks like the vacuum job didn't run last night.
+general,alice_dev,I can take a look at the cron config if you want
+general,charlie_ops,"That would be great, thanks Alice"
+general,dana_design,New color palette proposal in the design channel btw. Would love feedback.
+general,bob_tester,"Oh nice, I like the darker accents"
+general,alice_dev,Same. The contrast ratios look much better.
+general,dana_design,Thanks! I ran them all through the WCAG checker this time
+general,charlie_ops,Deploy to staging is done. v2.4.1 is live there now.
+general,bob_tester,Running smoke tests... one sec
+general,bob_tester,All green! Ship it.
+general,alice_dev,Awesome. Great work everyone.
+general,charlie_ops,Pushing to prod in 10 minutes. Last chance to object.
+general,dana_design,No objections from me
+general,alice_dev,Go for it
+general,bob_tester,Full send
+general,charlie_ops,Prod deploy complete. Monitoring dashboards look clean.
+general,alice_dev,Perfect. I'm heading out for the day. See you all tomorrow!
+general,bob_tester,Later Alice!
+general,dana_design,Bye! Great day everyone.
+general,charlie_ops,See ya. I'll keep an eye on the metrics overnight.
+general,bob_tester,"Oh wait, one more thing — the weekly report is due Friday. Who's writing it this week?"
+general,charlie_ops,I think it's Dana's turn
+general,dana_design,"Yep, I've got it. Will send a draft Thursday afternoon."
+general,bob_tester,"Cool, thanks Dana"
+general,alice_dev,Actually still here — just wanted to say the new onboarding flow metrics look great. 40% improvement in completion rate.
+general,dana_design,That's amazing! The simplified form really made a difference.
+general,bob_tester,We should write a blog post about that
+general,charlie_ops,Agreed. Good data to share externally.
+general,alice_dev,Ok NOW I'm actually leaving. Night everyone!
+general,bob_tester,Night!
+general,charlie_ops,Night!
+general,dana_design,Goodnight!
+general,bob_tester,Alright I'm out too. Catch everyone tomorrow.
+general,charlie_ops,Same. Signing off.
+general,dana_design,One last thing — I updated the Figma with the final icon set. Link in the design channel.
+general,charlie_ops,"Thanks Dana, bookmarked it."
+general,dana_design,Ok goodnight for real this time
+general,charlie_ops,Morning team. Prod metrics from overnight look solid. Zero errors.
+general,bob_tester,Morning! That's what I like to hear.
+general,alice_dev,"Hey all. Coffee acquired, ready to go."
+general,dana_design,Good morning! I have the weekly report draft if anyone wants to review before I send it.
+general,bob_tester,"Sure, drop the link"
+general,dana_design,It's in the shared drive under Reports/Week-12.md
+general,alice_dev,Reading it now... looks good. Maybe add a line about the onboarding metrics?
+general,dana_design,"Oh good call, I forgot to include that. Adding now."
+general,charlie_ops,Also mention the staging DB fix from yesterday. That was a real save.
+general,bob_tester,Agreed. Alice's cron fix prevented a lot of headaches.
+general,alice_dev,Aw thanks. It was a one-liner honestly.
+general,charlie_ops,The best fixes usually are
+general,bob_tester,So what's the plan for today? Sprint planning?
+general,alice_dev,"Yeah, we have the planning meeting at 10. Did everyone groom the backlog?"
+general,charlie_ops,I added estimates to the infra tickets last night
+general,dana_design,Design tickets are all sized and have mockups attached
+general,bob_tester,I've got the test tickets ready too. A few need acceptance criteria though.
+general,alice_dev,Let's finalize those in the meeting. I'll pull up the board.
+general,charlie_ops,Quick thing before that — the SSL cert for api.staging expires next week. I'll renew it today.
+general,bob_tester,Good catch. Those expiry emails always end up in spam somehow.
+general,alice_dev,We should automate cert renewal with Let's Encrypt
+general,charlie_ops,It's on my list. Just haven't had time to set up certbot.
+general,dana_design,Can we also talk about the mobile responsive issues in planning? I filed three bugs yesterday.
+general,bob_tester,Yeah I saw those. The sidebar collapse is definitely broken on tablets.
+general,alice_dev,I'll pick those up. Should be quick CSS fixes.
+general,dana_design,Thanks Alice. I included screenshots in each ticket.
+general,charlie_ops,Meeting in 5. Everyone ready?
+general,bob_tester,Ready
+general,alice_dev,Yep
+general,dana_design,Let's do it
+general,alice_dev,Good meeting. I think we have a solid sprint ahead.
+general,bob_tester,Agreed. I like that we kept scope manageable this time.
+general,charlie_ops,Famous last words
+general,dana_design,lol Charlie always the optimist
+general,bob_tester,He's not wrong though. Remember sprint 14?
+general,alice_dev,We don't talk about sprint 14.
+general,charlie_ops,"Anyway, I'm starting on the Kubernetes migration ticket. Wish me luck."
+general,bob_tester,Good luck. I'll have the test environment ready for you by noon.
+general,dana_design,I'm going to finalize the notification center designs. Quick question — do we want to support inline images in notifications?
+general,alice_dev,Let's keep v1 simple. Text only with a link to the source.
+general,bob_tester,Agree. We can always add rich content later.
+general,dana_design,Makes sense. Simpler to test too.
+general,charlie_ops,Quick update: SSL cert renewed. Also noticed our Docker images are getting big. 1.2GB for the backend.
+general,alice_dev,Yikes. Are we using a slim base image?
+general,charlie_ops,We're on python:3.12 which is the full image. Should switch to python:3.12-slim.
+general,bob_tester,That usually cuts it in half at least
+general,charlie_ops,I'll make a PR for it. Also going to add a multi-stage build.
+general,dana_design,Is it lunch time yet?
+general,bob_tester,It's 11:15 Dana
+general,dana_design,So... early lunch?
+general,alice_dev,Ha. Let's push to noon at least.
+general,charlie_ops,"Speaking of food, who's handling the team lunch order for Thursday?"
+general,bob_tester,I can do it. Same place as last time? The taco place was great.
+general,alice_dev,Yes please. I want that birria quesadilla again.
+general,dana_design,The fish tacos were incredible
+general,charlie_ops,I'm getting the burrito bowl. Easy choice.
+general,bob_tester,"Alright, I'll set up the group order and share the link."
+general,alice_dev,Hey quick question — is anyone using the `/api/search` endpoint? Thinking about refactoring it.
+general,bob_tester,The frontend uses it for the message search feature. Why?
+general,alice_dev,The query builder is really messy. I want to switch to a proper full-text search approach.
+general,charlie_ops,SQLite has FTS5 built in. Would be a nice improvement.
+general,bob_tester,Make sure the existing behavior doesn't break. I have a bunch of tests covering edge cases.
+general,alice_dev,For sure. I'll run the full test suite before and after.
+general,dana_design,Report is sent! Got good feedback from the PM already.
+general,bob_tester,Nice! What did they say?
+general,dana_design,They loved the metrics section. Want us to present at the all-hands next week.
+general,charlie_ops,Oh cool. Who's presenting?
+general,alice_dev,I vote Dana since she wrote most of it
+general,dana_design,I can do the design and metrics parts. Can someone cover the technical bits?
+general,charlie_ops,I'll cover the infrastructure improvements
+general,bob_tester,And I'll talk about the test coverage improvements. We went from 67% to 89%.
+general,alice_dev,That's a great story to tell. Let's prep slides tomorrow.
+general,dana_design,I'll set up the slide deck and share it tonight.
+general,charlie_ops,Heads up everyone: I'm restarting the staging server in 5 minutes for the Docker image update.
+general,bob_tester,Noted. Pausing my test run.
+general,alice_dev,Thanks for the warning
+general,charlie_ops,Staging is back up. New image is only 480MB. Down from 1.2GB.
+general,bob_tester,That's a huge improvement!
+general,alice_dev,Nice work Charlie
+general,dana_design,Does that affect deploy times too?
+general,charlie_ops,"Yep, deploys went from 4 minutes to about 90 seconds"
+general,bob_tester,I love when infra improvements just make everything better
+general,alice_dev,Ok I'm deep in the search refactor. Going heads-down for a bit.
+general,bob_tester,"Same, grinding through the tablet responsive bugs."
+general,dana_design,I'm in Figma if anyone needs me. Notification designs are coming along nicely.
+general,charlie_ops,I'll be in Terraform land. Pray for me.
+general,bob_tester,Thoughts and prayers
+general,alice_dev,May your state files be uncorrupted
+general,dana_design,lol
+general,bob_tester,Tablet bugs are fixed. Three PRs ready for review.
+general,alice_dev,I'll review them after I push my search refactor.
+general,charlie_ops,K8s cluster is provisioned. Tomorrow I'll start migrating services.
+general,dana_design,Notification designs are done! 12 screens total. Sharing the Figma link now.
+general,bob_tester,12 screens? That's thorough.
+general,dana_design,"Covers all the states: empty, loading, unread, read, error, grouped by type..."
+general,alice_dev,Love the attention to detail. The empty state illustration is cute.
+general,dana_design,Thanks! I spent way too long on that little bell character.
+general,charlie_ops,Alright I'm wrapping up. Good productive day everyone.
+general,bob_tester,Same here. See you all tomorrow.
+general,alice_dev,Night team! Great day.
+general,dana_design,Goodnight everyone!
+random,bob_tester,Has anyone tried that new coffee place on 5th?
+random,dana_design,Yes! The cold brew is amazing
+random,alice_dev,I'm more of a tea person tbh
+random,charlie_ops,The real question is: tabs or spaces?
+random,bob_tester,"oh no, not this again..."
+random,alice_dev,Spaces. Obviously. Fight me.
+random,charlie_ops,I use tabs and I'm not ashamed
+random,dana_design,I just let the formatter handle it honestly
+random,bob_tester,That's the only correct answer Dana
+random,alice_dev,Ok but what about semicolons in JS?
+random,charlie_ops,Now THAT's a real debate
+random,bob_tester,No semicolons. Prettier handles it.
+random,dana_design,I add them because it feels wrong not to
+random,alice_dev,Psychopath behavior
+random,dana_design,Excuse me??
+random,alice_dev,Kidding! Mostly.
+random,charlie_ops,"Anyway, what's everyone doing this weekend?"
+random,bob_tester,Hiking if the weather holds up
+random,dana_design,"Farmers market in the morning, then probably painting"
+random,alice_dev,I'm going to try to beat my speedrun time on Celeste
+random,charlie_ops,"Nice, what's your PB?"
+random,alice_dev,42 minutes. Trying to get under 40.
+random,bob_tester,Respect. I could never.
+random,dana_design,Has anyone watched that new series on Netflix? The one about the space station?
+random,charlie_ops,Orbital? Yeah it's pretty good
+random,bob_tester,I binged the whole thing last weekend. The ending is wild.
+random,alice_dev,NO SPOILERS
+random,bob_tester,I wasn't going to!
+random,dana_design,I'm on episode 3. So far so good.
+random,charlie_ops,It gets way better around ep 5
+random,alice_dev,Ok adding it to my list
+random,bob_tester,Random thought: why do we park in driveways and drive on parkways?
+random,charlie_ops,Please go home Bob
+random,dana_design,lol
+random,alice_dev,He's got a point though
+random,bob_tester,Thank you Alice. A true ally.
+random,charlie_ops,"Speaking of random, I found the best meme about deployment yesterday"
+random,bob_tester,Share it!
+random,charlie_ops,It's a picture of a dog sitting in a burning room saying 'this is fine' with a caption 'deploying on Friday'
+random,alice_dev,Accurate
+random,dana_design,Too real
+random,bob_tester,We literally deployed on a Friday last week
+random,charlie_ops,And nothing broke! We're getting better.
+random,alice_dev,Let's not jinx it
+random,dana_design,Ok lunch break. Anyone want anything from that Thai place?
+random,bob_tester,Pad Thai please!
+random,alice_dev,Green curry for me
+random,charlie_ops,"I'm good, brought my lunch today"
+random,bob_tester,Look at Mr. Responsible over here
+random,charlie_ops,I'm trying to save money ok
+random,dana_design,"Alright, orders noted. Back in 20."
+random,dana_design,Food is here!
+random,bob_tester,You're a hero Dana
+random,alice_dev,This green curry is perfect. Thank you.
+random,charlie_ops,I'm regretting my sad desk sandwich right now
+random,bob_tester,You brought that on yourself Charlie
+random,dana_design,There's extra spring rolls if you want some
+random,charlie_ops,Ok twist my arm
+random,alice_dev,Speaking of food takes — pineapple on pizza?
+random,bob_tester,Absolutely. Hawaiian pizza is elite.
+random,charlie_ops,You're dead to me Bob
+random,dana_design,I'm team pineapple honestly
+random,alice_dev,Same. The sweet and salty combo works.
+random,charlie_ops,I can't believe I work with these people
+random,bob_tester,What's YOUR controversial food take Charlie?
+random,charlie_ops,Ketchup on eggs is perfectly fine
+random,alice_dev,...that IS controversial
+random,dana_design,I mean it's not WRONG
+random,bob_tester,It's a little wrong
+random,charlie_ops,"You put pineapple on pizza, you don't get to judge me"
+random,alice_dev,Fair point lol
+random,dana_design,What does everyone listen to while coding? I need new music.
+random,alice_dev,Lo-fi hip hop beats to study/relax to. Obviously.
+random,bob_tester,I'm a movie soundtracks person. Hans Zimmer all day.
+random,charlie_ops,Death metal
+random,dana_design,...really?
+random,charlie_ops,No. Jazz mostly. Sometimes ambient electronic.
+random,bob_tester,I knew the death metal was a bit
+random,charlie_ops,You don't know my life Bob
+random,alice_dev,I went through a phase of listening to video game OSTs. The Celeste soundtrack is incredible.
+random,dana_design,Oh I love that! Also the Stardew Valley soundtrack is so cozy.
+random,bob_tester,The Hades soundtrack goes hard too
+random,charlie_ops,Ok that one I agree with
+random,alice_dev,"If you want something chill, try Tycho. Great for focus mode."
+random,dana_design,Adding all of these to a playlist. Thanks everyone!
+random,bob_tester,We should make a shared team playlist
+random,charlie_ops,Collaborative Spotify playlist? I'm in.
+random,alice_dev,I'll create it. Team Vibes or something?
+random,bob_tester,Call it 'Merge Conflict'
+random,dana_design,That's perfect actually
+random,charlie_ops,Seconded. Merge Conflict it is.
+random,alice_dev,Done. Link in the team drive. Add your favorites.
+random,bob_tester,Completely unrelated but my cat just knocked my coffee off the desk
+random,dana_design,Oh no! Is the laptop ok?
+random,bob_tester,Laptop is fine. My dignity is not.
+random,charlie_ops,What's the cat's name?
+random,bob_tester,Pixel. She's a menace.
+random,alice_dev,Pixel is a great name for a tech person's cat
+random,dana_design,I have a corgi named Biscuit. He sits under my desk all day.
+random,charlie_ops,I need a photo of Biscuit immediately
+random,alice_dev,Seconded
+random,dana_design,Ask and you shall receive. Check the pet channel.
+random,bob_tester,WE HAVE A PET CHANNEL?
+random,dana_design,We do now. I just made one.
+random,charlie_ops,Best channel in this whole app
+random,alice_dev,I don't have pets but I'm absolutely here for the content
+random,bob_tester,Pixel photo incoming
+random,charlie_ops,I have two cockatiels named Git and Hub
+random,alice_dev,You did NOT name your birds Git and Hub
+random,charlie_ops,I absolutely did
+random,bob_tester,That is the most DevOps thing I've ever heard
+random,dana_design,I love it. Do they sing?
+random,charlie_ops,Hub knows the Mario theme. Git just screams.
+random,alice_dev,Git just screams. Sounds about right.
+random,bob_tester,lmaooo
+random,dana_design,Ok serious question: what's the best text editor?
+random,alice_dev,VS Code. Next question.
+random,charlie_ops,Vim. And I will die on this hill.
+random,bob_tester,How do you exit vim though?
+random,charlie_ops,I've been stuck in vim since 2014 and this is a cry for help
+random,alice_dev,hahahaha
+random,dana_design,I use Figma for everything including writing code
+random,bob_tester,Please tell me that's a joke
+random,dana_design,It is. I use VS Code like a normal person.
+random,charlie_ops,Normal is relative in this field
+random,alice_dev,Anyone tried Zed? The new editor? It's insanely fast.
+random,bob_tester,I tried it for a week. It's nice but I miss my VS Code extensions.
+random,charlie_ops,Extensions are golden handcuffs
+random,dana_design,What's everyone's must-have extension?
+random,alice_dev,GitLens. Can't live without it.
+random,bob_tester,Error Lens. Shows errors inline right in the editor.
+random,charlie_ops,Remote SSH. I do all my editing on remote servers.
+random,dana_design,Peacock. I color-code my editor windows by project.
+random,bob_tester,That's actually genius Dana
+random,alice_dev,I'm stealing that idea
+random,charlie_ops,Ok I'm going to force myself to do actual work now. This channel is a trap.
+random,bob_tester,See you in 10 minutes when you come back
+random,charlie_ops,...probably
+random,dana_design,This channel is self-care Charlie
+random,alice_dev,She's right. Breaks are important for productivity.
+random,bob_tester,That sounds like something you'd read on a motivational poster in a WeWork
+random,alice_dev,Because it was. There's one right outside the bathroom.
+random,dana_design,I'm framing that quote
+random,charlie_ops,Ok for real this time. Back to work. BYE.
+random,bob_tester,Bye Charlie. Enjoy vim.
+random,alice_dev,:wq
+random,charlie_ops,I hate this channel
+random,dana_design,No you don't
+random,charlie_ops,No I don't
+random,bob_tester,Wholesome ending to a random thread. Screenshot saved.
+random,alice_dev,This is going in the all-hands presentation right?
+dev,alice_dev,I'm working on the new auth flow. Should be done by EOD.
+dev,bob_tester,Can you add some integration tests for that?
+dev,alice_dev,Already on it. Using the new test fixtures.
+dev,charlie_ops,Reminder: we need to update the CI pipeline for the new deps
+dev,dana_design,The new login page design is ready for implementation
+dev,alice_dev,Thanks Dana! I'll reference those when building the UI
+dev,bob_tester,I found a flaky test in the message search module. Looking into it.
+dev,charlie_ops,Was it the one that depends on timestamp ordering?
+dev,bob_tester,"Yep, exactly. Race condition in the async handler."
+dev,alice_dev,I saw that one too. The fix is to use an atomic counter instead of timestamps.
+dev,bob_tester,That's what I was thinking. PR incoming.
+dev,charlie_ops,Make sure to add a regression test for it
+dev,bob_tester,Way ahead of you
+dev,dana_design,Question: should the error states use red or our warning orange?
+dev,alice_dev,"Red for errors, orange for warnings. Let's keep them distinct."
+dev,dana_design,Makes sense. I'll update the component library.
+dev,charlie_ops,The new monitoring dashboard is up btw. Check grafana.internal/dashboards
+dev,bob_tester,Ooh nice. I can see the request latency graphs.
+dev,alice_dev,p99 is at 120ms. Not bad but we should aim for under 100.
+dev,charlie_ops,Most of the latency is in the DB queries. We need to add some indexes.
+dev,bob_tester,I can profile the slow queries this afternoon
+dev,alice_dev,That would be great. Start with the message search endpoint — that one's the worst.
+dev,charlie_ops,Also the room list query does a full table scan when you have 50+ rooms
+dev,bob_tester,Yikes. Ok I'll look at both.
+dev,dana_design,While we're on performance — the frontend bundle is 2.3MB. Can we tree-shake some of that?
+dev,alice_dev,"Yeah, I noticed we're importing all of lodash when we only use like 3 functions."
+dev,bob_tester,Classic
+dev,charlie_ops,Just import what you need: import debounce from 'lodash/debounce'
+dev,alice_dev,I'll do a pass on the imports this sprint
+dev,dana_design,That should help. Also the SVG icons are huge — we should switch to an icon font or sprite sheet.
+dev,alice_dev,Good idea. Let's add that to the sprint backlog.
+dev,charlie_ops,PR #247 is ready for review. It's the WebSocket reconnection logic.
+dev,bob_tester,I'll take a look
+dev,alice_dev,Me too. How did you handle the backoff?
+dev,charlie_ops,"Exponential backoff with jitter. Starts at 1s, maxes at 30s."
+dev,bob_tester,That's the right approach. Does it preserve the subscription state?
+dev,charlie_ops,"Yep, it replays room.join for all previously joined rooms on reconnect."
+dev,alice_dev,Nice. What about messages that arrived while disconnected?
+dev,charlie_ops,It uses the ?since= parameter to fetch anything missed.
+dev,bob_tester,LGTM. Approving.
+dev,alice_dev,"Same, looks solid. One minor nit on the variable naming but not blocking."
+dev,charlie_ops,I'll fix that before merging. Thanks for the quick review!
+dev,dana_design,"Hey, the A/B test results for the new onboarding are in."
+dev,alice_dev,And?
+dev,dana_design,Variant B (the simplified form) wins by a huge margin. 40% better completion rate.
+dev,bob_tester,Wow that's massive
+dev,charlie_ops,Ship it.
+dev,alice_dev,Agreed. Let's make variant B the default.
+dev,dana_design,Already updated the feature flag. Rolling out to 100% now.
+dev,bob_tester,I'll remove the old variant code in a cleanup PR
+dev,alice_dev,Don't forget to remove the feature flag config too
+dev,bob_tester,"Yep, I'll clean up the whole thing"
+dev,charlie_ops,One more thing — we should update the API docs. The new endpoints aren't documented yet.
+dev,alice_dev,I can do that. Which endpoints are missing?
+dev,charlie_ops,The room folder endpoints and the new plugin API.
+dev,alice_dev,On it. Should have the docs updated by tomorrow.
+dev,bob_tester,I'll add example requests/responses to the test suite too. Those double as docs.
+dev,dana_design,The swagger UI already auto-generates a lot of it. Just needs descriptions.
+dev,alice_dev,True. I'll focus on the descriptions and examples then.
+dev,charlie_ops,Great. I think that covers everything for today's standup.
+dev,bob_tester,Shortest standup ever. Love it.
+dev,dana_design,Efficient team is efficient
+dev,alice_dev,Back to coding then. Talk later!
+dev,charlie_ops,One sec — anyone want to pair on the caching layer this afternoon?
+dev,alice_dev,I'm in. 2pm work?
+dev,charlie_ops,Perfect. I'll set up the branch.
+dev,bob_tester,Can I sit in? Want to understand the caching strategy for the test suite.
+dev,charlie_ops,Of course. The more eyes the better.
+dev,dana_design,I'll skip the pairing but let me know if you need any UI for cache invalidation controls.
+dev,alice_dev,Will do. We might need a 'clear cache' button in the admin panel.
+dev,dana_design,Easy. I'll have a mockup ready by tomorrow.
+dev,charlie_ops,"Alright, see everyone at 2. Going to grab lunch."
+dev,charlie_ops,Ok the pairing session went great. We've got a two-layer cache: in-memory LRU + Redis.
+dev,alice_dev,"The LRU handles hot data, Redis handles the warm tier. Invalidation is event-driven."
+dev,bob_tester,I learned a ton watching you two work through that. The cache stampede protection is clever.
+dev,charlie_ops,Yeah the lock-and-recompute pattern is key. Prevents thundering herd on cache misses.
+dev,dana_design,Did you end up needing that admin UI for cache controls?
+dev,alice_dev,Definitely. We want a button to flush specific cache namespaces.
+dev,dana_design,I'll prioritize the mockup. Should have it by EOD.
+dev,bob_tester,I'm writing the cache integration tests now. How should I handle cache warmup in the test fixtures?
+dev,charlie_ops,Use a separate Redis DB for tests. I'll add the config. Just use REDIS_DB=1 for tests.
+dev,alice_dev,Also make sure to flush between test runs so there's no bleed.
+dev,bob_tester,Good point. I'll add that to the conftest.
+dev,bob_tester,"Found something weird. When a user leaves a room and rejoins, their unread count is wrong."
+dev,alice_dev,Wrong how? Too high or too low?
+dev,bob_tester,Too high. It's counting messages from when they weren't a member.
+dev,charlie_ops,That's probably the membership timestamp not being updated on rejoin.
+dev,alice_dev,"Let me check... yeah, the rejoin path just sets status='active' but doesn't update joined_at."
+dev,bob_tester,"So the unread query uses joined_at to filter, but it's the original join date, not the rejoin date."
+dev,alice_dev,Exactly. Easy fix. We need to update joined_at on rejoin. One line change.
+dev,charlie_ops,Should we also store the leave timestamp? Might be useful for audit trails.
+dev,alice_dev,That's a good idea but let's scope this fix small. Just the joined_at update.
+dev,bob_tester,Agreed. I'll file a separate ticket for the leave audit trail.
+dev,alice_dev,PR is up. #252. It's literally a one-line diff.
+dev,bob_tester,Reviewing... LGTM. Clean fix.
+dev,charlie_ops,Approved. Merge it.
+dev,alice_dev,Merged. Bob can you verify the fix?
+dev,bob_tester,Testing now... unread count is correct after rejoin. Ship it.
+dev,charlie_ops,Heads up: I ran a dependency audit this morning. We have 3 medium vulnerabilities.
+dev,alice_dev,In what packages?
+dev,charlie_ops,"Two in transitive deps of the markdown parser, one in the old version of pyjwt."
+dev,bob_tester,pyjwt is easy. Just bump the version.
+dev,charlie_ops,Already did that one. The markdown parser ones are trickier. Upstream hasn't patched yet.
+dev,alice_dev,What kind of vulns? XSS?
+dev,charlie_ops,One is a ReDoS in the regex parser. The other is an HTML injection in the sanitizer.
+dev,alice_dev,We should switch to markdown-it. It's been more actively maintained.
+dev,bob_tester,That's a bigger change though. Want to timebox it?
+dev,alice_dev,"Fair. Let's give it half a day. If it's not clean by then, we pin and revisit next sprint."
+dev,charlie_ops,I'll handle the migration. The API is similar so it shouldn't be too bad.
+dev,dana_design,Will the rendering change at all? I don't want the message formatting to look different.
+dev,charlie_ops,Shouldn't. I'll do a visual comparison before and after.
+dev,dana_design,Thanks. Let me know if you need me to check anything.
+dev,bob_tester,Profile results are in for the slow queries. Message search is doing a sequential scan on 500k rows.
+dev,alice_dev,Oof. We definitely need that FTS5 index.
+dev,charlie_ops,How big is the messages table right now?
+dev,bob_tester,"About 500k rows, 200MB on disk. Not huge but the queries are still slow without indexes."
+dev,alice_dev,FTS5 virtual table should handle this nicely. I'll set it up with triggers to keep it in sync.
+dev,charlie_ops,Make sure to use the unicode61 tokenizer so non-ASCII search works.
+dev,alice_dev,Good call. I almost forgot about that.
+dev,bob_tester,"The room list query was also bad. Added an index on room_members(username, room_id) and it went from 800ms to 2ms."
+dev,charlie_ops,That's a 400x improvement. Wow.
+dev,alice_dev,Indexes are magic. Until you have too many of them.
+dev,bob_tester,PR #253 for the room list index. Should I include the FTS migration too?
+dev,alice_dev,"No, keep them separate. FTS is a bigger change. I'll put it in its own PR."
+dev,dana_design,Question about the notification API: should dismissed notifications disappear permanently or just be marked as read?
+dev,alice_dev,Marked as read. Users might want to go back and find them.
+dev,bob_tester,Agree. Permanent deletion makes me nervous from a UX perspective.
+dev,charlie_ops,"From a data perspective, soft delete is better too. We can always purge old ones in a background job."
+dev,dana_design,Makes sense. I'll add a 'show dismissed' toggle to the UI.
+dev,alice_dev,Nice. Let's also add a 'mark all as read' button. That's always useful.
+dev,bob_tester,And a 'dismiss all' for the bold ones among us
+dev,charlie_ops,Inbox zero energy
+dev,dana_design,Love it. Updated the mockups.
+dev,alice_dev,"I'm looking at the notification data model now. We'll need: id, user_id, type, title, body, link, read_at, dismissed_at, created_at"
+dev,charlie_ops,Add a source_id and source_type too. So we can link back to the message or event that triggered it.
+dev,alice_dev,Good thinking. Polymorphic source reference. I'll add that.
+dev,bob_tester,Don't forget the delivery preferences. Users might want to disable certain notification types.
+dev,alice_dev,"That's a separate table. notification_preferences with user_id, type, enabled, created_at."
+dev,dana_design,Should I design a notification preferences page too?
+dev,alice_dev,Yes please. Put it in Settings > Notifications.
+dev,dana_design,On it.
+dev,charlie_ops,Markdown parser migration is done. PR #254. Rendering looks identical.
+dev,alice_dev,Reviewing now. The diff is surprisingly clean.
+dev,bob_tester,Tests all pass. Nice work Charlie.
+dev,charlie_ops,Thanks. The new parser is also 3x faster. Unexpected bonus.
+dev,alice_dev,Approved. Let's merge and deploy tomorrow morning after a soak test overnight on staging.
+dev,charlie_ops,Smart. I'll deploy to staging now and we can check it first thing tomorrow.
+dev,bob_tester,I set up a load test to run against staging overnight. 10 req/s for 8 hours.
+dev,alice_dev,That's thorough. Should catch any memory leaks.
+dev,dana_design,Notification preferences mockup is done. Six screens. Sharing now.
+dev,bob_tester,That was fast!
+dev,dana_design,I had a head start from the settings page patterns we already established.
+dev,alice_dev,These look great Dana. The toggle grouping by category is really intuitive.
+dev,charlie_ops,Can we get a 'quiet hours' feature in there too? I don't want pings at 2am.
+dev,dana_design,Adding it. Good idea.
+dev,bob_tester,If Charlie's getting paged at 2am we have bigger problems
+dev,charlie_ops,You'd be surprised
+dev,alice_dev,"Alright, wrapping up. Pushed the FTS5 PR. It can wait for review tomorrow."
+dev,bob_tester,I'll review first thing. My overnight load test is running so I'm heading out too.
+dev,charlie_ops,Same. Staging deploy is done. Fingers crossed for a clean overnight.
+dev,dana_design,Night everyone! Don't forget we have the all-hands prep tomorrow at 11.
+dev,alice_dev,"Night! Good reminder, I'll prep my slides tonight."
+dev,bob_tester,Later all!
+dev,charlie_ops,See you tomorrow. Don't let the bugs bite.
