@@ -1,0 +1,5 @@
+localhost {
+	reverse_proxy /api/* app:8000
+	reverse_proxy /ws/* app:8000
+	reverse_proxy app:5173
+}

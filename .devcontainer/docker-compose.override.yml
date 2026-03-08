@@ -1,5 +1,8 @@
 services:
   app:
+    build:
+      context: .
+      target: dev
     volumes:
       - ./:/workspace
       - /tmp/app-container:/tmp:rw

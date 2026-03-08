@@ -9,7 +9,8 @@
 	"onCreateCommand": ".devcontainer/on-create.sh",
 	"service": "app",
 	"runServices": [
-		"app"
+		"app",
+		"http-server",
 	],
 	"workspaceFolder": "/workspace",
 	"customizations": {

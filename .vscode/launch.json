@@ -17,7 +17,6 @@
       "cwd": "${workspaceFolder}/backend",
       "env": {
         "PYTHONUNBUFFERED": "1",
-        "SKRIB_RP_ID": "pinggy.link"
       },
       "console": "integratedTerminal",
       "justMyCode": false,
