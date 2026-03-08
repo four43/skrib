@@ -69,8 +69,8 @@ const roomTypeHandlers = {};  // roomType -> handler object
 
 const slashCommands = {};
 
-function registerCommand(name, handler, description) {
-    slashCommands[name] = { handler, description };
+function registerCommand(name, handler, description, args) {
+    slashCommands[name] = { handler, description, args: args || '' };
 }
 
 function parseAndExecuteCommand(input) {
@@ -262,6 +262,8 @@ function loadPluginScript(scriptUrl, plugin) {
                     loadRoomKeys,
                     escapeHtml,
                     getDisplayName,
+                    // Slash commands registry (for autocomplete)
+                    slashCommands: () => slashCommands,
                     // Crypto functions (ES module imports, inaccessible to plain scripts)
                     encryptMessage,
                     decryptMessage,
@@ -299,13 +301,13 @@ registerCommand('help', () => {
         lines.push(`  /${name} — ${cmd.description}`);
     }
     displaySystemMessage(lines.join('\n'));
-}, 'Show available commands');
+}, 'Show available commands', '');
 
 registerCommand('invite', async (args) => {
-    const targetUsername = args.trim();
+    const targetUsername = args.trim().replace(/^@/, '');
 
     if (!targetUsername) {
-        displaySystemMessage('Usage: /invite <username>');
+        displaySystemMessage('Usage: /invite @username');
         return;
     }
 
@@ -385,7 +387,7 @@ registerCommand('invite', async (args) => {
         console.error('[CMD] Error inviting user:', error);
         displaySystemMessage('Failed to invite user. Please try again.');
     }
-}, 'Invite a user to the current room');
+}, 'Invite a user to the current room', '@username');
 
 registerCommand('nick', async (args) => {
     const nickname = args.trim();
@@ -441,7 +443,7 @@ registerCommand('nick', async (args) => {
         console.error('[CMD] Error setting nickname:', error);
         displaySystemMessage('Failed to set nickname. Please try again.');
     }
-}, 'Set your display nickname (/nick <name>, /nick clear)');
+}, 'Set or clear your display nickname', '<name> or clear');
 
 registerCommand('leave', async () => {
     if (!currentRoom) {
@@ -492,18 +494,18 @@ registerCommand('leave', async () => {
         console.error('[CMD] Error leaving room:', error);
         displaySystemMessage('Failed to leave room. Please try again.');
     }
-}, 'Leave the current channel');
+}, 'Leave the current channel', '');
 
 // Alias /part for /leave (IRC terminology)
 registerCommand('part', async (args) => {
     await slashCommands['leave'].handler(args);
-}, 'Leave the current channel (alias for /leave)');
+}, 'Leave the current channel (alias for /leave)', '');
 
 registerCommand('kick', async (args) => {
-    const targetUsername = args.trim();
+    const targetUsername = args.trim().replace(/^@/, '');
 
     if (!targetUsername) {
-        displaySystemMessage('Usage: /kick <username>');
+        displaySystemMessage('Usage: /kick @username');
         return;
     }
 
@@ -537,7 +539,7 @@ registerCommand('kick', async (args) => {
         console.error('[CMD] Error kicking user:', error);
         displaySystemMessage('Failed to kick user. Please try again.');
     }
-}, 'Kick a user from the current channel (room op/owner)');
+}, 'Kick a user from the current channel', '@username');
 
 registerCommand('topic', async (args) => {
     const topic = args.trim();
@@ -586,7 +588,7 @@ registerCommand('topic', async (args) => {
         console.error('[CMD] Error setting topic:', error);
         displaySystemMessage('Failed to set topic. Please try again.');
     }
-}, 'Set or view the channel topic');
+}, 'Set or view the channel topic', '[topic]');
 
 // ---------------------------------------------------------------------------
 // E2E helpers

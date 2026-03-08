@@ -1,6 +1,9 @@
 #!/bin/bash
 set -euo pipefail
 
+DIR="$(dirname "$(readlink -f "$0")")"
+cd "$DIR/../"
+
 IMAGE_NAME="skrib:latest"
 TAR_FILE="/tmp/skrib-image.tar"
 REMOTE_HOST="ursa-minor"
@@ -20,11 +23,10 @@ ssh "$REMOTE_HOST" "docker load -i $TAR_FILE && rm $TAR_FILE"
 rm "$TAR_FILE"
 
 REMOTE_DIR="/opt/skrib-chat"
-SCRIPT_DIR="$(cd "$(dirname "$0")" && pwd)"
 
 echo "Copying docker-compose.prod.yml to $REMOTE_HOST..."
 ssh "$REMOTE_HOST" "mkdir -p $REMOTE_DIR"
-scp "$SCRIPT_DIR/docker-compose.prod.yml" "$REMOTE_HOST":"$REMOTE_DIR/docker-compose.yml"
+scp "$DIR/docker-compose.prod.yml" "$REMOTE_HOST":"$REMOTE_DIR/docker-compose.yml"
 
 echo "Starting services on $REMOTE_HOST..."
 ssh "$REMOTE_HOST" "cd $REMOTE_DIR && docker compose up -d --force-recreate"

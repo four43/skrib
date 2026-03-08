@@ -76,6 +76,25 @@ cd frontend && npm install && npm run dev  # port 5173
 docker-compose up --build
 ```
 
+## Testing
+
+You MUST USE ./util/test-e2e for E2E tests, it sets SKRIB_TEST_DATA_DIR and builds the frontend. Each test gets an isolated backend + temp SQLite DB, so they are fully parallel-safe. WebAuthn is handled via CDP virtual authenticators (Chromium only). Don't run `npx playwright test` directly., it won't set up the environment correctly.
+
+```bash
+# E2E tests (builds frontend, spawns isolated backends per test)
+cd frontend && ./util/test-e2e                              # run all e2e tests
+cd frontend && ./util/test-e2e tests/e2e/core.spec.js       # run a specific test file
+cd frontend && ./util/test-e2e --grep "room members"        # filter by test name
+
+# DOM/unit tests
+cd frontend && npm test
+```
+
+- E2E tests live in `frontend/tests/e2e/*.spec.js`, fixtures in `frontend/tests/e2e/fixtures.js`
+- Always use `./util/test-e2e` for e2e tests — it sets `SKRIB_TEST_DATA_DIR` and builds the frontend
+- Each e2e test gets its own backend + temp SQLite DB (fully isolated, parallel-safe)
+- WebAuthn is handled via CDP virtual authenticators (Chromium only)
+
 ## Debugging
 
 - Backend logs: `[WS]`, `[HTTP]`, `[DEBUG]` prefixes in console

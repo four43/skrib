@@ -56,6 +56,8 @@ const RoomTypeChatPlugin = (function() {
         lastMessageId = 0;
         oldestMessageId = null;
         hasOlderMessages = true;
+        allUsersCache = null;
+        delete roomMembersCache[roomId];
 
         const messagesDiv = document.getElementById('messages');
         messagesDiv.className = 'messages';
@@ -81,6 +83,27 @@ const RoomTypeChatPlugin = (function() {
     // Input area (owned by this plugin)
     // -----------------------------------------------------------------------
 
+    // -----------------------------------------------------------------------
+    // @ mention autocomplete state
+    // -----------------------------------------------------------------------
+
+    let mentionDropdown = null;
+    let mentionQuery = '';       // text after the '@'
+    let mentionStartIndex = -1;  // cursor position of the '@'
+    let mentionSelectedIndex = 0;
+    let mentionResults = [];
+    let allUsersCache = null;    // cached /api/users response
+    let roomMembersCache = {};   // room_id -> [username, ...]
+
+    // -----------------------------------------------------------------------
+    // / command autocomplete state
+    // -----------------------------------------------------------------------
+
+    let commandDropdown = null;
+    let commandQuery = '';       // text after the '/'
+    let commandSelectedIndex = 0;
+    let commandResults = [];     // [{ name, description, args }]
+
     function createInputArea() {
         // Remove any existing input area first
         removeInputArea();
@@ -91,6 +114,9 @@ const RoomTypeChatPlugin = (function() {
         const inputArea = document.createElement('div');
         inputArea.className = 'input-area';
         inputArea.id = 'chat-input-area';
+
+        const inputWrapper = document.createElement('div');
+        inputWrapper.className = 'input-wrapper';
 
         const input = document.createElement('input');
         input.type = 'text';
@@ -106,16 +132,26 @@ const RoomTypeChatPlugin = (function() {
         button.className = 'send-button';
         button.innerHTML = '<span class="send-label">Send</span><svg class="send-icon" viewBox="0 0 24 24" width="20" height="20" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><line x1="12" y1="19" x2="12" y2="5"/><polyline points="5 12 12 5 19 12"/></svg>';
 
-        inputArea.appendChild(input);
+        inputWrapper.appendChild(input);
+        inputArea.appendChild(inputWrapper);
         inputArea.appendChild(button);
         chatArea.appendChild(inputArea);
 
         // Bind event listeners — delegates through core's handleSendInput
         // which handles slash commands and then calls onSendMessage
         input.addEventListener('keypress', (e) => {
-            if (e.key === 'Enter') window.sendMessage();
+            if (e.key === 'Enter' && !mentionDropdown && !commandDropdown) window.sendMessage();
         });
         button.addEventListener('click', () => window.sendMessage());
+
+        // @ mention autocomplete
+        input.addEventListener('input', onAutocompleteInput);
+        input.addEventListener('keydown', onAutocompleteKeydown);
+        input.addEventListener('blur', () => {
+            // Delay to allow click on dropdown item
+            setTimeout(dismissMentionDropdown, 150);
+            setTimeout(dismissCommandDropdown, 150);
+        });
 
         input.focus();
     }
@@ -123,6 +159,377 @@ const RoomTypeChatPlugin = (function() {
     function removeInputArea() {
         const existing = document.getElementById('chat-input-area');
         if (existing) existing.remove();
+        dismissMentionDropdown();
+    }
+
+    // -----------------------------------------------------------------------
+    // @ mention autocomplete
+    // -----------------------------------------------------------------------
+
+    async function fetchAllUsers() {
+        if (allUsersCache) return allUsersCache;
+        try {
+            const response = await fetch(`${ctx.API_URL}/users`, {
+                headers: { 'Authorization': `Bearer ${ctx.sessionToken()}` },
+            });
+            allUsersCache = await response.json();
+        } catch (e) {
+            console.error('[RoomTypeChat] Error fetching users:', e);
+            allUsersCache = [];
+        }
+        return allUsersCache;
+    }
+
+    async function fetchRoomMembers(roomId) {
+        if (roomMembersCache[roomId]) return roomMembersCache[roomId];
+        try {
+            const response = await fetch(`${ctx.API_URL}/rooms/${encodeURIComponent(roomId)}`, {
+                headers: { 'Authorization': `Bearer ${ctx.sessionToken()}` },
+            });
+            const data = await response.json();
+            roomMembersCache[roomId] = (data.members || []).map(m => m.username);
+        } catch (e) {
+            console.error('[RoomTypeChat] Error fetching room members:', e);
+            roomMembersCache[roomId] = [];
+        }
+        return roomMembersCache[roomId];
+    }
+
+    function getMentionContext(input) {
+        const value = input.value;
+        const cursor = input.selectionStart;
+        // Walk backwards from cursor to find '@'
+        for (let i = cursor - 1; i >= 0; i--) {
+            if (value[i] === '@') {
+                // '@' must be at start or preceded by a space
+                if (i === 0 || value[i - 1] === ' ') {
+                    return { start: i, query: value.substring(i + 1, cursor) };
+                }
+                return null;
+            }
+            // Stop if we hit a space (no '@' in this word)
+            if (value[i] === ' ') return null;
+        }
+        return null;
+    }
+
+    async function onMentionInput() {
+        const input = document.getElementById('message-input');
+        if (!input) return;
+
+        const mentionCtx = getMentionContext(input);
+        if (!mentionCtx) {
+            dismissMentionDropdown();
+            return;
+        }
+
+        mentionStartIndex = mentionCtx.start;
+        mentionQuery = mentionCtx.query.toLowerCase();
+
+        // Get room members (prioritized) and all users
+        const roomMembers = await fetchRoomMembers(ctx.currentRoom());
+
+        const allUsers = await fetchAllUsers();
+        const allUsernames = allUsers.map(u => u.username);
+
+        // Build results: room members first, then others, filtered by query
+        const inRoom = [];
+        const notInRoom = [];
+        for (const username of allUsernames) {
+            const displayName = ctx.getDisplayName(username);
+            const matchesQuery = !mentionQuery ||
+                username.toLowerCase().includes(mentionQuery) ||
+                displayName.toLowerCase().includes(mentionQuery);
+            if (!matchesQuery) continue;
+
+            if (roomMembers.includes(username)) {
+                inRoom.push(username);
+            } else {
+                notInRoom.push(username);
+            }
+        }
+
+        mentionResults = [...inRoom, ...notInRoom];
+        if (mentionResults.length === 0) {
+            dismissMentionDropdown();
+            return;
+        }
+
+        mentionSelectedIndex = 0;
+        renderMentionDropdown(input);
+    }
+
+    function onMentionKeydown(e) {
+        if (!mentionDropdown) return;
+
+        if (e.key === 'ArrowDown') {
+            e.preventDefault();
+            mentionSelectedIndex = (mentionSelectedIndex + 1) % mentionResults.length;
+            updateMentionSelection();
+        } else if (e.key === 'ArrowUp') {
+            e.preventDefault();
+            mentionSelectedIndex = (mentionSelectedIndex - 1 + mentionResults.length) % mentionResults.length;
+            updateMentionSelection();
+        } else if (e.key === 'Enter' || e.key === 'Tab') {
+            e.preventDefault();
+            acceptMention(mentionResults[mentionSelectedIndex]);
+        } else if (e.key === 'Escape') {
+            e.preventDefault();
+            dismissMentionDropdown();
+        }
+    }
+
+    function renderMentionDropdown(input) {
+        // Remove existing dropdown DOM without resetting state
+        if (mentionDropdown) {
+            mentionDropdown.remove();
+            mentionDropdown = null;
+        }
+
+        const wrapper = input.closest('.input-wrapper');
+        if (!wrapper) return;
+
+        mentionDropdown = document.createElement('div');
+        mentionDropdown.className = 'mention-dropdown';
+
+        const roomMembers = roomMembersCache[ctx.currentRoom()] || [];
+
+        mentionResults.forEach((username, i) => {
+            const item = document.createElement('div');
+            item.className = 'mention-item' + (i === mentionSelectedIndex ? ' selected' : '');
+            item.dataset.index = i;
+
+            const displayName = ctx.getDisplayName(username);
+            const color = ctx.userColors()[username] || 'var(--theme-color)';
+            const avatarUrl = `${ctx.API_URL}/users/${encodeURIComponent(username)}/avatar`;
+            const inRoom = roomMembers.includes(username);
+
+            item.innerHTML = `
+                <img class="mention-avatar" src="${avatarUrl}" alt="">
+                <span class="mention-name" style="color: ${color};">${ctx.escapeHtml(displayName)}</span>
+                ${displayName !== username ? `<span class="mention-username">@${ctx.escapeHtml(username)}</span>` : ''}
+                ${inRoom ? '' : '<span class="mention-badge">other</span>'}
+            `;
+
+            item.addEventListener('mousedown', (e) => {
+                e.preventDefault(); // Prevent blur
+                acceptMention(username);
+            });
+
+            mentionDropdown.appendChild(item);
+        });
+
+        wrapper.appendChild(mentionDropdown);
+    }
+
+    function updateMentionSelection() {
+        if (!mentionDropdown) return;
+        mentionDropdown.querySelectorAll('.mention-item').forEach((el, i) => {
+            el.classList.toggle('selected', i === mentionSelectedIndex);
+            if (i === mentionSelectedIndex) {
+                el.scrollIntoView({ block: 'nearest' });
+            }
+        });
+    }
+
+    function acceptMention(username) {
+        const input = document.getElementById('message-input');
+        if (!input) return;
+
+        const value = input.value;
+        const before = value.substring(0, mentionStartIndex);
+        const after = value.substring(input.selectionStart);
+        input.value = before + '@' + username + ' ' + after;
+        const newCursor = mentionStartIndex + username.length + 2; // @username + space
+        input.setSelectionRange(newCursor, newCursor);
+        input.focus();
+
+        dismissMentionDropdown();
+    }
+
+    function dismissMentionDropdown() {
+        if (mentionDropdown) {
+            mentionDropdown.remove();
+            mentionDropdown = null;
+        }
+        mentionResults = [];
+        mentionStartIndex = -1;
+        mentionQuery = '';
+    }
+
+    // -----------------------------------------------------------------------
+    // / command autocomplete
+    // -----------------------------------------------------------------------
+
+    function getCommandContext(input) {
+        const value = input.value;
+        const cursor = input.selectionStart;
+        // Only trigger when '/' is at position 0
+        if (value.length === 0 || value[0] !== '/') return null;
+        // Extract the command query (text after '/' up to first space or cursor)
+        const spaceIndex = value.indexOf(' ');
+        // If cursor is past the space, we're in args territory, not command
+        if (spaceIndex !== -1 && cursor > spaceIndex) return null;
+        const end = spaceIndex !== -1 ? Math.min(spaceIndex, cursor) : cursor;
+        return { query: value.substring(1, end) };
+    }
+
+    function onCommandInput() {
+        const input = document.getElementById('message-input');
+        if (!input) return;
+
+        const cmdCtx = getCommandContext(input);
+        if (!cmdCtx) {
+            dismissCommandDropdown();
+            return;
+        }
+
+        commandQuery = cmdCtx.query.toLowerCase();
+
+        const commands = ctx.slashCommands();
+        commandResults = Object.entries(commands)
+            .filter(([name]) => name.startsWith(commandQuery))
+            .map(([name, cmd]) => ({ name, description: cmd.description, args: cmd.args || '' }));
+
+        if (commandResults.length === 0) {
+            dismissCommandDropdown();
+            return;
+        }
+
+        commandSelectedIndex = 0;
+        renderCommandDropdown(input);
+    }
+
+    function onCommandKeydown(e) {
+        if (!commandDropdown) return;
+
+        if (e.key === 'ArrowDown') {
+            e.preventDefault();
+            commandSelectedIndex = (commandSelectedIndex + 1) % commandResults.length;
+            updateCommandSelection();
+        } else if (e.key === 'ArrowUp') {
+            e.preventDefault();
+            commandSelectedIndex = (commandSelectedIndex - 1 + commandResults.length) % commandResults.length;
+            updateCommandSelection();
+        } else if (e.key === 'Tab') {
+            e.preventDefault();
+            acceptCommand(commandResults[commandSelectedIndex].name);
+        } else if (e.key === 'Enter') {
+            e.preventDefault();
+            const selected = commandResults[commandSelectedIndex];
+            const input = document.getElementById('message-input');
+            const currentCmd = input ? input.value.replace(/^\//, '').trim() : '';
+            // If input already matches the selected command, submit directly
+            if (currentCmd === selected.name) {
+                dismissCommandDropdown();
+                window.sendMessage();
+            } else {
+                acceptCommand(selected.name);
+            }
+        } else if (e.key === 'Escape') {
+            e.preventDefault();
+            dismissCommandDropdown();
+        }
+    }
+
+    function renderCommandDropdown(input) {
+        if (commandDropdown) {
+            commandDropdown.remove();
+            commandDropdown = null;
+        }
+
+        const wrapper = input.closest('.input-wrapper');
+        if (!wrapper) return;
+
+        commandDropdown = document.createElement('div');
+        commandDropdown.className = 'command-dropdown';
+
+        commandResults.forEach((cmd, i) => {
+            const item = document.createElement('div');
+            item.className = 'command-item' + (i === commandSelectedIndex ? ' selected' : '');
+            item.dataset.index = i;
+
+            const argsHtml = cmd.args
+                ? `<span class="command-args">${ctx.escapeHtml(cmd.args)}</span>`
+                : '';
+
+            item.innerHTML = `
+                <span class="command-name">${ctx.escapeHtml(cmd.name)}</span>
+                ${argsHtml}
+                <span class="command-description">${ctx.escapeHtml(cmd.description)}</span>
+            `;
+
+            item.addEventListener('mousedown', (e) => {
+                e.preventDefault();
+                acceptCommand(cmd.name);
+            });
+
+            commandDropdown.appendChild(item);
+        });
+
+        wrapper.appendChild(commandDropdown);
+    }
+
+    function updateCommandSelection() {
+        if (!commandDropdown) return;
+        commandDropdown.querySelectorAll('.command-item').forEach((el, i) => {
+            el.classList.toggle('selected', i === commandSelectedIndex);
+            if (i === commandSelectedIndex) {
+                el.scrollIntoView({ block: 'nearest' });
+            }
+        });
+    }
+
+    function acceptCommand(name) {
+        const input = document.getElementById('message-input');
+        if (!input) return;
+
+        input.value = '/' + name + ' ';
+        const newCursor = name.length + 2; // '/' + name + ' '
+        input.setSelectionRange(newCursor, newCursor);
+        input.focus();
+
+        dismissCommandDropdown();
+    }
+
+    function dismissCommandDropdown() {
+        if (commandDropdown) {
+            commandDropdown.remove();
+            commandDropdown = null;
+        }
+        commandResults = [];
+        commandQuery = '';
+    }
+
+    // -----------------------------------------------------------------------
+    // Unified autocomplete dispatcher
+    // -----------------------------------------------------------------------
+
+    function onAutocompleteInput() {
+        const input = document.getElementById('message-input');
+        if (!input) return;
+
+        // Check for command context first (/ at start of input)
+        if (getCommandContext(input)) {
+            dismissMentionDropdown();
+            onCommandInput();
+            return;
+        }
+        // Otherwise check for mention context
+        dismissCommandDropdown();
+        onMentionInput();
+    }
+
+    function onAutocompleteKeydown(e) {
+        // Dispatch to whichever dropdown is active
+        if (commandDropdown) {
+            onCommandKeydown(e);
+            return;
+        }
+        if (mentionDropdown) {
+            onMentionKeydown(e);
+            return;
+        }
     }
 
     function onRoomAction(action, data) {

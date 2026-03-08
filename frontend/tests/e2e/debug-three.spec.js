@@ -48,25 +48,24 @@ const test = base.extend({
 });
 
 test('Debug threeUsers fixture steps', async ({ browser, baseURL }) => {
-    console.log('=== Step 1: Register admin ===');
     const admin = await registerNewUser(browser, baseURL);
-    console.log('Admin username:', admin.username);
-    console.log('Admin sessionToken:', !!admin.sessionToken);
-    console.log('Admin approvalCode:', admin.approvalCode);
+    console.debug('Admin username:', admin.username);
+    console.debug('Admin sessionToken:', !!admin.sessionToken);
+    console.debug('Admin approvalCode:', admin.approvalCode);
 
-    console.log('=== Step 2: Register userB ===');
+    console.debug('=== Step 2: Register userB ===');
     const userB = await registerNewUser(browser, baseURL);
-    console.log('UserB username:', userB.username);
-    console.log('UserB sessionToken:', !!userB.sessionToken);
-    console.log('UserB approvalCode:', userB.approvalCode);
+    console.debug('UserB username:', userB.username);
+    console.debug('UserB sessionToken:', !!userB.sessionToken);
+    console.debug('UserB approvalCode:', userB.approvalCode);
 
-    console.log('=== Step 3: Register userC ===');
+    console.debug('=== Step 3: Register userC ===');
     const userC = await registerNewUser(browser, baseURL);
-    console.log('UserC username:', userC.username);
-    console.log('UserC sessionToken:', !!userC.sessionToken);
-    console.log('UserC approvalCode:', userC.approvalCode);
+    console.debug('UserC username:', userC.username);
+    console.debug('UserC sessionToken:', !!userC.sessionToken);
+    console.debug('UserC approvalCode:', userC.approvalCode);
 
-    console.log('=== Step 4: Approve userB ===');
+    console.debug('=== Step 4: Approve userB ===');
     const respB = await admin.page.request.patch(
         `${baseURL}/api/users/pending/${encodeURIComponent(userB.approvalCode)}`,
         {
@@ -74,12 +73,12 @@ test('Debug threeUsers fixture steps', async ({ browser, baseURL }) => {
             data: { status: 'approved' },
         }
     );
-    console.log('Approve userB status:', respB.status());
+    console.debug('Approve userB status:', respB.status());
     if (!respB.ok()) {
-        console.log('Approve userB body:', await respB.text());
+        console.debug('Approve userB body:', await respB.text());
     }
 
-    console.log('=== Step 5: Approve userC ===');
+    console.debug('=== Step 5: Approve userC ===');
     const respC = await admin.page.request.patch(
         `${baseURL}/api/users/pending/${encodeURIComponent(userC.approvalCode)}`,
         {
@@ -87,9 +86,9 @@ test('Debug threeUsers fixture steps', async ({ browser, baseURL }) => {
             data: { status: 'approved' },
         }
     );
-    console.log('Approve userC status:', respC.status());
+    console.debug('Approve userC status:', respC.status());
     if (!respC.ok()) {
-        console.log('Approve userC body:', await respC.text());
+        console.debug('Approve userC body:', await respC.text());
     }
 
     // Clean up
