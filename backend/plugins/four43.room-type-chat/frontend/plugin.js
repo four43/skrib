@@ -702,6 +702,161 @@ const RoomTypeChatPlugin = (function() {
         });
     }
 
+    // URL regex — matches http(s) URLs in escaped HTML text.
+    const URL_RE = /https?:\/\/[^\s<>&"]+/g;
+    const IMAGE_EXTS = ['.png', '.jpg', '.jpeg', '.gif', '.webp', '.svg', '.bmp', '.ico'];
+
+    /**
+     * Wrap bare URLs in clickable <a> tags. Run AFTER escapeHtml + linkifyRoomRefs.
+     */
+    function linkifyUrls(html) {
+        return html.replace(URL_RE, (url) => {
+            // Don't double-wrap if already inside an href (from linkifyRoomRefs)
+            return `<a href="${url}" target="_blank" rel="noopener noreferrer" class="message-link">${url}</a>`;
+        });
+    }
+
+    /**
+     * Extract raw URLs from plaintext.
+     */
+    function extractUrls(text) {
+        return (text.match(URL_RE) || []);
+    }
+
+    /**
+     * True if the URL points to an image based on file extension.
+     */
+    function isImageUrl(url) {
+        try {
+            const path = new URL(url).pathname.toLowerCase();
+            return IMAGE_EXTS.some(ext => path.endsWith(ext));
+        } catch {
+            return false;
+        }
+    }
+
+    // In-memory preview cache to avoid redundant API calls within a session.
+    const _previewCache = new Map();
+
+    /**
+     * Fetch link preview from the backend (cached).
+     */
+    async function fetchLinkPreview(url) {
+        if (_previewCache.has(url)) return _previewCache.get(url);
+
+        try {
+            const resp = await fetch(
+                `${PLUGIN_API}/link-preview?url=${encodeURIComponent(url)}`,
+                { headers: { 'Authorization': `Bearer ${ctx.sessionToken()}` } },
+            );
+            if (!resp.ok) return null;
+            const data = await resp.json();
+            _previewCache.set(url, data);
+            return data;
+        } catch {
+            return null;
+        }
+    }
+
+    /**
+     * Build an image preview element for a direct image URL.
+     */
+    function buildImagePreview(url) {
+        const wrapper = document.createElement('div');
+        wrapper.className = 'link-preview-image';
+        const img = document.createElement('img');
+        img.src = url;
+        img.alt = 'Image preview';
+        img.loading = 'lazy';
+        img.addEventListener('error', () => { wrapper.classList.add('link-preview-error'); });
+        wrapper.appendChild(img);
+        return wrapper;
+    }
+
+    /**
+     * Build a preview card element for a web page.
+     */
+    function buildPreviewCard(preview) {
+        if (!preview.title && !preview.description && !preview.image) return null;
+
+        const card = document.createElement('a');
+        card.className = 'link-preview-card';
+        card.href = preview.url;
+        card.target = '_blank';
+        card.rel = 'noopener noreferrer';
+
+        let html = '';
+        if (preview.image) {
+            html += `<img class="link-preview-card-image" src="${ctx.escapeHtml(preview.image)}" alt="" loading="lazy">`;
+        }
+        html += '<div class="link-preview-card-body">';
+        if (preview.site_name) {
+            html += `<div class="link-preview-card-site">${ctx.escapeHtml(preview.site_name)}</div>`;
+        }
+        if (preview.title) {
+            html += `<div class="link-preview-card-title">${ctx.escapeHtml(preview.title)}</div>`;
+        }
+        if (preview.description) {
+            html += `<div class="link-preview-card-desc">${ctx.escapeHtml(preview.description)}</div>`;
+        }
+        html += '</div>';
+        card.innerHTML = html;
+        return card;
+    }
+
+    /**
+     * Find URLs in a message's plaintext, then append image previews or
+     * OG preview cards below the message text.
+     */
+    async function renderLinkPreviews(messageDiv, plaintext) {
+        const urls = extractUrls(plaintext);
+        if (urls.length === 0) return;
+
+        const previewContainer = document.createElement('div');
+        previewContainer.className = 'link-previews';
+
+        const messageText = messageDiv.querySelector('.message-text');
+        if (!messageText) return;
+        messageText.after(previewContainer);
+
+        // Inner wrapper holds the actual preview content
+        const previewContent = document.createElement('div');
+        previewContent.className = 'link-previews-content';
+        previewContainer.appendChild(previewContent);
+
+        for (const url of urls.slice(0, 3)) {  // max 3 previews per message
+            if (isImageUrl(url)) {
+                previewContent.appendChild(buildImagePreview(url));
+            } else {
+                const preview = await fetchLinkPreview(url);
+                if (preview && preview.content_type === 'image') {
+                    previewContent.appendChild(buildImagePreview(preview.image || url));
+                } else if (preview && preview.content_type === 'webpage') {
+                    const card = buildPreviewCard(preview);
+                    if (card) previewContent.appendChild(card);
+                }
+            }
+        }
+
+        // Remove the container if nothing rendered
+        if (previewContent.children.length === 0) {
+            previewContainer.remove();
+            return;
+        }
+
+        // Add toggle button
+        const toggleBtn = document.createElement('button');
+        toggleBtn.className = 'link-preview-toggle';
+        toggleBtn.title = 'Hide preview';
+        toggleBtn.textContent = '▾ Hide preview';
+        toggleBtn.addEventListener('click', () => {
+            const hidden = previewContent.classList.toggle('link-previews-hidden');
+            toggleBtn.textContent = hidden ? '▸ Show preview' : '▾ Hide preview';
+            toggleBtn.title = hidden ? 'Show preview' : 'Hide preview';
+        });
+        previewContainer.insertBefore(toggleBtn, previewContent);
+    }
+
     /**
      * Build a DOM element for a message (shared by append and prepend paths).
      */
@@ -731,7 +886,7 @@ const RoomTypeChatPlugin = (function() {
             `;
         } else {
             const plaintext = await decryptContent(msg);
-            const messageBody = linkifyRoomRefs(ctx.escapeHtml(plaintext));
+            const messageBody = linkifyUrls(linkifyRoomRefs(ctx.escapeHtml(plaintext)));
 
             messageDiv.dataset.plaintext = plaintext;
 
@@ -750,6 +905,9 @@ const RoomTypeChatPlugin = (function() {
             `;
 
             createHoverBar(messageDiv, msg);
+
+            // Render link previews asynchronously (don't block message display)
+            renderLinkPreviews(messageDiv, plaintext);
         }
 
         return messageDiv;

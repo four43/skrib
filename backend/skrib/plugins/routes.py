@@ -168,6 +168,6 @@ async def get_plugin_file(plugin_id: str, file_path: str):
         requested_file,
         media_type=content_type,
         headers={
-            "Cache-Control": "public, max-age=3600",
+            "Cache-Control": "no-cache",
         }
     )

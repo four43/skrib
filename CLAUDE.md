@@ -14,6 +14,8 @@ Read these files on demand when working on specific areas:
 
 **IMPORTANT**: You MUST NOT create migration functions, we are in early development and will reset the database as needed. Just modify the schema and delete the `data/*` files to reset.
 
+When a new feature is requested, YOU MUST write red/green tests first before implementing the feature.
+
 ## Project Structure
 
 ```

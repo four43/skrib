@@ -67,8 +67,7 @@ class PluginRegistry:
         if schema:
             try:
                 with plugin.get_plugin_db() as conn:
-                    conn.execute(schema)
-                    conn.commit()
+                    conn.executescript(schema)
                 print(f"[Plugins]   - Created table in {plugin.id}.db")
             except Exception as e:
                 print(f"[Plugins]   - Warning: Failed to create table for {plugin.id}: {e}")

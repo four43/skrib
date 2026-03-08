@@ -1,10 +1,18 @@
-"""Chat room message storage and retrieval.
+"""Chat room message storage and retrieval, plus link preview caching.
 
 Uses a plugin-scoped database provider instead of the core database.
 The provider is set by the plugin during initialization.
 """
+import html.parser
+import logging
+import re
 from datetime import datetime, timezone
 from typing import Dict, List, Optional
+from urllib.parse import urlparse
+
+import requests as http_requests
+
+log = logging.getLogger(__name__)
 
 
 _get_db = None
@@ -183,3 +191,154 @@ class ChatRoom:
                 messages.append(msg)
 
             return messages
+
+
+# ---------------------------------------------------------------------------
+# Link preview fetching and caching
+# ---------------------------------------------------------------------------
+
+# File extensions that indicate an image (rendered inline on the frontend).
+IMAGE_EXTENSIONS = {'.png', '.jpg', '.jpeg', '.gif', '.webp', '.svg', '.bmp', '.ico'}
+
+# Max bytes we'll download when fetching a page for OG tags.
+_MAX_FETCH_BYTES = 128 * 1024  # 128 KB
+_FETCH_TIMEOUT = 5  # seconds
+
+
+class _OGParser(html.parser.HTMLParser):
+    """Minimal HTML parser that extracts Open Graph and basic <title> tags."""
+
+    def __init__(self):
+        super().__init__()
+        self.og: Dict[str, str] = {}
+        self.title = ''
+        self._in_title = False
+
+    def handle_starttag(self, tag, attrs):
+        if tag == 'title':
+            self._in_title = True
+            return
+        if tag == 'meta':
+            d = dict(attrs)
+            prop = d.get('property', '') or d.get('name', '')
+            content = d.get('content', '')
+            if prop.startswith('og:') and content:
+                self.og[prop[3:]] = content
+
+    def handle_data(self, data):
+        if self._in_title:
+            self.title += data
+
+    def handle_endtag(self, tag):
+        if tag == 'title':
+            self._in_title = False
+
+
+class LinkPreviewService:
+    """Fetch, parse, and cache link previews."""
+
+    def __init__(self, get_db):
+        self._get_db = get_db
+
+    # -- cache layer --------------------------------------------------------
+
+    def get_cached(self, url: str) -> Optional[Dict]:
+        with self._get_db() as conn:
+            row = conn.execute(
+                'SELECT url, title, description, image, site_name, content_type FROM link_previews WHERE url = ?',
+                (url,),
+            ).fetchone()
+            if row:
+                return dict(row)
+        return None
+
+    def _store(self, data: Dict):
+        with self._get_db() as conn:
+            conn.execute('''
+                INSERT OR REPLACE INTO link_previews (url, title, description, image, site_name, content_type, fetched_at)
+                VALUES (?, ?, ?, ?, ?, ?, ?)
+            ''', (
+                data['url'],
+                data.get('title', ''),
+                data.get('description', ''),
+                data.get('image', ''),
+                data.get('site_name', ''),
+                data.get('content_type', 'webpage'),
+                datetime.now(timezone.utc).isoformat(),
+            ))
+            conn.commit()
+
+    # -- public API ---------------------------------------------------------
+
+    def fetch_preview(self, url: str) -> Dict:
+        """Return a preview dict for *url*. Uses cache if available."""
+        cached = self.get_cached(url)
+        if cached:
+            return cached
+
+        parsed = urlparse(url)
+        if not parsed.scheme or not parsed.netloc:
+            return {'url': url, 'content_type': 'unknown'}
+
+        # Quick check: is this a direct image link?
+        ext = _path_extension(parsed.path)
+        if ext in IMAGE_EXTENSIONS:
+            data = {'url': url, 'content_type': 'image', 'title': '', 'description': '', 'image': url, 'site_name': ''}
+            self._store(data)
+            return data
+
+        # Fetch the page and parse OG tags
+        try:
+            resp = http_requests.get(
+                url,
+                timeout=_FETCH_TIMEOUT,
+                headers={'User-Agent': 'Skrib-LinkPreview/1.0'},
+                stream=True,
+            )
+            resp.raise_for_status()
+
+            ct = resp.headers.get('content-type', '')
+            if ct.startswith('image/'):
+                data = {'url': url, 'content_type': 'image', 'title': '', 'description': '', 'image': url, 'site_name': ''}
+                self._store(data)
+                return data
+
+            # Only parse HTML
+            if 'html' not in ct:
+                data = {'url': url, 'content_type': 'unknown', 'title': '', 'description': '', 'image': '', 'site_name': ''}
+                self._store(data)
+                return data
+
+            body = resp.content[:_MAX_FETCH_BYTES].decode('utf-8', errors='replace')
+            parser = _OGParser()
+            parser.feed(body)
+
+            title = parser.og.get('title', '') or parser.title.strip()
+            description = parser.og.get('description', '')
+            image = parser.og.get('image', '')
+            site_name = parser.og.get('site_name', '')
+
+            data = {
+                'url': url,
+                'content_type': 'webpage',
+                'title': title,
+                'description': description,
+                'image': image,
+                'site_name': site_name,
+            }
+            self._store(data)
+            return data
+
+        except Exception as exc:
+            log.debug('[LinkPreview] Failed to fetch %s: %s', url, exc)
+            data = {'url': url, 'content_type': 'error', 'title': '', 'description': '', 'image': '', 'site_name': ''}
+            self._store(data)
+            return data
+
+
+def _path_extension(path: str) -> str:
+    """Return the lowercased file extension (e.g. '.png') from a URL path."""
+    dot = path.rfind('.')
+    if dot == -1:
+        return ''
+    return path[dot:].lower().split('?')[0].split('#')[0]

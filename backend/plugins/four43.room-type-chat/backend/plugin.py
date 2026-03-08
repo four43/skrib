@@ -21,9 +21,10 @@ class RoomTypeChatPlugin(Plugin):
         super().__init__()
         # Wire up the DB provider for services module
         services_module.init_db_provider(self.get_plugin_db)
-        # Inject ChatRoom into routes module (so it uses the same services instance)
+        # Inject ChatRoom and LinkPreviewService into routes module
         from . import routes as routes_module
         routes_module.ChatRoom = services_module.ChatRoom
+        routes_module.link_preview_service = services_module.LinkPreviewService(self.get_plugin_db)
 
     @property
     def id(self) -> str:
@@ -57,7 +58,17 @@ class RoomTypeChatPlugin(Plugin):
                 timestamp TEXT NOT NULL,
                 edited_at TEXT,
                 deleted INTEGER NOT NULL DEFAULT 0
-            )
+            );
+
+            CREATE TABLE IF NOT EXISTS link_previews (
+                url TEXT PRIMARY KEY,
+                title TEXT,
+                description TEXT,
+                image TEXT,
+                site_name TEXT,
+                content_type TEXT NOT NULL DEFAULT 'webpage',
+                fetched_at TEXT NOT NULL
+            );
         '''
 
     async def on_startup(self):

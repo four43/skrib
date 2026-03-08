@@ -9,6 +9,7 @@ from skrib.plugins.auth import plugin_user, check_room_access
 ChatRoom = None
 plugin_bus = None  # PluginBus scoped to this plugin's namespace
 core_api = None  # CoreAPI for querying core data
+link_preview_service = None  # LinkPreviewService, injected by plugin.py
 
 router = APIRouter(tags=["Plugin: four43/room-type-chat"])
 
@@ -109,3 +110,23 @@ async def mark_read_endpoint(
     check_room_access(request, room_id)
     core_api.mark_room_read(room_id, username, body.last_read_message_id)
     return {}
+
+
+# --- Link preview ---
+
+class LinkPreviewResponse(BaseModel):
+    url: str
+    content_type: str = 'webpage'
+    title: str = ''
+    description: str = ''
+    image: str = ''
+    site_name: str = ''
+
+
+@router.get("/link-preview", response_model=LinkPreviewResponse)
+async def get_link_preview(
+    url: str = Query(..., description="URL to fetch a preview for"),
+    username: str = Depends(plugin_user),
+):
+    """Fetch (or return cached) Open Graph preview data for a URL."""
+    return link_preview_service.fetch_preview(url)
