@@ -8,9 +8,6 @@ COPY --from=node:20-slim /usr/local/lib/node_modules /usr/local/lib/node_modules
 RUN ln -s /usr/local/lib/node_modules/npm/bin/npm-cli.js /usr/local/bin/npm \
     && ln -s /usr/local/lib/node_modules/npm/bin/npx-cli.js /usr/local/bin/npx
 
-# Install git (needed by install-dependencies script)
-RUN apt-get update && apt-get install -y --no-install-recommends git && rm -rf /var/lib/apt/lists/*
-
 WORKDIR /app
 
 # Frontend node stuff
@@ -40,6 +37,15 @@ COPY ./ ./
 
 # ---------- Dev target (for devcontainer) ----------
 FROM base AS dev
+
+RUN apt-get update \
+    && apt-get install -y --no-install-recommends \
+        git \
+        openssh-client \
+    && rm -rf /var/lib/apt/lists/*
+
+RUN mkdir -p ~/.ssh \
+    && ssh-keyscan github.com >> ~/.ssh/known_hosts
 
 # Install Playwright Chromium + system dependencies for E2E tests
 RUN cd frontend && npx playwright install --with-deps chromium
