@@ -186,8 +186,8 @@ async function loadPlugins() {
             }
         }
 
-        // Load each enabled plugin
-        for (const plugin of plugins) {
+        // Load each enabled plugin concurrently so one slow plugin can't block the rest
+        const loadPromises = plugins.map(async (plugin) => {
             try {
                 console.log(`[Plugins] Loading plugin: ${plugin.name} (${plugin.id})`);
 
@@ -211,7 +211,9 @@ async function loadPlugins() {
             } catch (error) {
                 console.error(`[Plugins] Failed to load plugin ${plugin.id}:`, error);
             }
-        }
+        });
+
+        await Promise.allSettled(loadPromises);
 
         pluginsLoaded = true;
         console.log('[Plugins] All plugins loaded');

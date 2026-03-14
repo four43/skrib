@@ -20,25 +20,14 @@ services:
       - PYTHONUNBUFFERED=1
     init: true
     entrypoint: ""
+    ports:
+      - "8000:8000"  # Running via "localhost" is a secure context so we can test Service Workers
     command:
       - sh
       - -c
       - |
         npm run dev -- --host &
         cd /app && python -m uvicorn skrib.main:app --host 0.0.0.0 --port 8000 --reload
-
-  http-server:
-    image: caddy:2-alpine
-    ports:
-      - "443:443"
-      - "80:80"
-    volumes:
-      - ./Caddyfile:/etc/caddy/Caddyfile:ro
-      - caddy_data:/data
-      - caddy_config:/config
-    init: true
-    depends_on:
-      - app
 
 volumes:
   caddy_data:

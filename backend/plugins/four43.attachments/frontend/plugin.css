@@ -6,12 +6,14 @@
     position: relative;
     display: flex;
     align-items: flex-end;
+    align-self: flex-end;
 }
 
 .four43-attach-btn {
     width: 40px;
     height: 40px;
     min-width: 40px;
+    margin-top: 0;
     border-radius: 10px;
     border: 1px solid rgba(var(--theme-rgb), 0.15);
     background: rgba(255, 255, 255, 0.7);
@@ -22,6 +24,7 @@
     justify-content: center;
     transition: border-color 0.2s ease, color 0.2s ease, background 0.2s ease;
     padding: 0;
+    box-sizing: border-box;
 }
 
 .four43-attach-btn:hover {
@@ -135,6 +138,151 @@
     border-color: var(--theme-color);
 }
 
+/* ─── Image Preview ──────────────────────────────────────────────── */
+
+.four43-attachment-preview {
+    display: flex;
+    flex-direction: column;
+    max-width: 400px;
+    border-radius: 10px;
+    border: 1px solid rgba(var(--theme-rgb), 0.1);
+    overflow: hidden;
+    background: rgba(var(--theme-rgb), 0.04);
+}
+
+.four43-attachment-preview-img {
+    display: block;
+    max-width: 100%;
+    max-height: 300px;
+    object-fit: contain;
+    background: rgba(0, 0, 0, 0.03);
+}
+
+.four43-attachment-preview-loading {
+    padding: 24px;
+    text-align: center;
+    font-size: 13px;
+    color: var(--text-secondary, #64748b);
+}
+
+.four43-attachment-preview-footer {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    padding: 8px 12px;
+}
+
+.four43-attachment-preview-footer .four43-attachment-info {
+    flex: 1;
+    min-width: 0;
+}
+
+.four43-attachment-preview-footer .four43-attachment-download-btn {
+    flex-shrink: 0;
+}
+
+/* ─── Video Player ───────────────────────────────────────────────── */
+
+.four43-video-player {
+    display: flex;
+    flex-direction: column;
+    max-width: 480px;
+    border-radius: 10px;
+    border: 1px solid rgba(var(--theme-rgb), 0.1);
+    overflow: hidden;
+    background: rgba(var(--theme-rgb), 0.04);
+    position: relative;
+}
+
+.four43-video-player-video {
+    display: block;
+    width: 100%;
+    max-height: 360px;
+    background: #000;
+}
+
+/* ─── Video Play Overlay (shown before user clicks play) ────────── */
+
+.four43-video-play-overlay {
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    justify-content: center;
+    gap: 12px;
+    min-height: 180px;
+    background: #000;
+    cursor: pointer;
+    user-select: none;
+}
+
+.four43-video-play-overlay:hover .four43-video-play-btn {
+    transform: scale(1.1);
+    color: #fff;
+}
+
+.four43-video-play-btn {
+    width: 64px;
+    height: 64px;
+    border-radius: 50%;
+    border: 2px solid rgba(255, 255, 255, 0.8);
+    background: rgba(255, 255, 255, 0.1);
+    color: rgba(255, 255, 255, 0.85);
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    padding: 0 0 0 4px;
+    cursor: pointer;
+    transition: transform 0.2s ease, color 0.2s ease, background 0.2s ease;
+}
+
+.four43-video-play-btn:hover {
+    background: rgba(255, 255, 255, 0.18);
+}
+
+.four43-video-play-info {
+    font-size: 12px;
+    color: rgba(255, 255, 255, 0.55);
+}
+
+.four43-video-loading {
+    position: absolute;
+    top: 0;
+    left: 0;
+    right: 0;
+    bottom: 0;
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    justify-content: center;
+    gap: 10px;
+    background: rgba(0, 0, 0, 0.6);
+    z-index: 2;
+    pointer-events: none;
+    min-height: 120px;
+}
+
+.four43-video-loading-text {
+    font-size: 13px;
+    color: rgba(255, 255, 255, 0.85);
+}
+
+.four43-video-loading-bar {
+    width: 60%;
+    max-width: 200px;
+    height: 4px;
+    border-radius: 2px;
+    background: rgba(255, 255, 255, 0.15);
+    overflow: hidden;
+}
+
+.four43-video-loading-fill {
+    height: 100%;
+    border-radius: 2px;
+    background: var(--theme-color, #6366f1);
+    transition: width 0.3s ease;
+    width: 0%;
+}
+
 /* ─── Upload Progress ─────────────────────────────────────────────── */
 
 .four43-upload-progress {
@@ -181,10 +329,15 @@
         max-width: 100%;
     }
 
+    .four43-video-player {
+        max-width: 100%;
+    }
+
     .four43-attach-btn {
         width: 36px;
         height: 36px;
         min-width: 36px;
+        border-radius: 8px;
     }
 }
 
@@ -213,5 +366,19 @@
     .four43-attachment-download-btn {
         background: rgba(255, 255, 255, 0.06);
         border-color: rgba(255, 255, 255, 0.1);
+    }
+
+    .four43-attachment-preview {
+        background: rgba(255, 255, 255, 0.04);
+        border-color: rgba(255, 255, 255, 0.08);
+    }
+
+    .four43-attachment-preview-img {
+        background: rgba(0, 0, 0, 0.15);
+    }
+
+    .four43-video-player {
+        background: rgba(255, 255, 255, 0.04);
+        border-color: rgba(255, 255, 255, 0.08);
     }
 }

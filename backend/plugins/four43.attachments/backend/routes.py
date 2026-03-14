@@ -1,11 +1,16 @@
 """HTTP routes for file attachment operations."""
+from pathlib import Path
+
 from fastapi import APIRouter, Depends, Request, HTTPException
-from fastapi.responses import Response
+from fastapi.responses import Response, PlainTextResponse
 from pydantic import BaseModel
 
 from skrib.plugins.auth import plugin_user, check_room_access, get_user_role
 
 from .services import AttachmentStore
+
+PLUGIN_DIR = Path(__file__).resolve().parent.parent
+CHUNK_SIZE = 5 * 1024 * 1024  # must match frontend CHUNK_SIZE
 
 # Injected by plugin.py after module load
 core_api = None
@@ -148,3 +153,76 @@ async def delete_attachment(
 
     store.delete_attachment(attachment_id)
     return {"ok": True}
+
+
+# --- Video streaming ---
+
+@router.get("/sw-video.js")
+async def serve_video_service_worker():
+    """Serve the video-streaming Service Worker with Service-Worker-Allowed header.
+
+    The SW must control the whole origin (scope '/') so it can intercept
+    video Range requests made by <video> elements on /app.html.
+    """
+    sw_path = PLUGIN_DIR / "frontend" / "sw-video.js"
+    if not sw_path.exists():
+        raise HTTPException(status_code=404, detail="SW file not found")
+
+    return Response(
+        content=sw_path.read_bytes(),
+        media_type="application/javascript",
+        headers={"Service-Worker-Allowed": "/"},
+    )
+
+
+@router.get("/attachments/{attachment_id}/playlist.m3u8")
+async def get_playlist(
+    attachment_id: str,
+    request: Request,
+    username: str = Depends(plugin_user),
+):
+    """Generate an HLS-style m3u8 playlist for a video attachment.
+
+    Each encrypted chunk is a segment.  Durations are estimated from
+    chunk byte-sizes (the server cannot know real durations because data
+    is end-to-end encrypted).  The playlist is consumed by the frontend
+    video player which fetches and decrypts chunks on demand.
+    """
+    meta = store.get_meta(attachment_id)
+    if not meta:
+        raise HTTPException(status_code=404, detail="Attachment not found")
+
+    check_room_access(request, meta['room_id'])
+
+    chunks = meta['chunks']
+    if not chunks:
+        raise HTTPException(status_code=400, detail="Attachment has no chunks")
+
+    # Build relative chunk URLs and estimate durations.
+    # Without decrypting, we can't know real media durations, so we use
+    # a fixed target of 10 s per full-size chunk (reasonable for ~4 Mbps).
+    target_duration = 10
+    lines = [
+        "#EXTM3U",
+        "#EXT-X-VERSION:3",
+        f"#EXT-X-TARGETDURATION:{target_duration}",
+        "#EXT-X-PLAYLIST-TYPE:VOD",
+        "#EXT-X-MEDIA-SEQUENCE:0",
+        "",
+    ]
+
+    total_encrypted = sum(c['size'] for c in chunks)
+    for chunk in chunks:
+        proportion = chunk['size'] / total_encrypted if total_encrypted else 1
+        est_duration = round(proportion * target_duration * len(chunks), 3)
+        lines.append(f"#EXTINF:{est_duration},")
+        lines.append(f"chunk/{chunk['chunk_index']}")
+
+    lines.append("")
+    lines.append("#EXT-X-ENDLIST")
+    lines.append("")
+
+    return PlainTextResponse(
+        content="\n".join(lines),
+        media_type="application/vnd.apple.mpegurl",
+    )

@@ -37,6 +37,7 @@ backend/skrib/       # FastAPI app
 
 data/                    # SQLite database files, clear these as needed for testing
 
+frontend/pages/*.html    # HTML pages
 frontend/src/            # Vanilla JS (Vite build)
   chat.js                # Main chat (WebSocket, rooms, DMs, messages)
   login.js / register.js # Auth pages
