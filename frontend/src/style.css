@@ -290,6 +290,20 @@ input:focus-visible {
     padding: 20px;
 }
 
+.spinner {
+    width: 36px;
+    height: 36px;
+    margin: 24px auto;
+    border: 3px solid var(--border-normal);
+    border-top-color: var(--accent);
+    border-radius: 50%;
+    animation: spin 0.7s linear infinite;
+}
+
+@keyframes spin {
+    to { transform: rotate(360deg); }
+}
+
 .auth-box {
     background: var(--bg-surface-strong);
     padding: 48px;

@@ -30,14 +30,22 @@
                     </div>
                 </div>
 
-                <div id="auth-status"></div>
+                <!-- Spinner shown while checking session -->
+                <div id="auth-loading" style="text-align:center">
+                    <div class="spinner"></div>
+                </div>
 
-                <button id="login-button"><iconify-icon icon="lucide:key-round" inline></iconify-icon> Sign In</button>
-                <div id="register-section" class="hidden">
-                    <div class="divider">
-                        <span>OR</span>
+                <!-- Buttons hidden until session check completes -->
+                <div id="auth-actions" style="display:none">
+                    <div id="auth-status"></div>
+
+                    <button id="login-button"><iconify-icon icon="lucide:key-round" inline></iconify-icon> Sign In</button>
+                    <div id="register-section" class="hidden">
+                        <div class="divider">
+                            <span>OR</span>
+                        </div>
+                        <button id="go-to-register-button"><iconify-icon icon="lucide:user" inline></iconify-icon> Register</button>
                     </div>
-                    <button id="go-to-register-button"><iconify-icon icon="lucide:user" inline></iconify-icon> Register</button>
                 </div>
             </div>
         </div>

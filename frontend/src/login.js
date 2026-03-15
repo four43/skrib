@@ -10,7 +10,10 @@ async function checkSession() {
     const token = localStorage.getItem('session_token');
     const username = localStorage.getItem('username');
 
-    if (!token || !username) return;
+    if (!token || !username) {
+        showAuthView();
+        return;
+    }
 
     try {
         const resp = await fetch(`${API_URL}/auth/session`, {
@@ -21,6 +24,7 @@ async function checkSession() {
         if (data.authenticated) {
             // Redirect to chat if already logged in
             window.location.href = '/app.html';
+            return;
         } else {
             // Clear invalid session
             localStorage.removeItem('session_token');
@@ -30,6 +34,14 @@ async function checkSession() {
     } catch (error) {
         console.error('Session check failed:', error);
     }
+    showAuthView();
+}
+
+function showAuthView() {
+    const loading = document.getElementById('auth-loading');
+    const actions = document.getElementById('auth-actions');
+    if (loading) loading.style.display = 'none';
+    if (actions) actions.style.display = '';
 }
 
 async function login() {
