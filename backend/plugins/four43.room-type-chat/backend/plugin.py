@@ -189,6 +189,11 @@ class RoomTypeChatPlugin(Plugin):
             try:
                 result = room.delete_message(message_id, username, is_admin=is_admin)
                 await bus.broadcast_to_room(room_id, "message_deleted", data=result)
+                await bus.emit_event({
+                    "type": "core:message_deleted",
+                    "room_id": room_id,
+                    "message_id": message_id,
+                })
             except (ValueError, PermissionError) as e:
                 await bus.send_error(reply_to, str(e), room_id=room_id)
 

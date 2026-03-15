@@ -139,6 +139,25 @@ class AttachmentStore:
             conn.execute('DELETE FROM attachments WHERE id = ?', (attachment_id,))
             conn.commit()
 
+    def link_message(self, attachment_id: str, message_id: int):
+        """Associate an attachment with the chat message that references it."""
+        with _get_db() as conn:
+            conn.execute(
+                'UPDATE attachments SET message_id = ? WHERE id = ?',
+                (message_id, attachment_id),
+            )
+            conn.commit()
+
+    def delete_by_message_id(self, message_id: int):
+        """Delete all attachments linked to a message."""
+        with _get_db() as conn:
+            rows = conn.execute(
+                'SELECT id FROM attachments WHERE message_id = ?', (message_id,)
+            ).fetchall()
+
+        for row in rows:
+            self.delete_attachment(row['id'])
+
     def delete_room_attachments(self, room_id: str):
         with _get_db() as conn:
             rows = conn.execute(

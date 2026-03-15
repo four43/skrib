@@ -97,6 +97,27 @@ async def finalize_upload(
     return result
 
 
+class LinkBody(BaseModel):
+    message_id: int
+
+
+@router.post("/attachments/{attachment_id}/link")
+async def link_attachment_to_message(
+    attachment_id: str,
+    body: LinkBody,
+    username: str = Depends(plugin_user),
+):
+    """Associate an attachment with the message that references it."""
+    att = store.get_attachment(attachment_id)
+    if not att:
+        raise HTTPException(status_code=404, detail="Attachment not found")
+    if att['username'] != username:
+        raise HTTPException(status_code=403, detail="Not the uploader")
+
+    store.link_message(attachment_id, body.message_id)
+    return {"ok": True}
+
+
 @router.get("/attachments/{attachment_id}/meta")
 async def get_attachment_meta(
     attachment_id: str,

@@ -386,6 +386,103 @@ test.describe('File attachments', () => {
         expect(download.suggestedFilename()).toBe('stream-dl-test.txt');
     });
 
+    test('download stop button cancels download and restores UI', async ({ twoUsers }) => {
+        const { admin } = twoUsers;
+        await admin.page.waitForLoadState('networkidle');
+
+        await createRoom(admin.page, 'attach-stop-btn');
+
+        const filePath = createTempFile('stop-test.txt', 'Stop button test content');
+        const fileInput = admin.page.locator('.four43-attach-file-input');
+        await fileInput.setInputFiles(filePath);
+
+        await expect(admin.page.locator('.four43-attachment-card')).toBeVisible({ timeout: 15_000 });
+        await disableFilePicker(admin.page);
+
+        // Intercept chunk fetch GET requests and delay them so we have time
+        // to see and click the stop button
+        await admin.page.route(/\/chunk\/\d+$/, async (route) => {
+            if (route.request().method() === 'GET') {
+                await new Promise(r => setTimeout(r, 5000));
+            }
+            await route.continue();
+        });
+
+        // Click download — the meta fetch completes, then chunk fetch is delayed.
+        // Use force:true to bypass any overlapping hover bar from the chat plugin.
+        const dlBtn = admin.page.locator('.four43-attachment-download-btn');
+        await dlBtn.click({ force: true });
+
+        // Stop button (square icon) should replace the download button
+        const stopBtn = admin.page.locator('button[title="Cancel download"]');
+        await expect(stopBtn).toBeVisible({ timeout: 5_000 });
+
+        // Progress bar should appear with initial state
+        await expect(admin.page.locator('.four43-dl-progress')).toBeVisible();
+        await expect(admin.page.locator('.four43-dl-progress-text')).toContainText('Decrypting: 0/');
+
+        // Click stop
+        await stopBtn.click();
+
+        // Original download button should be restored, progress bar gone
+        await expect(admin.page.locator('.four43-attachment-download-btn')).toBeVisible({ timeout: 5_000 });
+        await expect(admin.page.locator('.four43-dl-progress')).toBeHidden();
+    });
+
+    test('deleting a message with attachment cleans up the attachment', async ({ twoUsers }) => {
+        const { admin } = twoUsers;
+        await admin.page.waitForLoadState('networkidle');
+
+        await createRoom(admin.page, 'attach-delete-cleanup');
+
+        // Start listening for the link request BEFORE upload
+        const linkPromise = admin.page.waitForResponse(
+            (resp) => resp.url().includes('/link') && resp.request().method() === 'POST',
+            { timeout: 15_000 },
+        );
+
+        // Upload a file
+        const filePath = createTempFile('delete-me.txt', 'This attachment should be cleaned up');
+        const fileInput = admin.page.locator('.four43-attach-file-input');
+        await fileInput.setInputFiles(filePath);
+
+        // Wait for attachment card and link response to complete
+        await expect(admin.page.locator('.four43-attachment-card')).toBeVisible({ timeout: 15_000 });
+        await linkPromise;
+
+        // Extract the attachment_id from the message's data-plaintext
+        const attachmentId = await admin.page.locator('.message[data-attachment-processed]').evaluate(el => {
+            return JSON.parse(el.dataset.plaintext).attachment_id;
+        });
+        expect(attachmentId).toBeTruthy();
+
+        // Verify attachment meta endpoint works before deletion
+        const token = admin.sessionToken;
+        const metaBefore = await admin.page.request.get(
+            `/api/plugins/four43.attachments/attachments/${attachmentId}/meta`,
+            { headers: { 'Authorization': `Bearer ${token}` } },
+        );
+        expect(metaBefore.ok()).toBe(true);
+
+        // Delete the message: click message → "..." → "Delete message"
+        await admin.page.locator('.message[data-attachment-processed]').click();
+        await admin.page.locator('.message-more-btn').click();
+        await admin.page.locator('.message-more-menu-item', { hasText: 'Delete message' }).click();
+
+        // Message should show as deleted
+        await expect(admin.page.locator('.message-deleted')).toBeVisible({ timeout: 5_000 });
+
+        // Attachment meta endpoint should return 404 once the backend
+        // processes the core:message_deleted event (async, may take a moment)
+        await expect(async () => {
+            const metaAfter = await admin.page.request.get(
+                `/api/plugins/four43.attachments/attachments/${attachmentId}/meta`,
+                { headers: { 'Authorization': `Bearer ${token}` } },
+            );
+            expect(metaAfter.status()).toBe(404);
+        }).toPass({ timeout: 5_000 });
+    });
+
     test('upload shows progress indicator', async ({ twoUsers }) => {
         const { admin } = twoUsers;
         await admin.page.waitForLoadState('networkidle');

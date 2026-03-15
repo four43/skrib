@@ -77,17 +77,30 @@ Download encrypted attachments with minimal memory usage. Ideally the save dialo
 The key insight: browsers store `Blob` objects >256KB on disk, not in memory. By wrapping each decrypted chunk in a `Blob` immediately, the raw `ArrayBuffer` is garbage collected and the data lives on disk. When all chunks are done, `new Blob([blob1, blob2, ...])` creates a composite Blob that references the sub-Blobs already on disk — no duplication.
 
 ```text
-for each chunk:
-    fetch encrypted chunk from server
-    AES-GCM decrypt → ArrayBuffer (~5MB in memory)
-    new Blob([decrypted]) → browser moves to disk, ArrayBuffer GC'd
-    peak memory: ~5MB regardless of file size
+┌─ worker 1 ─┐  ┌─ worker 2 ─┐  ┌─ worker 3 ─┐
+│ chunk 0     │  │ chunk 1     │  │ chunk 2     │   ← 3 parallel fetches
+│ fetch       │  │ fetch       │  │ fetch       │
+│ decrypt     │  │ decrypt     │  │ decrypt     │
+│ → Blob (GC) │  │ → Blob (GC) │  │ → Blob (GC) │  ← disk-backed
+└─────────────┘  └─────────────┘  └─────────────┘
+        ↓ worker picks up next chunk...
 
 new Blob([...chunkBlobs]) → composite Blob (disk-backed)
 URL.createObjectURL(blob) → triggers save dialog
 ```
 
-**Peak memory: ~1 chunk (5MB)** instead of the entire file. The download button shows chunk progress (`1/5`, `2/5`...) while processing.
+Chunks are fetched and decrypted by `DL_CONCURRENCY` (3) parallel workers. Each worker picks up the next chunk index from a shared counter, so results stay ordered. Each decrypted `ArrayBuffer` is immediately wrapped in a `Blob` (disk-backed for >256KB) so it can be GC'd.
+
+**Peak memory: ~3 chunks (15MB)** with 3 workers, instead of the entire file. Configurable via `DL_CONCURRENCY`.
+
+### Download UX
+
+When the user clicks the download button:
+
+1. The download button swaps to a **stop button** (filled square icon). The original button element is replaced with a `cloneNode(false)` copy so all original event listeners are removed — only the abort handler is attached.
+2. A **progress bar** appears below the attachment card showing `Decrypting: 1/5`, `Decrypting: 2/5`, etc. with an animated fill bar.
+3. If the user clicks the **stop button**, an `AbortController` cancels all in-flight fetch requests, the progress bar is removed, and the original download button (with its original click handler) is swapped back in.
+4. On completion (or cancellation), the UI resets cleanly to the original state.
 
 ### Tier 1: `showSaveFilePicker` (Chrome/Edge)
 
@@ -111,7 +124,6 @@ Note: `showSaveFilePicker` requires a secure context (HTTPS or localhost) and is
 ### TODO
 
 - [ ] Consider the [StreamSaver.js](https://github.com/nicosommi/streamsaver-service-worker) "mitm" approach for Firefox/Safari streaming: a separate HTML page loaded in an iframe that registers its own SW and uses a `WritableStream` bridge.
-- [ ] Consider showing a progress modal instead of just the button counter for large files.
 
 ## Backend API
 

@@ -143,10 +143,36 @@
     cursor: default;
 }
 
+/* ─── Download Progress ──────────────────────────────────────────── */
+
 .four43-dl-progress {
-    font-size: 10px;
-    font-weight: 600;
-    color: var(--theme-color);
+    display: flex;
+    align-items: center;
+    gap: 10px;
+    padding: 8px 12px;
+}
+
+.four43-dl-progress-text {
+    font-size: 12px;
+    font-weight: 500;
+    color: var(--text-secondary, #64748b);
+    white-space: nowrap;
+}
+
+.four43-dl-progress-bar {
+    flex: 1;
+    height: 4px;
+    border-radius: 2px;
+    background: rgba(var(--theme-rgb), 0.1);
+    overflow: hidden;
+}
+
+.four43-dl-progress-fill {
+    height: 100%;
+    border-radius: 2px;
+    background: var(--theme-color, #6366f1);
+    transition: width 0.3s ease;
+    width: 0%;
 }
 
 /* ─── Image Preview ──────────────────────────────────────────────── */

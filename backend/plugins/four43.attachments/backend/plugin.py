@@ -41,6 +41,7 @@ class AttachmentsPlugin(Plugin):
                 chunk_count INTEGER NOT NULL DEFAULT 0,
                 total_size INTEGER NOT NULL DEFAULT 0,
                 key_epoch INTEGER,
+                message_id INTEGER,
                 status TEXT NOT NULL DEFAULT 'pending',
                 created_at TEXT NOT NULL
             );
@@ -60,6 +61,7 @@ class AttachmentsPlugin(Plugin):
         routes_module.core_api = self.core_api
 
         self.register_event("core:room_deleted", self._on_room_deleted)
+        self.register_event("core:message_deleted", self._on_message_deleted)
 
         with self.get_plugin_db() as conn:
             conn.execute('''
@@ -69,6 +71,10 @@ class AttachmentsPlugin(Plugin):
             conn.execute('''
                 CREATE INDEX IF NOT EXISTS idx_attachment_chunks_id
                 ON attachment_chunks(attachment_id)
+            ''')
+            conn.execute('''
+                CREATE INDEX IF NOT EXISTS idx_attachments_message_id
+                ON attachments(message_id)
             ''')
             conn.commit()
 
@@ -87,3 +93,9 @@ class AttachmentsPlugin(Plugin):
         room_id = event_data.get("room_id")
         if room_id:
             services_module.AttachmentStore().delete_room_attachments(room_id)
+
+    async def _on_message_deleted(self, event_data: dict):
+        """Clean up attachment when its message is deleted."""
+        message_id = event_data.get("message_id")
+        if message_id:
+            services_module.AttachmentStore().delete_by_message_id(message_id)

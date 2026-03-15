@@ -62,6 +62,14 @@ class PluginBus:
             "message": message,
         })
 
+    async def emit_event(self, event_data: dict):
+        """Emit an internal lifecycle event to all registered listeners.
+
+        Used for cross-plugin communication (e.g., core:message_deleted).
+        Does NOT broadcast to WebSocket clients.
+        """
+        await self._bus.emit_event(event_data)
+
 # Plugin databases directory
 PLUGINS_DB_DIR = DB_DIR / "plugins"
 PLUGINS_DB_DIR.mkdir(parents=True, exist_ok=True)

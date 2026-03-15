@@ -7,6 +7,7 @@
 const AttachmentsPlugin = (function () {
     const PLUGIN_ID = 'four43.attachments';
     const CHUNK_SIZE = 5 * 1024 * 1024; // 5 MB
+    const DL_CONCURRENCY = 3; // parallel chunk downloads
 
     let ctx = null;
     let inputObserver = null;
@@ -85,6 +86,55 @@ const AttachmentsPlugin = (function () {
             roomKey,
             encryptedData,
         );
+    }
+
+    // ─── Parallel Chunk Download ──────────────────────────────────────────
+
+    /**
+     * Fetch + decrypt a single chunk, returning a disk-backed Blob.
+     */
+    async function fetchAndDecryptChunk(attachmentId, chunkIndex, iv, roomKey, token, signal) {
+        const chunkResp = await fetch(`${apiBase}/attachments/${attachmentId}/chunk/${chunkIndex}`, {
+            headers: { 'Authorization': `Bearer ${token}` },
+            signal,
+        });
+        if (!chunkResp.ok) throw new Error(`Failed to fetch chunk ${chunkIndex}`);
+        const encrypted = await chunkResp.arrayBuffer();
+        const decrypted = await decryptChunk(roomKey, encrypted, iv);
+        return new Blob([decrypted]);
+    }
+
+    /**
+     * Download + decrypt all chunks with up to `concurrency` in-flight at once.
+     * Calls onProgress(completedCount, totalCount) after each chunk finishes.
+     * Fires onProgress(0, total) immediately so the UI can show progress state.
+     * Returns an ordered array of Blobs.
+     */
+    async function downloadChunksParallel(attachmentId, chunks, roomKey, token, signal, onProgress) {
+        const total = chunks.length;
+        const results = new Array(total);
+        let completed = 0;
+        let nextIndex = 0;
+
+        // Fire immediately so the UI shows the progress/stop state
+        onProgress(0, total);
+
+        async function worker() {
+            while (nextIndex < total) {
+                if (signal && signal.aborted) throw new DOMException('Aborted', 'AbortError');
+                const i = nextIndex++;
+                results[i] = await fetchAndDecryptChunk(attachmentId, i, chunks[i].iv, roomKey, token, signal);
+                completed++;
+                onProgress(completed, total);
+            }
+        }
+
+        const workers = [];
+        for (let w = 0; w < Math.min(DL_CONCURRENCY, total); w++) {
+            workers.push(worker());
+        }
+        await Promise.all(workers);
+        return results;
     }
 
     // ─── Upload Flow ─────────────────────────────────────────────────────
@@ -197,19 +247,10 @@ const AttachmentsPlugin = (function () {
         const roomKey = epochs[meta.key_epoch] || epochs[Object.keys(epochs).pop()];
         if (!roomKey) throw new Error('No key for this attachment');
 
-        // 3. Download, decrypt each chunk, and wrap in a Blob immediately
-        //    so the ArrayBuffer can be GC'd (Blobs >256KB are disk-backed).
-        const chunkBlobs = [];
-        for (let i = 0; i < meta.chunks.length; i++) {
-            const chunkResp = await fetch(`${apiBase}/attachments/${data.attachment_id}/chunk/${i}`, {
-                headers: { 'Authorization': `Bearer ${token}` },
-            });
-            if (!chunkResp.ok) throw new Error(`Failed to download chunk ${i}`);
-
-            const encryptedData = await chunkResp.arrayBuffer();
-            const decrypted = await decryptChunk(roomKey, encryptedData, meta.chunks[i].iv);
-            chunkBlobs.push(new Blob([decrypted]));
-        }
+        // 3. Download + decrypt chunks in parallel (disk-backed Blobs)
+        const chunkBlobs = await downloadChunksParallel(
+            data.attachment_id, meta.chunks, roomKey, token, null, () => {},
+        );
 
         return new Blob(chunkBlobs, {
             type: data.mime_type || 'application/octet-stream',
@@ -217,17 +258,57 @@ const AttachmentsPlugin = (function () {
     }
 
     async function downloadAttachment(data, btnEl) {
-        // Show progress on the button while downloading
-        const originalHtml = btnEl ? btnEl.innerHTML : '';
+        const abortController = new AbortController();
+
+        // Show a progress bar near the download button while decrypting
+        let progressEl = null;
+        let stopBtn = null;     // cloned button with stop handler (no old listeners)
+        const originalBtn = btnEl;
+
         function setProgress(current, total) {
-            if (!btnEl) return;
-            btnEl.disabled = true;
-            btnEl.innerHTML = `<span class="four43-dl-progress">${current}/${total}</span>`;
+            if (!originalBtn) return;
+
+            // Swap download button → stop button on first progress update.
+            // Clone the button to strip all existing addEventListener handlers,
+            // then attach only the abort handler.
+            if (!progressEl) {
+                stopBtn = originalBtn.cloneNode(false);
+                stopBtn.innerHTML = '<svg viewBox="0 0 24 24" width="18" height="18" fill="currentColor"><rect x="6" y="6" width="12" height="12" rx="1"/></svg>';
+                stopBtn.title = 'Cancel download';
+                stopBtn.disabled = false;
+                stopBtn.addEventListener('click', (e) => {
+                    e.stopPropagation();
+                    abortController.abort();
+                });
+                originalBtn.replaceWith(stopBtn);
+
+                progressEl = document.createElement('div');
+                progressEl.className = 'four43-dl-progress';
+                progressEl.innerHTML = `
+                    <span class="four43-dl-progress-text"></span>
+                    <div class="four43-dl-progress-bar">
+                        <div class="four43-dl-progress-fill"></div>
+                    </div>
+                `;
+                const container = stopBtn.closest('.four43-attachment-preview-footer')
+                    || stopBtn.closest('.four43-attachment-card')
+                    || stopBtn.closest('.four43-video-player');
+                if (container) {
+                    container.parentElement.insertBefore(progressEl, container.nextSibling);
+                }
+            }
+            const text = progressEl.querySelector('.four43-dl-progress-text');
+            const fill = progressEl.querySelector('.four43-dl-progress-fill');
+            if (text) text.textContent = current === 0 ? `Decrypting: 0/${total}` : `Decrypting: ${current}/${total}`;
+            if (fill) fill.style.width = `${(current / total) * 100}%`;
         }
         function resetBtn() {
-            if (!btnEl) return;
-            btnEl.disabled = false;
-            btnEl.innerHTML = originalHtml;
+            if (stopBtn && stopBtn.parentElement) {
+                stopBtn.replaceWith(originalBtn);
+            }
+            stopBtn = null;
+            if (progressEl) progressEl.remove();
+            progressEl = null;
         }
 
         try {
@@ -256,7 +337,7 @@ const AttachmentsPlugin = (function () {
 
                 if (fileHandle) {
                     console.log('[Download] Streaming to disk via File System Access API');
-                    await streamDownloadToDisk(fileHandle, data, setProgress);
+                    await streamDownloadToDisk(fileHandle, data, setProgress, abortController.signal);
                     resetBtn();
                     return;
                 }
@@ -268,11 +349,15 @@ const AttachmentsPlugin = (function () {
             // SW cannot help here — <a download> navigations bypass the
             // SW fetch handler entirely (browser spec behavior).
             console.log('[Download] Using blob fallback');
-            const blob = await decryptAttachmentWithProgress(data, setProgress);
+            const blob = await decryptAttachmentWithProgress(data, setProgress, abortController.signal);
             triggerBlobDownload(blob, data.filename);
             resetBtn();
         } catch (error) {
             resetBtn();
+            if (abortController.signal.aborted) {
+                console.log('[Download] Cancelled by user');
+                return;
+            }
             console.error('[Attachments] Download failed:', error);
             alert('Failed to download file: ' + error.message);
         }
@@ -282,30 +367,29 @@ const AttachmentsPlugin = (function () {
      * Stream an attachment to disk chunk by chunk via File System Access API.
      * Each chunk is fetched, decrypted, and written before the next starts.
      */
-    async function streamDownloadToDisk(fileHandle, data, onProgress) {
+    async function streamDownloadToDisk(fileHandle, data, onProgress, signal) {
         const token = ctx.sessionToken();
         const currentRoom = ctx.currentRoom();
 
         const metaResp = await fetch(`${apiBase}/attachments/${data.attachment_id}/meta`, {
             headers: { 'Authorization': `Bearer ${token}` },
+            signal,
         });
         if (!metaResp.ok) throw new Error('Failed to get attachment metadata');
         const meta = await metaResp.json();
 
         const roomKey = await getRoomKeyForEpoch(currentRoom, meta.key_epoch);
+
+        // Download + decrypt chunks in parallel, then write to disk in order
+        const chunkBlobs = await downloadChunksParallel(
+            data.attachment_id, meta.chunks, roomKey, token, signal, onProgress,
+        );
+
         const writable = await fileHandle.createWritable();
-
         try {
-            for (let i = 0; i < meta.chunks.length; i++) {
-                onProgress(i + 1, meta.chunks.length);
-                const chunkResp = await fetch(`${apiBase}/attachments/${data.attachment_id}/chunk/${i}`, {
-                    headers: { 'Authorization': `Bearer ${token}` },
-                });
-                if (!chunkResp.ok) throw new Error(`Failed to fetch chunk ${i}`);
-
-                const encrypted = await chunkResp.arrayBuffer();
-                const decrypted = await decryptChunk(roomKey, encrypted, meta.chunks[i].iv);
-                await writable.write(decrypted);
+            for (const blob of chunkBlobs) {
+                if (signal && signal.aborted) throw new DOMException('Aborted', 'AbortError');
+                await writable.write(blob);
             }
         } finally {
             await writable.close();
@@ -315,12 +399,13 @@ const AttachmentsPlugin = (function () {
     /**
      * Like decryptAttachment but calls onProgress(current, total) per chunk.
      */
-    async function decryptAttachmentWithProgress(data, onProgress) {
+    async function decryptAttachmentWithProgress(data, onProgress, signal) {
         const token = ctx.sessionToken();
         const currentRoom = ctx.currentRoom();
 
         const metaResp = await fetch(`${apiBase}/attachments/${data.attachment_id}/meta`, {
             headers: { 'Authorization': `Bearer ${token}` },
+            signal,
         });
         if (!metaResp.ok) throw new Error('Failed to get attachment metadata');
         const meta = await metaResp.json();
@@ -331,20 +416,9 @@ const AttachmentsPlugin = (function () {
         const roomKey = epochs[meta.key_epoch] || epochs[Object.keys(epochs).pop()];
         if (!roomKey) throw new Error('No key for this attachment');
 
-        // Wrap each decrypted chunk in a Blob immediately so the raw
-        // ArrayBuffer can be GC'd.  Browsers store Blobs >256KB on disk,
-        // so peak memory stays at ~1 chunk (5MB) instead of N * 5MB.
-        const chunkBlobs = [];
-        for (let i = 0; i < meta.chunks.length; i++) {
-            onProgress(i + 1, meta.chunks.length);
-            const chunkResp = await fetch(`${apiBase}/attachments/${data.attachment_id}/chunk/${i}`, {
-                headers: { 'Authorization': `Bearer ${token}` },
-            });
-            if (!chunkResp.ok) throw new Error(`Failed to download chunk ${i}`);
-            const encryptedData = await chunkResp.arrayBuffer();
-            const decrypted = await decryptChunk(roomKey, encryptedData, meta.chunks[i].iv);
-            chunkBlobs.push(new Blob([decrypted]));
-        }
+        const chunkBlobs = await downloadChunksParallel(
+            data.attachment_id, meta.chunks, roomKey, token, signal, onProgress,
+        );
 
         return new Blob(chunkBlobs, {
             type: data.mime_type || 'application/octet-stream',
@@ -792,6 +866,24 @@ const AttachmentsPlugin = (function () {
         inputObserver.observe(roomContent, { childList: true, subtree: true });
     }
 
+    // ─── Attachment ↔ Message Linking ─────────────────────────────────────
+
+    async function linkAttachmentToMessage(attachmentId, messageId) {
+        try {
+            const token = ctx.sessionToken();
+            await fetch(`${apiBase}/attachments/${attachmentId}/link`, {
+                method: 'POST',
+                headers: {
+                    'Authorization': `Bearer ${token}`,
+                    'Content-Type': 'application/json',
+                },
+                body: JSON.stringify({ message_id: parseInt(messageId, 10) }),
+            });
+        } catch (err) {
+            console.warn('[Attachments] Failed to link attachment to message:', err);
+        }
+    }
+
     // ─── Message Post-Processing ─────────────────────────────────────────
 
     function processMessage(messageEl) {
@@ -805,7 +897,14 @@ const AttachmentsPlugin = (function () {
             if (data.type !== 'attachment') return;
 
             messageEl.dataset.attachmentProcessed = 'true';
+            messageEl.dataset.attachmentId = data.attachment_id;
             renderAttachmentCard(messageEl, data);
+
+            // Link attachment → message on the server so deletion cascades
+            const messageId = messageEl.dataset.messageId;
+            if (messageId) {
+                linkAttachmentToMessage(data.attachment_id, messageId);
+            }
         } catch {
             // Not JSON or not an attachment — ignore
         }
