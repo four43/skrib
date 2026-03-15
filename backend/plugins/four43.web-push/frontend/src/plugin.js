@@ -24,8 +24,11 @@ const WebPushPlugin = (function () {
             return;
         }
 
-        // Wait for service worker to be ready
-        const registration = await navigator.serviceWorker.ready;
+        // Wait for service worker to be ready (with timeout so we don't block other plugins)
+        const registration = await Promise.race([
+            navigator.serviceWorker.ready,
+            new Promise((_, reject) => setTimeout(() => reject(new Error('Service worker not ready after 3s')), 3000)),
+        ]);
 
         // Check if already subscribed
         const existing = await registration.pushManager.getSubscription();

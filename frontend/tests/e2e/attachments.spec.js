@@ -54,6 +54,14 @@ function createTempImage(name) {
     return filePath;
 }
 
+/**
+ * Disable showSaveFilePicker so the blob download fallback is used.
+ * (The native OS file picker dialog hangs in automated browsers.)
+ */
+async function disableFilePicker(page) {
+    await page.evaluate(() => { delete window.showSaveFilePicker; });
+}
+
 /** Create a small file with a video extension for testing video UI. */
 function createTempVideo(name) {
     // Small binary content — not a real video, but triggers video/* mime detection
@@ -136,6 +144,7 @@ test.describe('File attachments', () => {
         await expect(user.page.locator('.four43-attachment-card')).toContainText('cross-user-test.txt');
 
         // Click download and verify it triggers
+        await disableFilePicker(user.page);
         const downloadPromise = user.page.waitForEvent('download', { timeout: 15_000 });
         await user.page.locator('.four43-attachment-download-btn').click();
         const download = await downloadPromise;
@@ -162,6 +171,7 @@ test.describe('File attachments', () => {
         await expect(admin.page.locator('.four43-attachment-preview-footer .four43-attachment-download-btn')).toBeVisible();
 
         // Download should work
+        await disableFilePicker(admin.page);
         const downloadPromise = admin.page.waitForEvent('download', { timeout: 15_000 });
         await admin.page.locator('.four43-attachment-preview-footer .four43-attachment-download-btn').click();
         const download = await downloadPromise;
@@ -209,6 +219,7 @@ test.describe('File attachments', () => {
         await expect(admin.page.locator('.four43-video-player')).toBeVisible({ timeout: 15_000 });
 
         // Click download and verify
+        await disableFilePicker(admin.page);
         const downloadPromise = admin.page.waitForEvent('download', { timeout: 15_000 });
         await admin.page.locator('.four43-video-player .four43-attachment-download-btn').click();
         const download = await downloadPromise;
@@ -351,6 +362,28 @@ test.describe('File attachments', () => {
             l.includes('Registration failed')
         );
         expect(hasRegistration).toBe(true);
+    });
+
+    test('file download uses SW streaming when available', async ({ twoUsers }) => {
+        const { admin } = twoUsers;
+        await admin.page.waitForLoadState('networkidle');
+
+        await createRoom(admin.page, 'attach-stream-download');
+
+        const filePath = createTempFile('stream-dl-test.txt', 'Streaming download test content!');
+        const fileInput = admin.page.locator('.four43-attach-file-input');
+        await fileInput.setInputFiles(filePath);
+
+        await expect(admin.page.locator('.four43-attachment-card')).toBeVisible({ timeout: 15_000 });
+
+        // Disable native file picker so the blob fallback is used in tests
+        await disableFilePicker(admin.page);
+
+        // Click download
+        const downloadPromise = admin.page.waitForEvent('download', { timeout: 15_000 });
+        await admin.page.locator('.four43-attachment-download-btn').click();
+        const download = await downloadPromise;
+        expect(download.suggestedFilename()).toBe('stream-dl-test.txt');
     });
 
     test('upload shows progress indicator', async ({ twoUsers }) => {

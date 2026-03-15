@@ -8,6 +8,11 @@
  *
  * This gives true streaming: only the chunks needed for the current
  * playback position are fetched, and seeking/scrubbing works natively.
+ *
+ * NOTE: This SW is NOT used for file downloads. <a download> navigations
+ * bypass the SW fetch handler entirely (browser spec behavior), so
+ * downloads are handled in the main thread via Blob URL or
+ * showSaveFilePicker.
  */
 
 /* global self, caches, crypto, fetch, atob, Response, Uint8Array */

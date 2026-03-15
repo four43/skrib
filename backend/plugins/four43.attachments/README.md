@@ -23,9 +23,9 @@ Files are chunked (5 MB), encrypted client-side with the room's AES-GCM key, and
 
 **Images:** All chunks downloaded, decrypted, rendered as `<img>` with preview sizing.
 
-**Videos:** Streamed via Service Worker (see below). Falls back to full download if SW unavailable.
+**Videos:** Play overlay shown first (no auto-load). On click, streamed via Service Worker (see below). Falls back to full download if SW unavailable.
 
-**Other files:** Download button decrypts and triggers browser save.
+**All file downloads:** When the SW is available, downloads are streamed — the browser's native save dialog appears immediately and chunks are decrypted on the fly via a `ReadableStream`. Falls back to full in-memory decrypt + Blob URL if SW is unavailable.
 
 ## Video Streaming
 
@@ -37,7 +37,10 @@ A thumbnail should be shown while the video is loading, and the user should be a
 
 ### Solution: Service Worker Proxy
 
-A Service Worker (`sw-video.js`) acts as a decrypting proxy between `<video>` and the chunk API.
+A Service Worker (`sw-video.js`) acts as a decrypting proxy between the browser and the encrypted chunk API. It handles two URL patterns:
+
+- `/video-stream/{id}` — Range-aware video streaming (HTTP 206)
+- `/attachment-download/{id}` — Streaming file download (ReadableStream + Content-Disposition)
 
 ```
 <video src="/video-stream/{id}">
@@ -59,12 +62,56 @@ Service Worker intercepts
 
 **Chunk caching:** Decrypted chunks are cached in the SW to avoid re-fetching/re-decrypting on repeated seeks.
 
+**Autoplay:** Since the user explicitly clicks the play overlay to start loading, the `<video>` element is set to `autoplay` so playback begins as soon as data is available — no second click needed.
+
 **Fallback:** When SW is unavailable (private browsing, insecure context), all chunks are downloaded and decrypted into a single Blob URL. No seeking until fully loaded. This should only happen once the user presses the play button, so the UX impact is minimal.
 
-### Current Issues
+## File Downloads
 
-- [ ] **Video loads entirely before playing automatically, no user input** — The fallback (full download) path is being used instead of the SW streaming path. Root cause TBD — likely SW registration or interception not working correctly. Create better log messages for this.
-- [ ] Needs investigation: Is the SW registering successfully? Is it intercepting `/video-stream/*` requests?
+### Goal
+
+Download encrypted attachments with minimal memory usage. Ideally the save dialog appears before any chunks are fetched and bytes stream directly to disk.
+
+### Solution: Disk-Backed Blob Assembly (working)
+
+The key insight: browsers store `Blob` objects >256KB on disk, not in memory. By wrapping each decrypted chunk in a `Blob` immediately, the raw `ArrayBuffer` is garbage collected and the data lives on disk. When all chunks are done, `new Blob([blob1, blob2, ...])` creates a composite Blob that references the sub-Blobs already on disk — no duplication.
+
+```text
+for each chunk:
+    fetch encrypted chunk from server
+    AES-GCM decrypt → ArrayBuffer (~5MB in memory)
+    new Blob([decrypted]) → browser moves to disk, ArrayBuffer GC'd
+    peak memory: ~5MB regardless of file size
+
+new Blob([...chunkBlobs]) → composite Blob (disk-backed)
+URL.createObjectURL(blob) → triggers save dialog
+```
+
+**Peak memory: ~1 chunk (5MB)** instead of the entire file. The download button shows chunk progress (`1/5`, `2/5`...) while processing.
+
+### Tier 1: `showSaveFilePicker` (Chrome/Edge)
+
+When `'showSaveFilePicker' in window` is true, we can do even better: open the save dialog **first**, then write each decrypted chunk directly to the file handle via `FileSystemWritableFileStream`. True streaming — no Blob assembly, no memory accumulation, bytes hit disk as they arrive. Falls through to Tier 2 if the user cancels or the API is unavailable.
+
+Note: `showSaveFilePicker` requires a secure context (HTTPS or localhost) and is only available in Chrome/Edge, not Firefox/Safari.
+
+### Why not use the Service Worker for downloads?
+
+`<a download>` navigations **bypass the SW fetch handler entirely** — this is browser spec behavior, not a bug. The SW cannot intercept download navigations, so we cannot use it to stream decrypted bytes for file downloads the way we do for video playback.
+
+### Approaches tried and failed for SW-based streaming downloads
+
+1. **`<iframe>` navigation to SW URL** — iframe not controlled by the page's SW; request bypasses SW → backend 404.
+2. **`<a>` click (no download attr) to SW URL** — full page navigation away from the app → backend 404.
+3. **`<a download>` to SW URL with ReadableStream from async `pull()`** — SW never receives the fetch event. Request goes to backend → 404.
+4. **`<a download>` + TransformStream transferred to SW via `postMessage`** — Same as #3. Confirmed via `MessageChannel` that SW had the stream registered, but `<a download>` still bypasses the SW fetch handler entirely.
+5. **`fetch()` + `response.blob()` from SW URL** — SW intercepted correctly (fetch IS controlled by SW), but `response.blob()` waits for the entire stream, so it's equivalent to the Blob fallback with extra overhead.
+6. **Holding all decrypted `ArrayBuffer`s in memory** — the original approach before disk-backed Blob assembly. Peak memory = entire file size. Replaced by the current solution.
+
+### TODO
+
+- [ ] Consider the [StreamSaver.js](https://github.com/nicosommi/streamsaver-service-worker) "mitm" approach for Firefox/Safari streaming: a separate HTML page loaded in an iframe that registers its own SW and uses a `WritableStream` bridge.
+- [ ] Consider showing a progress modal instead of just the button counter for large files.
 
 ## Backend API
 
@@ -103,5 +150,5 @@ backend/services.py    # File storage, metadata
 backend/plugin.py      # Plugin init, DB schema
 frontend/src/plugin.js # UI, encryption, SW integration
 frontend/plugin.css    # Styling
-frontend/sw-video.js   # Service Worker for video streaming
+frontend/sw-video.js   # Service Worker for video streaming + file downloads
 ```

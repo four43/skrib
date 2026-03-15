@@ -367,7 +367,8 @@
 /* ── Input area ─────────────────────────────────────────────────── */
 
 .input-area {
-    padding: 16px 20px;
+    box-sizing: border-box;
+    padding: 16px 0;
     padding-bottom: max(16px, env(safe-area-inset-bottom));
     display: flex;
     gap: 10px;

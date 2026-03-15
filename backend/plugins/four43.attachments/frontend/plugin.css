@@ -138,6 +138,17 @@
     border-color: var(--theme-color);
 }
 
+.four43-attachment-download-btn:disabled {
+    opacity: 0.7;
+    cursor: default;
+}
+
+.four43-dl-progress {
+    font-size: 10px;
+    font-weight: 600;
+    color: var(--theme-color);
+}
+
 /* ─── Image Preview ──────────────────────────────────────────────── */
 
 .four43-attachment-preview {

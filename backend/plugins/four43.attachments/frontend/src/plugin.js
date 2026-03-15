@@ -197,8 +197,9 @@ const AttachmentsPlugin = (function () {
         const roomKey = epochs[meta.key_epoch] || epochs[Object.keys(epochs).pop()];
         if (!roomKey) throw new Error('No key for this attachment');
 
-        // 3. Download and decrypt each chunk
-        const decryptedChunks = [];
+        // 3. Download, decrypt each chunk, and wrap in a Blob immediately
+        //    so the ArrayBuffer can be GC'd (Blobs >256KB are disk-backed).
+        const chunkBlobs = [];
         for (let i = 0; i < meta.chunks.length; i++) {
             const chunkResp = await fetch(`${apiBase}/attachments/${data.attachment_id}/chunk/${i}`, {
                 headers: { 'Authorization': `Bearer ${token}` },
@@ -207,29 +208,158 @@ const AttachmentsPlugin = (function () {
 
             const encryptedData = await chunkResp.arrayBuffer();
             const decrypted = await decryptChunk(roomKey, encryptedData, meta.chunks[i].iv);
-            decryptedChunks.push(decrypted);
+            chunkBlobs.push(new Blob([decrypted]));
         }
 
-        return new Blob(decryptedChunks, {
+        return new Blob(chunkBlobs, {
             type: data.mime_type || 'application/octet-stream',
         });
     }
 
-    async function downloadAttachment(data) {
+    async function downloadAttachment(data, btnEl) {
+        // Show progress on the button while downloading
+        const originalHtml = btnEl ? btnEl.innerHTML : '';
+        function setProgress(current, total) {
+            if (!btnEl) return;
+            btnEl.disabled = true;
+            btnEl.innerHTML = `<span class="four43-dl-progress">${current}/${total}</span>`;
+        }
+        function resetBtn() {
+            if (!btnEl) return;
+            btnEl.disabled = false;
+            btnEl.innerHTML = originalHtml;
+        }
+
         try {
-            const blob = await decryptAttachment(data);
-            const url = URL.createObjectURL(blob);
-            const a = document.createElement('a');
-            a.href = url;
-            a.download = data.filename || 'download';
-            document.body.appendChild(a);
-            a.click();
-            document.body.removeChild(a);
-            URL.revokeObjectURL(url);
+            const hasFilePicker = 'showSaveFilePicker' in window;
+            const isSecure = window.isSecureContext;
+            console.log('[Download] Starting download for:', data.filename,
+                '| showSaveFilePicker:', hasFilePicker,
+                '| secureContext:', isSecure);
+
+            // ── Best path: File System Access API ───────────────────────
+            // Save dialog appears FIRST (before any chunks load), then
+            // each chunk is fetched → decrypted → written to disk.
+            // Only one chunk in memory at a time.
+            // Requires secure context (HTTPS or localhost).
+            if (hasFilePicker) {
+                let fileHandle = null;
+                try {
+                    console.log('[Download] Calling showSaveFilePicker...');
+                    fileHandle = await window.showSaveFilePicker({
+                        suggestedName: data.filename || 'download',
+                    });
+                    console.log('[Download] File handle obtained:', !!fileHandle);
+                } catch (err) {
+                    console.warn('[Download] showSaveFilePicker threw:', err.name, err.message);
+                }
+
+                if (fileHandle) {
+                    console.log('[Download] Streaming to disk via File System Access API');
+                    await streamDownloadToDisk(fileHandle, data, setProgress);
+                    resetBtn();
+                    return;
+                }
+                console.log('[Download] No file handle — falling through to blob path');
+            }
+
+            // ── Fallback: decrypt all chunks into Blob, then save ───────
+            // Used on browsers without showSaveFilePicker (Firefox/Safari).
+            // SW cannot help here — <a download> navigations bypass the
+            // SW fetch handler entirely (browser spec behavior).
+            console.log('[Download] Using blob fallback');
+            const blob = await decryptAttachmentWithProgress(data, setProgress);
+            triggerBlobDownload(blob, data.filename);
+            resetBtn();
         } catch (error) {
+            resetBtn();
             console.error('[Attachments] Download failed:', error);
             alert('Failed to download file: ' + error.message);
         }
+    }
+
+    /**
+     * Stream an attachment to disk chunk by chunk via File System Access API.
+     * Each chunk is fetched, decrypted, and written before the next starts.
+     */
+    async function streamDownloadToDisk(fileHandle, data, onProgress) {
+        const token = ctx.sessionToken();
+        const currentRoom = ctx.currentRoom();
+
+        const metaResp = await fetch(`${apiBase}/attachments/${data.attachment_id}/meta`, {
+            headers: { 'Authorization': `Bearer ${token}` },
+        });
+        if (!metaResp.ok) throw new Error('Failed to get attachment metadata');
+        const meta = await metaResp.json();
+
+        const roomKey = await getRoomKeyForEpoch(currentRoom, meta.key_epoch);
+        const writable = await fileHandle.createWritable();
+
+        try {
+            for (let i = 0; i < meta.chunks.length; i++) {
+                onProgress(i + 1, meta.chunks.length);
+                const chunkResp = await fetch(`${apiBase}/attachments/${data.attachment_id}/chunk/${i}`, {
+                    headers: { 'Authorization': `Bearer ${token}` },
+                });
+                if (!chunkResp.ok) throw new Error(`Failed to fetch chunk ${i}`);
+
+                const encrypted = await chunkResp.arrayBuffer();
+                const decrypted = await decryptChunk(roomKey, encrypted, meta.chunks[i].iv);
+                await writable.write(decrypted);
+            }
+        } finally {
+            await writable.close();
+        }
+    }
+
+    /**
+     * Like decryptAttachment but calls onProgress(current, total) per chunk.
+     */
+    async function decryptAttachmentWithProgress(data, onProgress) {
+        const token = ctx.sessionToken();
+        const currentRoom = ctx.currentRoom();
+
+        const metaResp = await fetch(`${apiBase}/attachments/${data.attachment_id}/meta`, {
+            headers: { 'Authorization': `Bearer ${token}` },
+        });
+        if (!metaResp.ok) throw new Error('Failed to get attachment metadata');
+        const meta = await metaResp.json();
+
+        const roomKeys = ctx.roomKeys();
+        const epochs = roomKeys[currentRoom];
+        if (!epochs) throw new Error('No room keys available');
+        const roomKey = epochs[meta.key_epoch] || epochs[Object.keys(epochs).pop()];
+        if (!roomKey) throw new Error('No key for this attachment');
+
+        // Wrap each decrypted chunk in a Blob immediately so the raw
+        // ArrayBuffer can be GC'd.  Browsers store Blobs >256KB on disk,
+        // so peak memory stays at ~1 chunk (5MB) instead of N * 5MB.
+        const chunkBlobs = [];
+        for (let i = 0; i < meta.chunks.length; i++) {
+            onProgress(i + 1, meta.chunks.length);
+            const chunkResp = await fetch(`${apiBase}/attachments/${data.attachment_id}/chunk/${i}`, {
+                headers: { 'Authorization': `Bearer ${token}` },
+            });
+            if (!chunkResp.ok) throw new Error(`Failed to download chunk ${i}`);
+            const encryptedData = await chunkResp.arrayBuffer();
+            const decrypted = await decryptChunk(roomKey, encryptedData, meta.chunks[i].iv);
+            chunkBlobs.push(new Blob([decrypted]));
+        }
+
+        return new Blob(chunkBlobs, {
+            type: data.mime_type || 'application/octet-stream',
+        });
+    }
+
+    function triggerBlobDownload(blob, filename) {
+        const url = URL.createObjectURL(blob);
+        const a = document.createElement('a');
+        a.href = url;
+        a.download = filename || 'download';
+        document.body.appendChild(a);
+        a.click();
+        document.body.removeChild(a);
+        URL.revokeObjectURL(url);
     }
 
     function isPreviewable(mimeType) {
@@ -508,14 +638,17 @@ const AttachmentsPlugin = (function () {
             </button>
         `;
 
-        footer.querySelector('.four43-attachment-download-btn').addEventListener('click', () => {
-            downloadAttachment(data);
+        const dlBtn = footer.querySelector('.four43-attachment-download-btn');
+        dlBtn.addEventListener('click', () => {
+            downloadAttachment(data, dlBtn);
         });
 
-        // Click play → hide overlay, show video + loading, start streaming
+        // Click play → hide overlay, show video + loading, start streaming.
+        // Autoplay since the user already clicked the overlay.
         playOverlay.addEventListener('click', () => {
             playOverlay.style.display = 'none';
             video.style.display = '';
+            video.autoplay = true;
             loading.style.display = '';
             streamVideo(video, loading, data);
         });
@@ -719,8 +852,9 @@ const AttachmentsPlugin = (function () {
             `;
             wrapper.appendChild(footer);
 
-            footer.querySelector('.four43-attachment-download-btn').addEventListener('click', () => {
-                downloadAttachment(data);
+            const imgDlBtn = footer.querySelector('.four43-attachment-download-btn');
+            imgDlBtn.addEventListener('click', () => {
+                downloadAttachment(data, imgDlBtn);
             });
 
             textEl.appendChild(wrapper);
@@ -754,8 +888,9 @@ const AttachmentsPlugin = (function () {
                 </button>
             `;
 
-            card.querySelector('.four43-attachment-download-btn').addEventListener('click', () => {
-                downloadAttachment(data);
+            const cardDlBtn = card.querySelector('.four43-attachment-download-btn');
+            cardDlBtn.addEventListener('click', () => {
+                downloadAttachment(data, cardDlBtn);
             });
 
             textEl.appendChild(card);
