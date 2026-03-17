@@ -371,6 +371,7 @@
     padding: 16px 0;
     padding-bottom: max(16px, env(safe-area-inset-bottom));
     display: flex;
+    align-items: flex-end;
     gap: 10px;
     background: transparent;
     max-width: 800px;
@@ -384,9 +385,11 @@
 }
 
 .message-input {
+    display: block;
     width: 100%;
     box-sizing: border-box;
     padding: 10px 14px;
+    margin: 0;
     border: 1px solid rgba(var(--theme-rgb), 0.15);
     border-radius: 10px;
     background: rgba(255, 255, 255, 0.7);
@@ -532,7 +535,8 @@
 
 .send-button {
     width: auto;
-    padding: 10px 24px;
+    height: 43px;
+    padding: 0 24px;
     margin: 0;
     border-radius: 10px;
     font-size: 14px;
@@ -540,6 +544,7 @@
     display: flex;
     align-items: center;
     justify-content: center;
+    box-sizing: border-box;
 }
 
 .send-button .send-icon {

@@ -171,6 +171,16 @@ test.describe('App Page', () => {
     });
   });
 
+  test.describe('Members Panel', () => {
+    test('close button should use .sidebar-close-btn class', async ({ page }) => {
+      await page.goto('/app.html');
+
+      const closeBtn = page.locator('#members-panel-close-btn');
+      await expect(closeBtn).toBeAttached();
+      await expect(closeBtn).toHaveClass(/sidebar-close-btn/);
+    });
+  });
+
   test.describe('CSS Classes', () => {
     test('should have proper semantic classes', async ({ page }) => {
       await page.goto('/app.html');

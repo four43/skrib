@@ -5,14 +5,14 @@
 .four43-attach-container {
     position: relative;
     display: flex;
-    align-items: flex-end;
-    align-self: flex-end;
+    align-self: stretch;
+    width: 43px;
+    min-width: 43px;
 }
 
 .four43-attach-btn {
-    width: 40px;
-    height: 40px;
-    min-width: 40px;
+    width: 100%;
+    height: 100%;
     margin-top: 0;
     border-radius: 10px;
     border: 1px solid rgba(var(--theme-rgb), 0.15);
@@ -370,10 +370,12 @@
         max-width: 100%;
     }
 
-    .four43-attach-btn {
+    .four43-attach-container {
         width: 36px;
-        height: 36px;
         min-width: 36px;
+    }
+
+    .four43-attach-btn {
         border-radius: 8px;
     }
 }

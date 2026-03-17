@@ -1,0 +1,302 @@
+/* ═══════════════════════════════════════════
+   Admin Panel
+   ═══════════════════════════════════════════ */
+
+.admin-page {
+    max-width: 720px;
+    margin: 0 auto;
+    min-height: 100vh;
+    background: var(--bg-surface-strong);
+}
+
+/* Server Icon */
+.server-icon-section {
+    display: flex;
+    align-items: center;
+    gap: 20px;
+    padding: 12px 16px;
+    background: rgba(var(--theme-rgb), 0.04);
+    border-radius: 10px;
+    border: 1px solid rgba(var(--theme-rgb), 0.08);
+}
+
+.server-icon-preview {
+    display: flex;
+    align-items: center;
+    gap: 12px;
+}
+
+.server-icon-preview img {
+    border-radius: 12px;
+    border: 2px solid rgba(var(--theme-rgb), 0.15);
+}
+
+.server-icon-label {
+    font-size: 13px;
+    color: var(--text-muted);
+}
+
+.server-icon-actions {
+    display: flex;
+    gap: 8px;
+    margin-left: auto;
+}
+
+.upload-btn {
+    cursor: pointer;
+    background: var(--theme-color);
+    color: white;
+    border-radius: 6px;
+    padding: 5px 12px;
+    font-size: 12px;
+    font-weight: 600;
+}
+
+.upload-btn:hover {
+    opacity: 0.9;
+}
+
+/* Registration Mode Slider */
+.reg-mode-slider {
+    padding: 14px 16px;
+    background: rgba(var(--theme-rgb), 0.04);
+    border-radius: 10px;
+    border: 1px solid rgba(var(--theme-rgb), 0.08);
+}
+
+.reg-mode-slider input[type="range"] {
+    -webkit-appearance: none;
+    appearance: none;
+    width: 100%;
+    height: 6px;
+    border-radius: 3px;
+    background: linear-gradient(to right, var(--color-error), var(--color-warning), var(--theme-color), var(--color-success));
+    outline: none;
+    margin: 12px 0 8px;
+}
+
+.reg-mode-slider input[type="range"]::-webkit-slider-thumb {
+    -webkit-appearance: none;
+    appearance: none;
+    width: 22px;
+    height: 22px;
+    border-radius: 50%;
+    background: white;
+    border: 2px solid var(--theme-color);
+    cursor: pointer;
+    box-shadow: 0 2px 6px rgba(0, 0, 0, 0.15);
+    transition: border-color 0.2s ease;
+}
+
+.reg-mode-slider input[type="range"]::-moz-range-thumb {
+    width: 22px;
+    height: 22px;
+    border-radius: 50%;
+    background: white;
+    border: 2px solid var(--theme-color);
+    cursor: pointer;
+    box-shadow: 0 2px 6px rgba(0, 0, 0, 0.15);
+}
+
+.reg-mode-labels {
+    display: flex;
+    justify-content: space-between;
+    margin-top: 4px;
+}
+
+.reg-mode-labels span {
+    font-size: 12px;
+    color: var(--text-muted);
+    font-weight: 500;
+    transition: all 0.2s ease;
+}
+
+.reg-mode-labels span.active {
+    color: var(--theme-color);
+    font-weight: 700;
+}
+
+.reg-mode-description {
+    font-size: 12px;
+    color: var(--text-tertiary);
+    margin-top: 10px;
+    text-align: center;
+    font-style: italic;
+}
+
+/* Invite Section */
+.invite-generate-btn {
+    margin: 0 0 14px 0;
+    padding: 10px;
+    font-size: 13px;
+    border-radius: 8px;
+}
+
+.invite-item {
+    background: var(--bg-surface-dim);
+    padding: 12px;
+    border-radius: 8px;
+    margin-bottom: 8px;
+    border: 1px solid var(--border-normal);
+    display: flex;
+    align-items: center;
+    gap: 8px;
+}
+
+.invite-info {
+    flex: 1;
+    min-width: 0;
+}
+
+.invite-url {
+    font-family: var(--font-family-mono);
+    font-size: 12px;
+    color: var(--theme-color);
+    cursor: pointer;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+    padding: 4px 6px;
+    background: rgba(var(--theme-rgb), 0.06);
+    border-radius: 4px;
+    transition: background 0.2s ease;
+}
+
+.invite-url:hover {
+    background: rgba(var(--theme-rgb), 0.12);
+}
+
+.invite-meta {
+    font-size: 12px;
+    color: var(--text-muted);
+    margin-top: 4px;
+}
+
+.invite-available {
+    color: var(--color-success);
+    font-weight: 600;
+}
+
+.invite-used {
+    color: var(--text-muted);
+    font-weight: 500;
+}
+
+.invite-delete-btn {
+    padding: 4px 8px;
+    flex-shrink: 0;
+}
+
+.pending-user {
+    background: var(--bg-surface-strong);
+    padding: 16px;
+    border-radius: 10px;
+    margin-bottom: 10px;
+    border: 1px solid var(--border-normal);
+}
+
+.pending-user h4 {
+    margin-bottom: 6px;
+    color: var(--text-primary);
+    font-size: 14px;
+}
+
+.pending-user .code {
+    font-family: var(--font-family-mono);
+    font-size: 13px;
+    color: var(--theme-color);
+    margin: 6px 0;
+}
+
+.pending-user-actions {
+    display: flex;
+    gap: 8px;
+    margin-top: 12px;
+}
+
+.pending-user-actions button {
+    flex: 1;
+    padding: 7px;
+    border-radius: 8px;
+}
+
+.approve-btn {
+    background: var(--color-success);
+    box-shadow: 0 2px 6px var(--color-success-shadow);
+}
+
+.approve-btn:hover {
+    filter: brightness(0.85);
+}
+
+.reject-btn {
+    background: var(--color-error);
+    box-shadow: 0 2px 6px var(--color-error-shadow);
+}
+
+.reject-btn:hover {
+    filter: brightness(0.85);
+}
+
+/* ═══════════════════════════════════════════
+   User List
+   ═══════════════════════════════════════════ */
+
+.user-item {
+    background: var(--bg-surface-dim);
+    padding: 12px 16px;
+    border-radius: 10px;
+    margin-bottom: 8px;
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    border: 1px solid var(--border-normal);
+}
+
+.user-info {
+    flex: 1;
+}
+
+.user-name {
+    font-weight: 700;
+    color: var(--text-primary);
+    font-size: 14px;
+}
+
+.user-actions {
+    display: flex;
+    gap: 6px;
+}
+
+.promote-btn {
+    background: var(--theme-color);
+    color: var(--text-inverse);
+    box-shadow: 0 1px 4px rgba(var(--theme-rgb), 0.2);
+}
+
+.promote-btn:hover {
+    filter: brightness(0.85);
+}
+
+.demote-btn {
+    background: var(--gray-500);
+    color: var(--text-inverse);
+}
+
+.demote-btn:hover {
+    background: var(--gray-600);
+}
+
+/* Admin Panel User Preferences Section */
+#userPreferencesList .preference-item {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    padding: 10px 0;
+    border-bottom: 1px solid rgba(var(--theme-rgb), 0.06);
+}
+
+#userPreferencesList .user-name {
+    font-weight: 700;
+    flex: 1;
+}

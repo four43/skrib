@@ -88,7 +88,7 @@ async function initializeRoomSettings() {
         currentRoom = await roomResponse.json();
 
         // Update back button to navigate to this room
-        const backBtn = document.querySelector('.admin-back-btn');
+        const backBtn = document.querySelector('.page-header .close-btn');
         if (backBtn) {
             backBtn.href = `/app.html#/r/${encodeURIComponent(currentRoomId)}`;
         }
@@ -594,7 +594,7 @@ function setupEventListeners() {
     }
 
     // Auto-save topic before navigating away via back button
-    const backBtn = document.querySelector('.admin-back-btn');
+    const backBtn = document.querySelector('.page-header .close-btn');
     if (backBtn) {
         backBtn.addEventListener('click', async (e) => {
             e.preventDefault();

@@ -173,7 +173,7 @@ test.describe('Topic management', () => {
 
         // User A edits topic and clicks back — auto-saves on navigation
         await userA.page.locator('#room-topic').fill('Welcome to topic room');
-        await userA.page.locator('.admin-back-btn').click();
+        await userA.page.locator('.page-header .close-btn').click();
         await userA.page.waitForURL('**/app.html**');
         await selectRoom(userA.page, 'topic-ui-room');
         await expect(userA.page.locator('#room-content-topic')).toHaveText('Welcome to topic room');

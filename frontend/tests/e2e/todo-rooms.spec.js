@@ -14,8 +14,8 @@ async function createTodoRoom(page, roomName) {
     await page.locator('#add-channel-btn').click();
     await page.locator('#new-room-input').fill(roomName);
 
-    // Select "todo" room type radio button
-    await page.locator('input[name="create-room-type"][value="todo"]').check();
+    // Select "todo" room type from dropdown
+    await page.locator('#room-type-select').selectOption('todo');
 
     await page.locator('#create-room-submit-btn').click();
     await expect(page.locator('#room-content-name')).toHaveText(`#${roomName}`);

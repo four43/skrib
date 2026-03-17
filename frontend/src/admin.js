@@ -662,36 +662,32 @@ async function deleteUser(username) {
 
 async function loadUserPreferences() {
     try {
-        const response = await fetch(`${API_URL}/users`, {
-            headers: { 'Authorization': `Bearer ${sessionToken}` }
-        });
-        if (!response.ok) return;
+        const [usersResponse, colorsResponse] = await Promise.all([
+            fetch(`${API_URL}/users`, {
+                headers: { 'Authorization': `Bearer ${sessionToken}` }
+            }),
+            fetch(`${API_URL}/users/preferences/colors`, {
+                headers: { 'Authorization': `Bearer ${sessionToken}` }
+            }),
+        ]);
+        if (!usersResponse.ok) return;
 
-        const data = await response.json();
+        const users = await usersResponse.json();
+        const colors = colorsResponse.ok ? await colorsResponse.json() : {};
         const preferencesList = document.getElementById('user-preferences-list');
 
-        const prefsPromises = data.map(async (user) => {
-            const prefsResponse = await fetch(`${API_URL}/users/${user.username}/preferences`, {
-                headers: { 'Authorization': `Bearer ${sessionToken}` }
-            });
-            if (prefsResponse.ok) {
-                const prefs = await prefsResponse.json();
-                return { ...user, color: prefs.color };
-            }
-            return { ...user, color: '#1976d2' };
-        });
-
-        const usersWithPrefs = await Promise.all(prefsPromises);
-
-        preferencesList.innerHTML = usersWithPrefs.map(user => `
+        preferencesList.innerHTML = users.map(user => {
+            const color = colors[user.username]?.color || '#1976d2';
+            return `
             <div class="preference-item">
-                <span class="user-name" style="color: ${user.color};">${user.username}</span>
+                <span class="user-name" style="color: ${color};">${user.username}</span>
                 <input type="color"
                        id="color-${user.username}"
-                       value="${user.color}"
+                       value="${color}"
                        onchange="updateUserColorAdmin('${user.username}')">
             </div>
-        `).join('');
+        `;
+        }).join('');
 
     } catch (error) {
         console.error('[HTTP] Error loading user preferences:', error);

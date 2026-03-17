@@ -48,7 +48,7 @@ test.describe('Settings Page', () => {
     test('back to chat link should navigate', async ({ page }) => {
       await page.goto('/settings.html');
 
-      const backLink = page.locator('a.admin-back-btn');
+      const backLink = page.locator('.page-header a.close-btn');
       await expect(backLink).toBeVisible();
       await expect(backLink).toHaveAttribute('href', '/app.html');
     });
@@ -64,6 +64,17 @@ test.describe('Settings Page', () => {
       await page.locator('.settings-nav-item[data-section="appearance"]').click();
       await expect(page.locator('#section-appearance')).toHaveClass(/active/);
       await expect(page.locator('#section-account')).not.toHaveClass(/active/);
+    });
+  });
+
+  test.describe('Navigation', () => {
+    test('nav should display as horizontal tabs on mobile', async ({ page }) => {
+      await page.setViewportSize({ width: 375, height: 667 });
+      await page.goto('/settings.html');
+
+      const nav = page.locator('.settings-nav');
+      const flexDirection = await nav.evaluate(el => getComputedStyle(el).flexDirection);
+      expect(flexDirection).toBe('row');
     });
   });
 

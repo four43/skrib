@@ -1,0 +1,256 @@
+/* ═══════════════════════════════════════════
+   Auth Pages (Login / Register)
+   ═══════════════════════════════════════════ */
+
+.auth-container {
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    min-height: 100vh;
+    padding: 20px;
+}
+
+.spinner {
+    width: 36px;
+    height: 36px;
+    margin: 24px auto;
+    border: 3px solid var(--border-normal);
+    border-top-color: var(--accent);
+    border-radius: 50%;
+    animation: spin 0.7s linear infinite;
+}
+
+@keyframes spin {
+    to { transform: rotate(360deg); }
+}
+
+.auth-box {
+    background: var(--bg-surface-strong);
+    padding: 48px;
+    border-radius: 20px;
+    border: 1px solid var(--border-normal);
+    box-shadow: 0 20px 40px -12px rgba(0, 0, 0, 0.08),
+        0 8px 20px -8px rgba(0, 0, 0, 0.04);
+    max-width: 420px;
+    width: 100%;
+}
+
+.auth-server-branding {
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    gap: 16px;
+    margin-bottom: 32px;
+}
+
+.auth-server-icon {
+    width: 44px;
+    height: 44px;
+    border-radius: 10px;
+    flex-shrink: 0;
+}
+
+.auth-server-branding h1 {
+    margin: 0;
+    color: var(--text-primary);
+    font-weight: 700;
+    font-size: 28px;
+    line-height: 1.1;
+}
+
+.auth-powered-by {
+    color: var(--text-tertiary);
+    font-size: 13px;
+    line-height: 1;
+}
+
+.auth-box h1 {
+    margin-bottom: 8px;
+    color: var(--text-primary);
+    font-weight: 700;
+    font-size: 28px;
+}
+
+.auth-box h2 {
+    margin-bottom: 8px;
+    color: var(--text-primary);
+    font-weight: 700;
+    font-size: 22px;
+}
+
+.auth-box p {
+    color: var(--text-tertiary);
+    font-size: 15px;
+}
+
+.divider {
+    display: flex;
+    align-items: center;
+    text-align: center;
+    margin: 20px 0;
+}
+
+.divider::before,
+.divider::after {
+    content: '';
+    flex: 1;
+    border-bottom: 1px solid rgba(var(--theme-rgb), 0.12);
+}
+
+.divider span {
+    padding: 0 15px;
+    color: var(--text-muted);
+    font-size: 13px;
+    font-weight: 500;
+    text-transform: uppercase;
+    letter-spacing: 0.5px;
+}
+
+.link-button {
+    background: none;
+    color: var(--theme-color);
+    text-decoration: none;
+    padding: 8px;
+    margin-top: 12px;
+    font-weight: 500;
+    box-shadow: none;
+}
+
+.link-button:hover {
+    background: rgba(var(--theme-rgb), 0.06);
+    color: var(--theme-color);
+}
+
+.status {
+    padding: 14px 16px;
+    margin: 15px 0;
+    border-radius: 10px;
+    font-size: 14px;
+    font-weight: 500;
+}
+
+.success {
+    background: var(--color-success-bg);
+    color: var(--color-success);
+    border: 1px solid var(--color-success-border);
+}
+
+.error {
+    background: var(--color-error-bg);
+    color: var(--color-error);
+    border: 1px solid var(--color-error-border);
+}
+
+.info {
+    background: rgba(var(--theme-rgb), 0.1);
+    color: var(--color-info);
+    border: 1px solid rgba(var(--theme-rgb), 0.2);
+}
+
+.approval-code {
+    background: rgba(var(--theme-rgb), 0.07);
+    border: 1px solid rgba(var(--theme-rgb), 0.2);
+    padding: 24px;
+    border-radius: 12px;
+    margin: 20px 0;
+    text-align: center;
+}
+
+.status .approval-code {
+    background: none;
+    border: none;
+    padding: 0;
+    margin: 0;
+    border-radius: 0;
+}
+
+.approval-code h3 {
+    color: var(--theme-color);
+    margin-bottom: 10px;
+    font-weight: 700;
+}
+
+.approval-code p {
+    color: var(--text-secondary);
+}
+
+.code {
+    font-size: 24px;
+    font-weight: bold;
+    font-family: var(--font-family-mono);
+    color: var(--theme-color);
+    letter-spacing: 3px;
+}
+
+/* Crypto debug panel (VITE_DEBUG=true) */
+.crypto-debug {
+    margin-top: 24px;
+    padding: 16px;
+    border: 1px solid rgba(var(--theme-rgb), 0.25);
+    border-radius: 12px;
+    background: var(--bg-surface);
+    text-align: left;
+    overflow-x: auto;
+}
+
+.crypto-debug h3 {
+    margin: 0 0 12px;
+    font-size: 14px;
+    font-weight: 700;
+    color: var(--theme-color);
+    text-transform: uppercase;
+    letter-spacing: 0.5px;
+}
+
+.crypto-debug table {
+    width: 100%;
+    border-collapse: collapse;
+    font-size: 13px;
+    font-family: var(--font-family-mono);
+}
+
+.crypto-debug td {
+    padding: 6px 8px;
+    vertical-align: top;
+    border-bottom: 1px solid rgba(var(--theme-rgb), 0.08);
+    word-break: break-all;
+}
+
+.crypto-debug td:first-child {
+    white-space: nowrap;
+    color: var(--text-secondary);
+    width: 1%;
+    padding-right: 16px;
+}
+
+.crypto-debug pre {
+    margin: 0;
+    font-size: 12px;
+    white-space: pre-wrap;
+    word-break: break-all;
+    max-height: 200px;
+    overflow-y: auto;
+}
+
+#debug-continue-button {
+    margin-top: 16px;
+}
+
+/* ═══════════════════════════════════════════
+   Auth Mobile
+   ═══════════════════════════════════════════ */
+
+@media (max-width: 768px) {
+    .auth-container {
+        padding: 15px;
+    }
+
+    .auth-box {
+        padding: 32px 24px;
+        border-radius: 16px;
+    }
+
+    .auth-box h1 {
+        font-size: 24px;
+    }
+}

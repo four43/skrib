@@ -5,6 +5,7 @@
     <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover">
     <title>Settings - Skrīb</title>
     <link rel="stylesheet" href="/src/style.css">
+    <link rel="stylesheet" href="/src/settings.css">
     <link rel="manifest" href="/manifest.json">
     <meta name="theme-color" content="#f1f5f9">
     <meta name="mobile-web-app-capable" content="yes">
@@ -20,11 +21,11 @@
 </head>
 <body>
     <div class="settings-page">
-        <div class="admin-page-header">
-            <div class="admin-page-header-content">
+        <div class="page-header">
+            <div class="page-header-content">
                 <h1>Settings</h1>
             </div>
-            <a href="/app.html" class="admin-back-btn">Back to App</a>
+            <a href="/app.html" class="close-btn" title="Back to App"><iconify-icon icon="lucide:x"></iconify-icon></a>
         </div>
 
         <div class="settings-layout">
@@ -46,7 +47,7 @@
             <div class="settings-content">
                 <!-- Account Section -->
                 <div class="settings-panel-section active" id="section-account">
-                    <div class="admin-section">
+                    <div class="page-section">
                         <h3>Profile</h3>
                         <div class="settings-user-identity">
                             <span id="current-user" class="settings-username"></span>
@@ -61,7 +62,7 @@
                         </div>
                     </div>
 
-                    <div class="admin-section">
+                    <div class="page-section">
                         <h3>Session</h3>
                         <button id="settings-logout-btn" class="reject-btn">Logout</button>
                     </div>
@@ -69,7 +70,7 @@
 
                 <!-- Appearance Section -->
                 <div class="settings-panel-section" id="section-appearance">
-                    <div class="admin-section">
+                    <div class="page-section">
                         <h3>Color Scheme</h3>
                         <div class="color-scheme-picker" id="color-scheme-picker">
                             <button class="color-scheme-option active" data-scheme="auto" type="button">
@@ -87,7 +88,7 @@
                         </div>
                     </div>
 
-                    <div class="admin-section">
+                    <div class="page-section">
                         <h3>Your Color</h3>
                         <div class="preference-item">
                             <label for="user-color">Username color:</label>
@@ -95,14 +96,14 @@
                         </div>
                     </div>
 
-                    <div class="admin-section">
+                    <div class="page-section">
                         <h3>Theme</h3>
                         <div id="theme-list" class="theme-list">
                             <!-- Theme cards populated by JS -->
                         </div>
                     </div>
 
-                    <div class="admin-section">
+                    <div class="page-section">
                         <h3>Preview</h3>
                         <div id="theme-preview-container"></div>
                     </div>
@@ -110,12 +111,12 @@
 
                 <!-- Servers Section -->
                 <div class="settings-panel-section" id="section-servers">
-                    <div class="admin-section">
+                    <div class="page-section">
                         <h3>Your Servers</h3>
                         <p class="form-hint" style="margin-bottom: 12px;">Manage your list of Skrib servers. The current server is always pinned at the top.</p>
                         <div id="settings-server-list"></div>
                     </div>
-                    <div class="admin-section">
+                    <div class="page-section">
                         <h3>Add Server</h3>
                         <div class="preference-item">
                             <label for="settings-add-server-url">Server URL</label>

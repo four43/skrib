@@ -5,6 +5,7 @@
     <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover">
     <title>Room Settings - Skrīb</title>
     <link rel="stylesheet" href="/src/style.css">
+    <link rel="stylesheet" href="/src/room-settings.css">
     <link rel="manifest" href="/manifest.json">
     <meta name="theme-color" content="#f1f5f9">
     <script async src="https://code.iconify.design/iconify-icon/2.3.0/iconify-icon.min.js"></script>
@@ -18,17 +19,17 @@
     </script>
 </head>
 <body>
-    <div class="admin-page">
-        <div class="admin-page-header">
-            <div class="admin-page-header-content">
+    <div class="settings-page">
+        <div class="page-header">
+            <div class="page-header-content">
                 <h1 id="room-settings-title">Room Settings</h1>
             </div>
-            <a href="/app.html" class="admin-back-btn">Back to App</a>
+            <a href="/app.html" class="close-btn" title="Back to App"><iconify-icon icon="lucide:x"></iconify-icon></a>
         </div>
 
-        <div class="admin-page-content">
+        <div class="page-content">
             <!-- Room Info Section -->
-            <div class="admin-section">
+            <div class="page-section">
                 <h3>Room Information</h3>
                 <div class="preference-item">
                     <label>Room name:</label>
@@ -41,7 +42,7 @@
             </div>
 
             <!-- Visibility Section (channels only) -->
-            <div id="visibility-section" class="admin-section hidden">
+            <div id="visibility-section" class="page-section hidden">
                 <h3>Visibility</h3>
                 <div class="preference-item">
                     <label for="room-visibility">Who can find this room:</label>
@@ -53,26 +54,26 @@
             </div>
 
             <!-- Pending Join Requests (ops/owners only) -->
-            <div id="join-requests-section" class="admin-section hidden">
+            <div id="join-requests-section" class="page-section hidden">
                 <h3>Pending Join Requests (<span id="join-request-count">0</span>)</h3>
                 <div id="join-requests-list" class="members-list"></div>
             </div>
 
             <!-- Members Section -->
-            <div class="admin-section">
+            <div class="page-section">
                 <h3>Members (<span id="member-count">0</span>)</h3>
                 <div id="members-list" class="members-list"></div>
             </div>
 
             <!-- Leave Room (channels only) -->
-            <div id="leave-room-section" class="admin-section hidden">
+            <div id="leave-room-section" class="page-section hidden">
                 <h3>Membership</h3>
                 <p class="leave-room-description">Leave this channel. You will need to be re-invited to rejoin.</p>
                 <button id="leave-room-btn" class="leave-room-btn">Leave Room</button>
             </div>
 
             <!-- Danger Zone (Admin/Owner only) -->
-            <div id="danger-zone" class="admin-section hidden">
+            <div id="danger-zone" class="page-section hidden">
                 <h3>Danger Zone</h3>
                 <p class="danger-zone-description">Permanently deletes this room, all messages, and all member data. This cannot be undone.</p>
                 <button id="delete-room-btn" class="reject-btn btn-sm">Delete Room</button>

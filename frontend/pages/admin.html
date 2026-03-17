@@ -5,6 +5,8 @@
     <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover">
     <title>Admin - Skrīb</title>
     <link rel="stylesheet" href="/src/style.css">
+    <link rel="stylesheet" href="/src/admin.css">
+    <link rel="stylesheet" href="/src/settings.css">
     <link rel="manifest" href="/manifest.json">
     <meta name="theme-color" content="#f1f5f9">
     <meta name="mobile-web-app-capable" content="yes">
@@ -19,11 +21,11 @@
 </head>
 <body>
     <div class="settings-page">
-        <div class="admin-page-header">
-            <div class="admin-page-header-content">
+        <div class="page-header">
+            <div class="page-header-content">
                 <h1>Admin Panel</h1>
             </div>
-            <a href="/app.html" class="admin-back-btn">Back to App</a>
+            <a href="/app.html" class="close-btn" title="Back to App"><iconify-icon icon="lucide:x"></iconify-icon></a>
         </div>
 
         <div class="settings-layout">
@@ -49,7 +51,7 @@
             <div class="settings-content">
                 <!-- Server Section -->
                 <div class="settings-panel-section active admin-only" id="section-server">
-                    <div class="admin-section">
+                    <div class="page-section">
                         <h3>Server Name</h3>
                         <div class="preference-item">
                             <label for="server-name-input">Name:</label>
@@ -57,7 +59,7 @@
                         </div>
                     </div>
 
-                    <div class="admin-section">
+                    <div class="page-section">
                         <h3>Server Icon</h3>
                         <div class="server-icon-section">
                             <div class="server-icon-preview">
@@ -72,13 +74,13 @@
                         </div>
                     </div>
 
-                    <div class="admin-section">
+                    <div class="page-section">
                         <h3>DM Room Type</h3>
                         <p class="form-hint">Plugin used for all direct messages</p>
                         <div id="dm-room-type-select" class="dm-room-type-list"></div>
                     </div>
 
-                    <div class="admin-section">
+                    <div class="page-section">
                         <h3>Registration Mode</h3>
                         <div class="reg-mode-slider">
                             <input type="range" id="reg-mode-slider" min="0" max="3" step="1" value="0">
@@ -95,14 +97,14 @@
 
                 <!-- Appearance Section -->
                 <div class="settings-panel-section admin-only" id="section-appearance">
-                    <div class="admin-section">
+                    <div class="page-section">
                         <h3>Default Theme</h3>
                         <div id="admin-theme-list" class="theme-list">
                             <!-- Theme cards populated by JS -->
                         </div>
                     </div>
 
-                    <div class="admin-section">
+                    <div class="page-section">
                         <h3>Preview</h3>
                         <div id="admin-theme-preview-container"></div>
                     </div>
@@ -110,17 +112,17 @@
 
                 <!-- Users Section -->
                 <div class="settings-panel-section" id="section-users">
-                    <div class="admin-section">
+                    <div class="page-section">
                         <h3>Pending Approvals (<span id="pending-count">0</span>)</h3>
                         <div id="pending-list"></div>
                     </div>
 
-                    <div class="admin-section">
+                    <div class="page-section">
                         <h3>All Users (<span id="user-count">0</span>)</h3>
                         <div id="users-list"></div>
                     </div>
 
-                    <div class="admin-section admin-only">
+                    <div class="page-section admin-only">
                         <h3>User Preferences</h3>
                         <div id="user-preferences-list"></div>
                     </div>
@@ -128,7 +130,7 @@
 
                 <!-- Invites Section -->
                 <div class="settings-panel-section admin-only" id="section-invites">
-                    <div class="admin-section">
+                    <div class="page-section">
                         <h3>Invite Links</h3>
                         <button id="generate-invite-btn" class="invite-generate-btn">Generate Invite Link</button>
                         <div id="invite-list"></div>

@@ -12,7 +12,7 @@ test.describe('Admin Page', () => {
 
       // Main containers (class changed from .admin-page to .settings-page)
       await expect(page.locator('.settings-page')).toBeVisible();
-      await expect(page.locator('.admin-page-header')).toBeVisible();
+      await expect(page.locator('.page-header')).toBeVisible();
       await expect(page.locator('.settings-content')).toBeVisible();
 
       // Admin controls (in active section-server)
@@ -35,7 +35,47 @@ test.describe('Admin Page', () => {
     test('should have proper CSS classes', async ({ page }) => {
       await page.goto('/admin.html');
 
-      await expect(page.locator('.admin-page-header-content')).toBeVisible();
+      await expect(page.locator('.page-header-content')).toBeVisible();
+    });
+  });
+
+  test.describe('Navigation Tabs', () => {
+    test('should have settings-nav with section buttons', async ({ page }) => {
+      await page.goto('/admin.html');
+
+      const nav = page.locator('.settings-nav');
+      await expect(nav).toBeVisible();
+
+      // Should have nav items for server, appearance, users
+      await expect(page.locator('.settings-nav-item[data-section="server"]')).toBeVisible();
+      await expect(page.locator('.settings-nav-item[data-section="appearance"]')).toBeVisible();
+      await expect(page.locator('.settings-nav-item[data-section="users"]')).toBeVisible();
+    });
+
+    test('section nav should switch active section', async ({ page }) => {
+      await page.goto('/admin.html');
+
+      // Server section is active by default
+      await expect(page.locator('#section-server')).toHaveClass(/active/);
+
+      // Click users nav
+      await page.locator('.settings-nav-item[data-section="users"]').click();
+      await expect(page.locator('#section-users')).toHaveClass(/active/);
+      await expect(page.locator('#section-server')).not.toHaveClass(/active/);
+
+      // Click appearance nav
+      await page.locator('.settings-nav-item[data-section="appearance"]').click();
+      await expect(page.locator('#section-appearance')).toHaveClass(/active/);
+      await expect(page.locator('#section-users')).not.toHaveClass(/active/);
+    });
+
+    test('nav should display as horizontal tabs on mobile', async ({ page }) => {
+      await page.setViewportSize({ width: 375, height: 667 });
+      await page.goto('/admin.html');
+
+      const nav = page.locator('.settings-nav');
+      const flexDirection = await nav.evaluate(el => getComputedStyle(el).flexDirection);
+      expect(flexDirection).toBe('row');
     });
   });
 
@@ -72,7 +112,7 @@ test.describe('Admin Page', () => {
     test('back to chat link should navigate', async ({ page }) => {
       await page.goto('/admin.html');
 
-      const backLink = page.locator('a.admin-back-btn');
+      const backLink = page.locator('.page-header a.close-btn');
       await expect(backLink).toBeVisible();
       await expect(backLink).toHaveAttribute('href', '/app.html');
     });

@@ -1978,42 +1978,24 @@ function updateJoinRequestBadges(roomId) {
     }
 }
 
-function renderRoomTypeList(containerId, radioName) {
-    const container = document.getElementById(containerId);
-    if (!container) return;
-    container.innerHTML = '';
+function renderRoomTypeSelect(selectId) {
+    const select = document.getElementById(selectId);
+    if (!select) return;
+    select.innerHTML = '';
 
     if (availableRoomTypes.length === 0) {
-        container.innerHTML = '<p class="form-hint">No room types available</p>';
+        const opt = document.createElement('option');
+        opt.textContent = 'No room types available';
+        opt.disabled = true;
+        select.appendChild(opt);
         return;
     }
 
-    availableRoomTypes.forEach((rt, i) => {
-        const label = document.createElement('label');
-        label.className = 'room-type-option';
-
-        const radio = document.createElement('input');
-        radio.type = 'radio';
-        radio.name = radioName;
-        radio.value = rt.room_type;
-        if (i === 0) radio.checked = true;
-
-        const info = document.createElement('div');
-        info.className = 'room-type-info';
-
-        const name = document.createElement('span');
-        name.className = 'room-type-name';
-        name.textContent = rt.name;
-
-        const desc = document.createElement('span');
-        desc.className = 'room-type-desc';
-        desc.textContent = rt.description;
-
-        info.appendChild(name);
-        info.appendChild(desc);
-        label.appendChild(radio);
-        label.appendChild(info);
-        container.appendChild(label);
+    availableRoomTypes.forEach((rt) => {
+        const opt = document.createElement('option');
+        opt.value = rt.room_type;
+        opt.textContent = rt.name;
+        select.appendChild(opt);
     });
 }
 
@@ -2024,7 +2006,7 @@ function openCreateRoomModal() {
     const modal = document.getElementById('create-room-modal');
     const input = document.getElementById('new-room-input');
     input.value = '';
-    renderRoomTypeList('room-type-list', 'create-room-type');
+    renderRoomTypeSelect('room-type-select');
     // Reset search state
     document.getElementById('room-search-results').classList.add('hidden');
     document.getElementById('room-search-results').innerHTML = '';
@@ -2214,7 +2196,7 @@ async function createRoom() {
             },
             body: JSON.stringify({
                 room_id: roomId,
-                room_type: document.querySelector('input[name="create-room-type"]:checked')?.value || 'chat',
+                room_type: document.getElementById('room-type-select')?.value || 'chat',
                 visibility: visibility,
             })
         });

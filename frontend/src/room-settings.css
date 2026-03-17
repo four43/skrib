@@ -1,0 +1,298 @@
+/* ═══════════════════════════════════════════
+   Settings Panel (slide-out)
+   ═══════════════════════════════════════════ */
+
+.settings-panel {
+    position: fixed;
+    top: 0;
+    right: -380px;
+    width: 380px;
+    height: 100dvh;
+    background: var(--bg-surface-opaque);
+    border-left: 1px solid var(--border-normal);
+    box-shadow: -4px 0 16px rgba(0, 0, 0, 0.06);
+    transition: right 0.3s ease;
+    z-index: 1000;
+    overflow-y: auto;
+}
+
+.settings-panel.open {
+    right: 0;
+}
+
+.settings-panel-header {
+    padding: 20px 24px;
+    padding-top: calc(20px + env(safe-area-inset-top));
+    border-bottom: 1px solid rgba(var(--theme-rgb), 0.08);
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    background: var(--bg-header);
+}
+
+.settings-panel-header h2 {
+    margin: 0;
+    font-size: 20px;
+    font-weight: 700;
+    color: var(--text-primary);
+}
+
+.settings-panel-header .close-btn {
+    color: var(--text-tertiary);
+    background: none;
+    border: none;
+    box-shadow: none;
+}
+
+.settings-panel-header .close-btn:hover {
+    color: var(--text-primary);
+}
+
+.settings-user-identity {
+    display: flex;
+    align-items: center;
+    gap: 10px;
+    margin-bottom: 16px;
+}
+
+.settings-username {
+    font-size: 16px;
+    font-weight: 700;
+    color: var(--text-primary);
+}
+
+/* ═══════════════════════════════════════════
+   Members List
+   ═══════════════════════════════════════════ */
+
+.members-list {
+    display: flex;
+    flex-direction: column;
+    gap: 8px;
+}
+
+.member-item {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    padding: 12px;
+    background: rgba(var(--theme-rgb), 0.02);
+    border: 1px solid rgba(var(--theme-rgb), 0.08);
+    border-radius: 8px;
+}
+
+.member-info {
+    display: flex;
+    align-items: center;
+    gap: 10px;
+}
+
+.member-name {
+    font-weight: 600;
+    font-size: 14px;
+}
+
+.member-role {
+    font-size: 11px;
+    font-weight: 600;
+    padding: 2px 8px;
+    background: rgba(var(--theme-rgb), 0.15);
+    color: var(--theme-color);
+    border-radius: 4px;
+    text-transform: uppercase;
+    letter-spacing: 0.5px;
+}
+
+.member-actions {
+    display: flex;
+    gap: 6px;
+}
+
+.member-remove-btn {
+    background: var(--color-error-bg);
+    color: var(--color-error);
+    border-color: var(--color-error-border);
+}
+
+.member-remove-btn:hover {
+    background: rgba(239, 68, 68, 0.15);
+    color: var(--color-error);
+}
+
+/* Leave Room Button */
+.leave-room-description {
+    color: var(--text-secondary);
+    font-size: 13px;
+    margin-bottom: 12px;
+}
+
+.leave-room-btn {
+    padding: 8px 16px;
+    border: 1px solid rgba(239, 68, 68, 0.3);
+    border-radius: 8px;
+    background: rgba(239, 68, 68, 0.08);
+    color: var(--color-error);
+    font-size: 13px;
+    font-weight: 600;
+    transition: background 0.15s ease;
+}
+
+.leave-room-btn:hover {
+    background: rgba(239, 68, 68, 0.15);
+}
+
+/* ═══════════════════════════════════════════
+   Modals
+   ═══════════════════════════════════════════ */
+
+.room-settings-modal {
+    display: none;
+    position: fixed;
+    top: 0;
+    left: 0;
+    right: 0;
+    bottom: 0;
+    z-index: 2000;
+    align-items: center;
+    justify-content: center;
+}
+
+.room-settings-modal.open {
+    display: flex;
+}
+
+.room-settings-backdrop {
+    position: absolute;
+    top: 0;
+    left: 0;
+    right: 0;
+    bottom: 0;
+    background: rgba(15, 23, 42, 0.4);
+    backdrop-filter: blur(4px);
+    -webkit-backdrop-filter: blur(4px);
+}
+
+.room-settings-content {
+    position: relative;
+    background: var(--bg-surface-opaque);
+    border-radius: 16px;
+    width: 400px;
+    max-width: 90vw;
+    box-shadow: 0 20px 40px -12px rgba(0, 0, 0, 0.15),
+        0 8px 20px -8px rgba(0, 0, 0, 0.08);
+    border: 1px solid var(--border-normal);
+}
+
+.room-settings-header {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    padding: 18px 24px;
+    border-bottom: 1px solid rgba(var(--theme-rgb), 0.08);
+    background: var(--bg-header-dim);
+    border-radius: 16px 16px 0 0;
+}
+
+.room-settings-header h3 {
+    margin: 0;
+    font-size: 18px;
+    font-weight: 700;
+    color: var(--text-primary);
+}
+
+.room-settings-header .close-btn {
+    color: var(--text-tertiary);
+    background: none;
+    border: none;
+    box-shadow: none;
+}
+
+.room-settings-header .close-btn:hover {
+    color: var(--text-primary);
+}
+
+.room-settings-body {
+    padding: 24px;
+}
+
+.room-settings-name-row {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    margin-bottom: 20px;
+}
+
+.room-settings-label {
+    color: var(--text-tertiary);
+    font-size: 14px;
+}
+
+.room-settings-value {
+    font-weight: 700;
+    font-size: 14px;
+    color: var(--text-primary);
+}
+
+.room-settings-section {
+    margin-bottom: 16px;
+}
+
+.room-settings-section h4 {
+    margin: 0 0 8px 0;
+    font-size: 14px;
+    font-weight: 700;
+    color: var(--text-primary);
+}
+
+.room-settings-section select {
+    width: 100%;
+    padding: 8px 12px;
+    border: 1px solid rgba(0, 0, 0, 0.15);
+    border-radius: 8px;
+    font-size: 14px;
+    background: white;
+    color: var(--text-primary);
+    cursor: pointer;
+}
+
+.room-settings-danger {
+    border: 1px solid var(--color-error-border);
+    border-radius: 10px;
+    padding: 18px;
+    background: rgba(239, 68, 68, 0.04);
+}
+
+.room-settings-danger h4 {
+    color: var(--color-error);
+    margin: 0 0 8px 0;
+    font-size: 14px;
+    font-weight: 700;
+}
+
+.room-settings-danger p {
+    color: var(--text-tertiary);
+    font-size: 13px;
+    margin: 0 0 14px 0;
+    line-height: 1.5;
+}
+
+.room-settings-danger .reject-btn {
+    padding: 8px 18px;
+    font-size: 13px;
+    border-radius: 8px;
+}
+
+/* ═══════════════════════════════════════════
+   Room Settings Mobile
+   ═══════════════════════════════════════════ */
+
+@media (max-width: 768px) {
+    .settings-panel {
+        width: 100%;
+        right: -100%;
+    }
+
+    .settings-panel.open {
+        right: 0;
+    }
+}

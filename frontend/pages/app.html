@@ -5,6 +5,8 @@
     <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover">
     <title>Skrīb</title>
     <link rel="stylesheet" href="/src/style.css">
+    <link rel="stylesheet" href="/src/app.css">
+    <link rel="stylesheet" href="/src/room-settings.css">
     <link rel="manifest" href="/manifest.json">
     <script async src="https://code.iconify.design/iconify-icon/2.3.0/iconify-icon.min.js"></script>
     <meta name="mobile-web-app-capable" content="yes">
@@ -95,7 +97,7 @@
                 <div class="sidebar-section">
                     <div class="sidebar-section-header">
                         <span>Members <span id="members-panel-count" class="members-panel-count"></span></span>
-                        <button id="members-panel-close-btn" class="panel-close-btn"><iconify-icon icon="lucide:x"></iconify-icon></button>
+                        <button id="members-panel-close-btn" class="sidebar-close-btn"><iconify-icon icon="lucide:x"></iconify-icon></button>
                     </div>
                     <div class="members-panel-body">
                         <div id="join-requests-panel-list" class="members-list"></div>
@@ -170,23 +172,25 @@
                 <div id="create-room-form" class="create-room-form">
                     <div class="form-divider"><span>or create new</span></div>
                     <div class="form-group">
-                        <label>Room type</label>
-                        <div id="room-type-list" class="room-type-list"></div>
+                        <label for="room-type-select">Room type</label>
+                        <select id="room-type-select"></select>
                     </div>
                     <div class="form-group">
                         <label>Visibility</label>
                         <div class="visibility-options">
-                            <label class="room-type-option">
+                            <label class="visibility-option">
                                 <input type="radio" name="create-room-visibility" value="private" checked>
-                                <div class="room-type-info">
-                                    <iconify-icon icon="lucide:lock" inline></iconify-icon> Private
+                                <iconify-icon icon="lucide:lock" width="16" height="16"></iconify-icon>
+                                <div class="visibility-label">
+                                    <span>Private</span>
                                     <small>Invite only, not searchable</small>
                                 </div>
                             </label>
-                            <label class="room-type-option">
+                            <label class="visibility-option">
                                 <input type="radio" name="create-room-visibility" value="public">
-                                <div class="room-type-info">
-                                    <iconify-icon icon="lucide:hash" inline></iconify-icon> Public
+                                <iconify-icon icon="lucide:hash" width="16" height="16"></iconify-icon>
+                                <div class="visibility-label">
+                                    <span>Public</span>
                                     <small>Searchable, users can request to join</small>
                                 </div>
                             </label>
