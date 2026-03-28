@@ -300,3 +300,138 @@
     font-weight: 700;
     flex: 1;
 }
+
+/* ═══════════════════════════════════════════
+   Backups
+   ═══════════════════════════════════════════ */
+
+.backup-status {
+    padding: 8px 12px;
+    border-radius: 8px;
+    font-size: 13px;
+    margin-top: 8px;
+    background: rgba(var(--theme-rgb), 0.06);
+    color: var(--text-secondary);
+}
+
+.backup-status.success {
+    background: rgba(46, 125, 50, 0.1);
+    color: var(--color-success);
+}
+
+.backup-status.error {
+    background: rgba(211, 47, 47, 0.1);
+    color: var(--color-error);
+}
+
+.backup-item {
+    background: var(--bg-surface-dim);
+    padding: 12px;
+    border-radius: 8px;
+    margin-bottom: 8px;
+    border: 1px solid var(--border-normal);
+    display: flex;
+    align-items: center;
+    gap: 8px;
+}
+
+.backup-info {
+    flex: 1;
+    min-width: 0;
+}
+
+.backup-filename {
+    font-family: var(--font-family-mono);
+    font-size: 13px;
+    color: var(--text-primary);
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+}
+
+.backup-meta {
+    font-size: 12px;
+    color: var(--text-muted);
+    margin-top: 2px;
+}
+
+.backup-actions {
+    display: flex;
+    gap: 6px;
+    flex-shrink: 0;
+}
+
+.backup-actions a,
+.backup-actions a:visited {
+    text-decoration: none;
+    color: inherit;
+}
+
+/* ═══════════════════════════════════════════
+   System Log
+   ═══════════════════════════════════════════ */
+
+.log-entry {
+    padding: 10px 12px;
+    border-radius: 8px;
+    margin-bottom: 6px;
+    border: 1px solid var(--border-normal);
+    background: var(--bg-surface-dim);
+}
+
+.log-entry-header {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    margin-bottom: 4px;
+    flex-wrap: wrap;
+}
+
+.log-level-badge {
+    font-size: 11px;
+    font-weight: 700;
+    text-transform: uppercase;
+    padding: 1px 6px;
+    border-radius: 4px;
+    background: rgba(var(--theme-rgb), 0.1);
+    color: var(--theme-color);
+}
+
+.log-level-error .log-level-badge {
+    background: rgba(211, 47, 47, 0.1);
+    color: var(--color-error);
+}
+
+.log-level-warning .log-level-badge {
+    background: rgba(237, 108, 2, 0.1);
+    color: var(--color-warning);
+}
+
+.log-category {
+    font-size: 12px;
+    font-weight: 600;
+    color: var(--text-secondary);
+}
+
+.log-time {
+    font-size: 11px;
+    color: var(--text-muted);
+    margin-left: auto;
+}
+
+.log-user {
+    font-size: 11px;
+    color: var(--text-muted);
+}
+
+.log-message {
+    font-size: 13px;
+    color: var(--text-primary);
+}
+
+.log-pagination {
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    gap: 12px;
+}

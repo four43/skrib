@@ -82,6 +82,12 @@ async function initializeSettingsPage() {
 
     // Set up event listeners
     setupEventListeners();
+
+    // Restore section from URL hash (e.g. #appearance)
+    const hashSection = location.hash.replace('#', '');
+    if (hashSection && document.getElementById(`section-${hashSection}`)) {
+        switchSection(hashSection);
+    }
 }
 
 async function loadUserSettings() {
@@ -275,6 +281,8 @@ function switchSection(sectionId) {
     document.querySelectorAll('.settings-panel-section').forEach(panel => {
         panel.classList.toggle('active', panel.id === `section-${sectionId}`);
     });
+    // Persist in URL hash so refresh returns to this tab
+    history.replaceState(null, '', `#${sectionId}`);
 }
 
 function renderSettingsServerList() {

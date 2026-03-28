@@ -24,7 +24,7 @@
     {
       "label": "Seed Database",
       "type": "shell",
-      "command": "${workspaceFolder}/backend/.venv/bin/python",
+      "command": "python",
       "args": ["${workspaceFolder}/backend/scripts/seed.py"],
       "options": {
         "cwd": "${workspaceFolder}/backend"

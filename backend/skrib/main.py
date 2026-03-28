@@ -10,6 +10,7 @@ from starlette.middleware.gzip import GZipMiddleware
 
 # Import routers
 from .auth.routes import router as auth_router
+from .backups.routes import router as backups_router, log_router
 from .config import (
     APP_TITLE,
     APP_VERSION,
@@ -95,6 +96,8 @@ app.include_router(preferences_router, prefix="/api")
 app.include_router(ws_router, prefix="/api")
 app.include_router(plugins_router, prefix="/api")
 app.include_router(themes_router, prefix="/api")
+app.include_router(backups_router, prefix="/api")
+app.include_router(log_router, prefix="/api")
 
 # Register plugin routes at module level, before the static catch-all mount
 print("\n[Plugins] Initializing plugin system...")
@@ -194,6 +197,10 @@ async def startup_event():
     # Start WebSocket heartbeat (periodic ping to detect dead connections)
     ws.bus.start_heartbeat()
 
+    # Start backup scheduler
+    from .backups.services import start_backup_scheduler
+    await start_backup_scheduler()
+
     print()
 
 
@@ -202,6 +209,8 @@ async def shutdown_event():
     """Call on_shutdown for all plugins, then auto-cleanup registered resources."""
     from . import ws
     ws.bus.stop_heartbeat()
+    from .backups.services import stop_backup_scheduler
+    stop_backup_scheduler()
     print("\n[Plugins] Shutting down plugins...")
     for plugin in registry.get_all_plugins():
         try:

@@ -198,6 +198,19 @@ def init_db():
             )
         ''')
 
+        # System log table for admin-visible events (backups, errors, etc.)
+        conn.execute('''
+            CREATE TABLE IF NOT EXISTS system_log (
+                id INTEGER PRIMARY KEY AUTOINCREMENT,
+                timestamp TEXT NOT NULL DEFAULT (strftime('%Y-%m-%dT%H:%M:%SZ', 'now')),
+                level TEXT NOT NULL DEFAULT 'info',
+                category TEXT NOT NULL,
+                message TEXT NOT NULL,
+                details TEXT,
+                username TEXT
+            )
+        ''')
+
         # Set default registration mode (env var override on first startup only)
         cursor = conn.execute("SELECT value FROM settings WHERE key = 'registration_mode'")
         if not cursor.fetchone():
@@ -244,4 +257,15 @@ def set_setting(key: str, value: str):
             INSERT OR REPLACE INTO settings (key, value)
             VALUES (?, ?)
         ''', (key, value))
+        conn.commit()
+
+
+def add_system_log(category: str, message: str, level: str = 'info',
+                   details: str = None, username: str = None):
+    """Add an entry to the system log."""
+    with get_db() as conn:
+        conn.execute(
+            'INSERT INTO system_log (category, message, level, details, username) VALUES (?, ?, ?, ?, ?)',
+            (category, message, level, details, username)
+        )
         conn.commit()

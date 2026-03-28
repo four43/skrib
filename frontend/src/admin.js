@@ -49,6 +49,12 @@ async function checkSession() {
                 switchSection('users');
             }
 
+            // Restore section from URL hash (e.g. #backups)
+            const hashSection = location.hash.replace('#', '');
+            if (hashSection && document.getElementById(`section-${hashSection}`)) {
+                switchSection(hashSection);
+            }
+
             // Inject theme preview
             const previewContainer = document.getElementById('admin-theme-preview-container');
             if (previewContainer) {
@@ -70,7 +76,7 @@ async function checkSession() {
 
 // Section navigation
 
-function switchSection(sectionId) {
+function switchSection(sectionId, { updateHash = true } = {}) {
     currentSection = sectionId;
     // Update nav items
     document.querySelectorAll('.settings-nav-item').forEach(item => {
@@ -80,6 +86,13 @@ function switchSection(sectionId) {
     document.querySelectorAll('.settings-panel-section').forEach(panel => {
         panel.classList.toggle('active', panel.id === `section-${sectionId}`);
     });
+    // Persist in URL hash so refresh returns to this tab
+    if (updateHash) {
+        history.replaceState(null, '', `#${sectionId}`);
+    }
+    // Lazy-load data for sections
+    if (sectionId === 'logs') loadSystemLog(1);
+    if (sectionId === 'backups') loadBackups();
 }
 
 // Admin settings
@@ -120,6 +133,10 @@ async function loadAdminSettings() {
         if (data.registration_mode === 'invite_only') {
             loadInviteTokens();
         }
+
+        // Backups
+        loadBackups();
+        loadBackupConfig();
     } catch (error) {
         console.error('Failed to load admin settings:', error);
     }
@@ -714,6 +731,198 @@ async function updateUserColorAdmin(username) {
     }
 }
 
+// ── Backups ────────────────────────────────────────────────────────────
+
+async function loadBackups() {
+    try {
+        const resp = await fetch(`${API_URL}/admin/backups`, {
+            headers: { 'Authorization': `Bearer ${sessionToken}` }
+        });
+        if (!resp.ok) return;
+        const data = await resp.json();
+        const list = document.getElementById('backup-list');
+        if (!list) return;
+
+        if (data.backups.length === 0) {
+            list.innerHTML = '<p style="color: var(--text-muted, #999); font-size: 13px;">No backups yet</p>';
+        } else {
+            list.innerHTML = data.backups.map(b => `
+                <div class="backup-item">
+                    <div class="backup-info">
+                        <div class="backup-filename">${escapeHtml(b.filename)}</div>
+                        <div class="backup-meta">${formatBytes(b.size)} &middot; ${new Date(b.created_at).toLocaleString()}</div>
+                    </div>
+                    <div class="backup-actions">
+                        <a class="btn-sm demote-btn" href="${API_URL}/admin/backups/${encodeURIComponent(b.filename)}" onclick="event.stopPropagation();" title="Download">
+                            <iconify-icon icon="lucide:download"></iconify-icon>
+                        </a>
+                        <button class="reject-btn btn-sm" onclick="window.deleteBackup('${escapeHtml(b.filename)}')" title="Delete">
+                            <iconify-icon icon="lucide:trash-2"></iconify-icon>
+                        </button>
+                    </div>
+                </div>
+            `).join('');
+        }
+    } catch (error) {
+        console.error('[HTTP] Error loading backups:', error);
+    }
+}
+
+async function triggerBackup() {
+    const btn = document.getElementById('trigger-backup-btn');
+    const status = document.getElementById('backup-status');
+    if (btn) btn.disabled = true;
+    if (status) {
+        status.style.display = '';
+        status.textContent = 'Creating backup...';
+        status.className = 'backup-status';
+    }
+
+    try {
+        const resp = await fetch(`${API_URL}/admin/backups`, {
+            method: 'POST',
+            headers: { 'Authorization': `Bearer ${sessionToken}` }
+        });
+
+        if (resp.ok) {
+            const data = await resp.json();
+            if (status) {
+                status.textContent = `Backup created: ${data.filename} (${formatBytes(data.size)}, ${data.duration_seconds}s)`;
+                status.className = 'backup-status success';
+            }
+            loadBackups();
+        } else {
+            const err = await resp.json();
+            if (status) {
+                status.textContent = `Backup failed: ${err.detail || 'Unknown error'}`;
+                status.className = 'backup-status error';
+            }
+        }
+    } catch (error) {
+        console.error('[HTTP] Error triggering backup:', error);
+        if (status) {
+            status.textContent = 'Backup failed: network error';
+            status.className = 'backup-status error';
+        }
+    } finally {
+        if (btn) btn.disabled = false;
+    }
+}
+
+async function deleteBackup(filename) {
+    if (!confirm(`Delete backup "${filename}"?`)) return;
+    try {
+        await fetch(`${API_URL}/admin/backups/${encodeURIComponent(filename)}`, {
+            method: 'DELETE',
+            headers: { 'Authorization': `Bearer ${sessionToken}` }
+        });
+        loadBackups();
+    } catch (error) {
+        console.error('[HTTP] Error deleting backup:', error);
+    }
+}
+
+async function loadBackupConfig() {
+    try {
+        const resp = await fetch(`${API_URL}/admin/backups/config`, {
+            headers: { 'Authorization': `Bearer ${sessionToken}` }
+        });
+        if (!resp.ok) return;
+        const config = await resp.json();
+
+        const enabledToggle = document.getElementById('backup-enabled-toggle');
+        const scheduleInput = document.getElementById('backup-schedule-input');
+        const directoryInput = document.getElementById('backup-directory-input');
+
+        if (enabledToggle) enabledToggle.checked = config.enabled;
+        if (scheduleInput) scheduleInput.value = config.schedule;
+        if (directoryInput) directoryInput.value = config.directory;
+    } catch (error) {
+        console.error('[HTTP] Error loading backup config:', error);
+    }
+}
+
+async function saveBackupConfig(field, value) {
+    try {
+        await fetch(`${API_URL}/admin/backups/config`, {
+            method: 'PATCH',
+            headers: {
+                'Content-Type': 'application/json',
+                'Authorization': `Bearer ${sessionToken}`
+            },
+            body: JSON.stringify({ [field]: value })
+        });
+    } catch (error) {
+        console.error('[HTTP] Error saving backup config:', error);
+    }
+}
+
+function formatBytes(bytes) {
+    if (bytes === 0) return '0 B';
+    const k = 1024;
+    const sizes = ['B', 'KB', 'MB', 'GB'];
+    const i = Math.floor(Math.log(bytes) / Math.log(k));
+    return parseFloat((bytes / Math.pow(k, i)).toFixed(1)) + ' ' + sizes[i];
+}
+
+// ── System Log ────────────────────────────────────────────────────────
+
+let logPage = 1;
+
+async function loadSystemLog(page = 1) {
+    logPage = page;
+    const category = document.getElementById('log-category-filter')?.value || '';
+    const level = document.getElementById('log-level-filter')?.value || '';
+
+    try {
+        const params = new URLSearchParams({ page, page_size: 50 });
+        if (category) params.set('category', category);
+        if (level) params.set('level', level);
+
+        const resp = await fetch(`${API_URL}/admin/logs?${params}`, {
+            headers: { 'Authorization': `Bearer ${sessionToken}` }
+        });
+        if (!resp.ok) return;
+        const data = await resp.json();
+
+        const list = document.getElementById('log-list');
+        if (!list) return;
+
+        if (data.entries.length === 0) {
+            list.innerHTML = '<p style="color: var(--text-muted, #999); font-size: 13px;">No log entries</p>';
+        } else {
+            list.innerHTML = data.entries.map(e => `
+                <div class="log-entry log-level-${escapeHtml(e.level)}">
+                    <div class="log-entry-header">
+                        <span class="log-level-badge">${escapeHtml(e.level)}</span>
+                        <span class="log-category">${escapeHtml(e.category)}</span>
+                        <span class="log-time">${new Date(e.timestamp).toLocaleString()}</span>
+                        ${e.username ? `<span class="log-user">${escapeHtml(e.username)}</span>` : ''}
+                    </div>
+                    <div class="log-message">${escapeHtml(e.message)}</div>
+                </div>
+            `).join('');
+        }
+
+        // Pagination
+        const pagination = document.getElementById('log-pagination');
+        if (pagination) {
+            const totalPages = Math.ceil(data.total / data.page_size);
+            if (totalPages <= 1) {
+                pagination.innerHTML = '';
+            } else {
+                pagination.innerHTML = `
+                    <button class="btn-sm" ${page <= 1 ? 'disabled' : ''} onclick="window.loadSystemLog(${page - 1})">Prev</button>
+                    <span style="font-size: 13px; color: var(--text-muted, #999);">Page ${page} of ${totalPages}</span>
+                    <button class="btn-sm" ${page >= totalPages ? 'disabled' : ''} onclick="window.loadSystemLog(${page + 1})">Next</button>
+                `;
+            }
+        }
+    } catch (error) {
+        console.error('[HTTP] Error loading system log:', error);
+    }
+}
+
 // Expose functions to window for inline event handlers
 window.updateRegModeLabel = updateRegModeLabel;
 window.setRegistrationMode = setRegistrationMode;
@@ -725,6 +934,9 @@ window.rejectUser = rejectUser;
 window.setUserRole = setUserRole;
 window.deleteUser = deleteUser;
 window.updateUserColorAdmin = updateUserColorAdmin;
+window.triggerBackup = triggerBackup;
+window.deleteBackup = deleteBackup;
+window.loadSystemLog = loadSystemLog;
 
 // Event listeners
 document.addEventListener('DOMContentLoaded', () => {
@@ -768,5 +980,37 @@ document.addEventListener('DOMContentLoaded', () => {
     const generateInviteBtn = document.getElementById('generate-invite-btn');
     if (generateInviteBtn) {
         generateInviteBtn.addEventListener('click', generateInviteLink);
+    }
+
+    // Backup controls
+    const triggerBackupBtn = document.getElementById('trigger-backup-btn');
+    if (triggerBackupBtn) {
+        triggerBackupBtn.addEventListener('click', triggerBackup);
+    }
+
+    const backupEnabledToggle = document.getElementById('backup-enabled-toggle');
+    if (backupEnabledToggle) {
+        backupEnabledToggle.addEventListener('change', () => saveBackupConfig('enabled', backupEnabledToggle.checked));
+    }
+
+    const backupScheduleInput = document.getElementById('backup-schedule-input');
+    if (backupScheduleInput) {
+        backupScheduleInput.addEventListener('change', () => saveBackupConfig('schedule', backupScheduleInput.value));
+    }
+
+    const backupDirectoryInput = document.getElementById('backup-directory-input');
+    if (backupDirectoryInput) {
+        backupDirectoryInput.addEventListener('change', () => saveBackupConfig('directory', backupDirectoryInput.value));
+    }
+
+    // System log filters
+    const logCategoryFilter = document.getElementById('log-category-filter');
+    if (logCategoryFilter) {
+        logCategoryFilter.addEventListener('change', () => loadSystemLog(1));
+    }
+
+    const logLevelFilter = document.getElementById('log-level-filter');
+    if (logLevelFilter) {
+        logLevelFilter.addEventListener('change', () => loadSystemLog(1));
     }
 });
