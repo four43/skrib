@@ -5,6 +5,9 @@ cd "$DIR/.."
 
 PLUGINS_DIR="$DIR/../../backend/plugins"
 
+# Clean stale production build so the backend doesn't serve old HTML
+rm -rf dist
+
 # Install and build all plugins, then watch for changes
 PIDS=()
 cleanup() {

@@ -6,7 +6,8 @@
     display: flex;
     justify-content: space-between;
     align-items: center;
-    padding: 12px 0;
+    gap: 16px;
+    padding: 10px 0;
     border-bottom: 1px solid rgba(var(--theme-rgb), 0.06);
 }
 
@@ -248,11 +249,72 @@
 .preview-messages {
     display: flex;
     flex-direction: column;
-    gap: 8px;
+    gap: 6px;
 }
 
-.preview-messages .message {
-    margin-bottom: 0;
+.preview-message {
+    display: grid;
+    grid-template-columns: auto 1fr;
+    column-gap: 10px;
+    align-items: start;
+    padding: 10px 14px;
+    border-radius: 12px;
+    background: rgba(var(--theme-rgb), 0.04);
+}
+
+.preview-avatar {
+    width: 36px;
+    height: 36px;
+    border-radius: 50%;
+    grid-row: 1 / 3;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    font-size: 14px;
+    font-weight: 700;
+    color: white;
+    margin-top: 2px;
+}
+
+.preview-message-header {
+    font-size: 12px;
+    color: var(--text-muted);
+    display: flex;
+    align-items: baseline;
+    gap: 4px;
+    margin-bottom: 2px;
+}
+
+.preview-username {
+    font-weight: 700;
+    color: var(--theme-color);
+}
+
+.preview-timestamp {
+    margin-left: 8px;
+    font-weight: 400;
+}
+
+.preview-message-text {
+    color: var(--text-primary);
+    line-height: 1.5;
+    font-size: 14px;
+}
+
+.preview-system-message {
+    text-align: center;
+    padding: 4px 0;
+}
+
+.preview-system-text {
+    background: rgba(var(--theme-rgb), 0.06);
+    border: 1px solid rgba(var(--theme-rgb), 0.12);
+    color: var(--text-tertiary);
+    font-size: 13px;
+    font-style: italic;
+    display: inline-block;
+    padding: 8px 16px;
+    border-radius: 10px;
 }
 
 .preview-statuses {
@@ -261,10 +323,29 @@
     gap: 8px;
 }
 
-.preview-statuses .status {
-    margin: 0;
-    font-size: 13px;
+.preview-status {
     padding: 10px 14px;
+    border-radius: 10px;
+    font-size: 13px;
+    font-weight: 500;
+}
+
+.preview-status-success {
+    background: var(--color-success-bg);
+    color: var(--color-success);
+    border: 1px solid var(--color-success-border);
+}
+
+.preview-status-error {
+    background: var(--color-error-bg);
+    color: var(--color-error);
+    border: 1px solid var(--color-error-border);
+}
+
+.preview-status-info {
+    background: rgba(var(--theme-rgb), 0.1);
+    color: var(--color-info);
+    border: 1px solid rgba(var(--theme-rgb), 0.2);
 }
 
 .preview-badges {

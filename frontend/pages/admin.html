@@ -84,22 +84,8 @@
 
                     <div class="page-section">
                         <h3>DM Room Type</h3>
-                        <p class="form-hint">Plugin used for all direct messages</p>
+                        <p class="form-hint">Room type used for all direct messages</p>
                         <div id="dm-room-type-select" class="dm-room-type-list"></div>
-                    </div>
-
-                    <div class="page-section">
-                        <h3>Registration Mode</h3>
-                        <div class="reg-mode-slider">
-                            <input type="range" id="reg-mode-slider" min="0" max="3" step="1" value="0">
-                            <div class="reg-mode-labels">
-                                <span>Closed</span>
-                                <span>Invite</span>
-                                <span>Approval</span>
-                                <span>Open</span>
-                            </div>
-                            <p id="reg-mode-description" class="reg-mode-description">Registration is closed</p>
-                        </div>
                     </div>
                 </div>
 
@@ -120,6 +106,19 @@
 
                 <!-- Users Section -->
                 <div class="settings-panel-section" id="section-users">
+                    <div class="page-section">
+                        <h3>Registration Mode</h3>
+                        <div class="reg-mode-slider">
+                            <input type="range" id="reg-mode-slider" min="0" max="3" step="1" value="0">
+                            <div class="reg-mode-labels">
+                                <span>Closed</span>
+                                <span>Invite</span>
+                                <span>Approval</span>
+                                <span>Open</span>
+                            </div>
+                            <p id="reg-mode-description" class="reg-mode-description">Registration is closed</p>
+                        </div>
+                    </div>
                     <div class="page-section">
                         <h3>Pending Approvals (<span id="pending-count">0</span>)</h3>
                         <div id="pending-list"></div>

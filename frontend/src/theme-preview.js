@@ -50,22 +50,28 @@ export function createThemePreviewHTML() {
             <div class="preview-section">
                 <div class="preview-label">Chat Messages</div>
                 <div class="preview-messages">
-                    <div class="message">
-                        <div class="message-header">
-                            <span class="username">alice</span>
-                            <span class="timestamp">12:34 PM</span>
+                    <div class="preview-message">
+                        <div class="preview-avatar" style="background: var(--theme-color)">A</div>
+                        <div class="preview-message-content">
+                            <div class="preview-message-header">
+                                <span class="preview-username">alice</span>
+                                <span class="preview-timestamp">12:34 PM</span>
+                            </div>
+                            <div class="preview-message-text">Hey, have you seen the new theme?</div>
                         </div>
-                        <div class="message-text">Hey, have you seen the new theme?</div>
                     </div>
-                    <div class="message">
-                        <div class="message-header">
-                            <span class="username" style="color: var(--color-success)">bob</span>
-                            <span class="timestamp">12:35 PM</span>
+                    <div class="preview-message">
+                        <div class="preview-avatar" style="background: var(--color-success)">B</div>
+                        <div class="preview-message-content">
+                            <div class="preview-message-header">
+                                <span class="preview-username" style="color: var(--color-success)">bob</span>
+                                <span class="preview-timestamp">12:35 PM</span>
+                            </div>
+                            <div class="preview-message-text">Looks great! Love the colors.</div>
                         </div>
-                        <div class="message-text">Looks great! Love the colors.</div>
                     </div>
-                    <div class="system-message">
-                        <span class="system-message-text">alice set the topic to "Theme testing"</span>
+                    <div class="preview-system-message">
+                        <span class="preview-system-text">alice set the topic to "Theme testing"</span>
                     </div>
                 </div>
             </div>
@@ -73,9 +79,9 @@ export function createThemePreviewHTML() {
             <div class="preview-section">
                 <div class="preview-label">Status Messages</div>
                 <div class="preview-statuses">
-                    <div class="status success">Registration successful!</div>
-                    <div class="status error">Connection lost. Retrying...</div>
-                    <div class="status info">New update available.</div>
+                    <div class="preview-status preview-status-success">Registration successful!</div>
+                    <div class="preview-status preview-status-error">Connection lost. Retrying...</div>
+                    <div class="preview-status preview-status-info">New update available.</div>
                 </div>
             </div>
 
