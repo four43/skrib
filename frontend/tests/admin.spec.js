@@ -15,9 +15,9 @@ test.describe('Admin Page', () => {
       await expect(page.locator('.page-header')).toBeVisible();
       await expect(page.locator('.settings-content')).toBeVisible();
 
-      // Admin controls (in active section-server)
-      await expect(page.locator('#reg-mode-slider')).toBeVisible();
-      await expect(page.locator('#reg-mode-description')).toBeVisible();
+      // Admin controls (in non-active section-users)
+      await expect(page.locator('#reg-mode-slider')).toBeAttached();
+      await expect(page.locator('#reg-mode-description')).toBeAttached();
 
       // Invite section (non-active tab, elements are in DOM but not visible)
       await expect(page.locator('#section-invites')).toBeAttached();
@@ -82,6 +82,9 @@ test.describe('Admin Page', () => {
   test.describe('Interactions', () => {
     test('registration mode slider should be functional', async ({ page }) => {
       await page.goto('/admin.html');
+
+      // Navigate to Users section where the slider now lives
+      await page.locator('.settings-nav-item[data-section="users"]').click();
 
       const slider = page.locator('#reg-mode-slider');
       const description = page.locator('#reg-mode-description');

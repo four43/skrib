@@ -75,6 +75,7 @@ test.describe('Admin panel - Server settings', () => {
         const { admin } = threeUsers;
 
         await goToAdmin(admin.page);
+        await switchSection(admin.page, 'users');
 
         const slider = admin.page.locator('#reg-mode-slider');
         await expect(slider).toBeVisible();
@@ -105,6 +106,7 @@ test.describe('Admin panel - Server settings', () => {
         const { admin } = threeUsers;
 
         await goToAdmin(admin.page);
+        await switchSection(admin.page, 'users');
 
         // Wait for the registration mode slider to load
         const slider = admin.page.locator('#reg-mode-slider');
