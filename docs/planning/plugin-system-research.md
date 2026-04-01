@@ -1,6 +1,6 @@
-# Plugin System Research: Discord, Slack, and Obsidian
+# Plugin System Research: Discord, Slack, Obsidian, and VS Code
 
-A comparative analysis of plugin architectures from Discord, Slack, and Obsidian — with recommendations for Skrib's plugin system.
+A comparative analysis of plugin architectures from Discord, Slack, Obsidian, and VS Code — with recommendations for Skrib's plugin system.
 
 ---
 
@@ -9,8 +9,9 @@ A comparative analysis of plugin architectures from Discord, Slack, and Obsidian
 - [Discord](#discord)
 - [Slack](#slack)
 - [Obsidian](#obsidian)
+- [VS Code](#vs-code)
 - [Cross-Platform Comparison](#cross-platform-comparison)
-- [Common Pain Points](#common-pain-points-across-all-three)
+- [Common Pain Points](#common-pain-points-across-all-four)
 - [Recommendations for Skrib](#recommendations-for-skrib)
 - [Sources](#sources)
 
@@ -261,34 +262,200 @@ Limitations: no dependency resolution, no load ordering, no event bus between pl
 
 ---
 
-## Cross-Platform Comparison
+## VS Code
 
-| | Discord | Slack | Obsidian | Skrib (current) |
-|---|---|---|---|---|
-| **Plugin runs** | External server | External or Slack-hosted | In-process (same JS context) | In-process (same Python process) |
-| **Communication** | WebSocket + HTTP | HTTP + Socket Mode | Direct function calls | Namespaced event bus + HTTP routes |
-| **UI system** | Components v2 | Block Kit | Commands, views, editor extensions | Manifest-declared frontend JS |
-| **Manifest** | Developer Portal | `manifest.yaml` (declarative) | `manifest.json` (simple) | `manifest.json` |
-| **Database** | BYO | Built-in Datastores | File-based `data.json` | Isolated SQLite per plugin |
-| **Sandboxing** | Iframes for Activities | Deno sandbox; Electron sandbox | None | None (planned Phase 5) |
-| **Auto-cleanup** | N/A (external) | N/A (external) | Yes (`register*` pattern) | No |
-| **Inter-plugin comms** | N/A (independent) | N/A (independent) | Unofficial hacks | Bus event subscriptions |
-| **Core as plugins** | No | No | Yes | Yes (`room-type-chat`, `room-type-todo`) |
-| **Permission enforcement** | OAuth scopes + intents | OAuth scopes per API method | None | Declared but not enforced |
+### Architecture
+
+VS Code extensions run in a **dedicated Node.js process** called the **Extension Host**, separate from the main editor UI process. This is the defining architectural decision — extensions never have direct access to the DOM or the main thread. Communication between the Extension Host and the renderer uses a bidirectional RPC protocol: the renderer exposes `MainThread*` actors, and the Extension Host exposes `ExtHost*` actors.
+
+This process isolation means a misbehaving extension cannot freeze the editor. Users can always open, type, and save files regardless of what extensions are doing. VS Code also loads extensions **lazily** — extensions that aren't needed during a session consume zero memory.
+
+There are multiple Extension Host types for different contexts:
+- **Local Extension Host** — Node.js process on the local machine
+- **Remote Extension Host** — Runs on a remote machine (SSH, containers, WSL)
+- **Web Extension Host** — Runs in the browser (for vscode.dev / github.dev), restricted to browser APIs only
+
+### Registration and Installation
+
+- Extensions are packaged as `.vsix` files using the `vsce` CLI tool.
+- Published to the [Visual Studio Marketplace](https://marketplace.visualstudio.com/) under a **publisher** identity (Microsoft or Personal Azure DevOps account).
+- Installation is one-click from the Marketplace or via `code --install-extension`.
+- Publishing is **immediate** — no review queue. Extensions appear in search within minutes.
+- Post-publish, automated malware scanning runs on all incoming packages. If malware is detected, the extension is blocked immediately.
+- Since VS Code 1.97, first-time installs from third-party publishers show a **trust confirmation dialog**.
+
+### Extension Manifest (`package.json`)
+
+The `package.json` serves as the extension manifest, mixing standard Node.js fields with VS Code-specific fields:
+
+- `activationEvents` — When to load the extension (lazy activation)
+- `contributes` — Static declarations of what the extension adds (contribution points)
+- `extensionDependencies` — Other extensions this one depends on
+- `extensionKind` — Whether it runs in the UI process or workspace process (relevant for remote dev)
+
+### Extension Points
+
+VS Code uses two complementary systems:
+
+**Contribution Points (Declarative, in `package.json`):**
+
+| Contribution | Purpose |
+|---|---|
+| `commands` | Register Command Palette actions |
+| `menus` | Context menus, editor title bar, SCM title, etc. |
+| `keybindings` | Keyboard shortcuts |
+| `views` | Custom panels in sidebar, panel area |
+| `viewsContainers` | New sidebar/panel containers |
+| `languages` | Language declarations (ID, extensions, aliases) |
+| `grammars` | TextMate grammars for syntax highlighting |
+| `themes` | Color themes and icon themes |
+| `snippets` | Code snippets |
+| `debuggers` | Debug adapter configurations |
+| `taskDefinitions` | Custom task types |
+| `jsonValidation` | JSON schema associations |
+| `configuration` | Settings entries in the Settings UI |
+| `walkthroughs` | Getting started walkthroughs |
+
+**Programmatic API (in `activate()`):**
+
+| API Namespace | Purpose |
+|---|---|
+| `vscode.languages.*` | Hovers, completions, diagnostics, CodeLens, formatting, go-to-definition |
+| `vscode.window.*` | Editors, terminals, notifications, quick picks, input boxes, status bar |
+| `vscode.workspace.*` | File system, configuration, text documents, workspace folders |
+| `vscode.commands.*` | Register and execute commands |
+| `vscode.debug.*` | Debug sessions and breakpoints |
+| `vscode.tests.*` | Test discovery and execution |
+| `vscode.authentication.*` | Authentication providers |
+| `vscode.comments.*` | Comment threads (used by PR extensions) |
+
+**Webviews** provide fully custom HTML/CSS/JS UI panels, rendered in sandboxed iframes with Content Security Policy enforcement. Communication between the webview and extension uses message passing (`postMessage`/`onDidReceiveMessage`). A **Webview UI Toolkit** provides VS Code-native web components.
+
+### Lifecycle
+
+```
+Installed → Inactive → Activating → Active → Deactivating → Inactive
+```
+
+| Hook | When | Purpose |
+|------|------|---------|
+| `activate(context)` | Activation event fires | Register capabilities, initialize state |
+| `deactivate()` | Extension disabled or VS Code shuts down | Clean up resources |
+
+**Activation Events** control lazy loading:
+
+- `onCommand:myExtension.doThing` — When a specific command is invoked
+- `onLanguage:python` — When a file of that language is opened
+- `onView:myCustomView` — When a specific view becomes visible
+- `onFileSystem:myScheme` — When a file with a custom URI scheme is opened
+- `onStartupFinished` — After VS Code has started (non-blocking)
+- `*` — Activate immediately on startup (discouraged)
+
+Since VS Code 1.74.0, commands declared in `contributes.commands` auto-generate activation events — explicit `onCommand` entries are no longer required.
+
+**Cleanup:** The `activate()` function receives an `ExtensionContext` with a `subscriptions` array. Anything pushed into `subscriptions` (event listeners, disposables) is automatically disposed when the extension deactivates. This is similar to Obsidian's `register*` pattern.
+
+```typescript
+export function activate(context: vscode.ExtensionContext) {
+    // Auto-disposed on deactivate:
+    context.subscriptions.push(
+        vscode.commands.registerCommand('myExt.hello', () => { ... }),
+        vscode.languages.registerHoverProvider('javascript', myProvider),
+        vscode.window.onDidChangeActiveTextEditor(handler)
+    );
+}
+```
+
+### Permissions and Sandboxing
+
+**The Extension Host has the same permissions as VS Code itself.** Extensions can:
+
+- Read and write files anywhere on the filesystem
+- Make arbitrary network requests
+- Spawn child processes and system commands
+- Modify workspace settings
+- Access environment variables and credentials
+
+There is **no API-level permission system**. Unlike Android, Chrome extensions, or mobile app stores, VS Code does not require extensions to declare or request access to specific capabilities. Any extension can call any API.
+
+**What is isolated:**
+
+- Extensions cannot access the DOM — all UI goes through the VS Code API or sandboxed webviews
+- Extensions run in a separate process from the editor — crashes don't take down the UI
+- Webviews enforce Content Security Policy and have restricted filesystem access via `localResourceRoots`
+- Web extensions (vscode.dev) are restricted to browser-available APIs only
+
+**Marketplace security measures:**
+
+- Automated malware scanning on publish and periodic rescans
+- Publisher trust dialog on first install (since v1.97)
+- Community "Report a concern" link on extension pages
+- Dynamic runtime behavior analysis in sandboxed VMs
+
+### Inter-Extension Communication
+
+VS Code has an **official mechanism** for inter-extension APIs:
+
+1. **Exporting an API:** Return an object from `activate()` — it becomes the extension's public API surface.
+2. **Consuming an API:** Declare `extensionDependencies` in `package.json`, then use `vscode.extensions.getExtension('publisher.extensionId')?.exports` to access it.
+3. **Dependency resolution:** `extensionDependencies` ensures the dependency activates first.
+4. **Commands as loose coupling:** Any extension can invoke any other extension's commands via `vscode.commands.executeCommand()` — no dependency declaration needed.
+
+**Limitation:** API sharing only works between extensions running in the same Extension Host. UI extensions and Workspace extensions (in remote scenarios) cannot share APIs directly — they must use commands instead.
+
+### What Works Well
+
+- **Process isolation** — Extensions can't crash the editor. The UI stays responsive regardless of extension behavior. This is a stronger guarantee than Obsidian's in-process model.
+- **Lazy activation** — Extensions are loaded only when needed, keeping startup fast. A user with 50 installed extensions may only activate 5 on a given session.
+- **`ExtensionContext.subscriptions` auto-cleanup** — Same pattern as Obsidian's `register*`, preventing resource leaks.
+- **Rich, typed API surface** — Comprehensive TypeScript definitions. Language features, UI, debugging, testing, SCM, and authentication all have dedicated API namespaces.
+- **Contribution points** — Declarative JSON for static UI (menus, keybindings, views) means extensions integrate consistently without imperative DOM manipulation.
+- **Official inter-extension API** — First-class dependency declaration and API export, unlike Obsidian's unofficial hacks.
+- **Instant publishing** — No review queue. Publish and it's live within minutes.
+- **Massive ecosystem** — 50,000+ extensions. Abundant reference implementations for any pattern.
+- **Remote/web extension support** — Extensions can run on remote machines or in browsers without modification (if they follow the API constraints).
+
+### What Doesn't Work Well
+
+- **No permission system** — Extensions get full system access with no granularity. A syntax highlighter has the same privileges as a deployment tool. A [2024 research paper](https://arxiv.org/html/2411.07479v1) found widespread data exposure risks in the ecosystem. There's been a [long-standing feature request](https://github.com/microsoft/vscode/issues/52116) (since 2018) for permission sandboxing that remains unimplemented.
+- **Webview limitations** — Custom UI requires webviews (sandboxed iframes), which have no control over panel size/position, suffer from state management complexity, and carry performance/accessibility costs. The official guidance is "only use webviews if you absolutely need them."
+- **No UI primitives beyond contribution points** — If your UI doesn't fit into the predefined contribution points (views, menus, status bar), your only option is a webview. There's no component system like Discord's Components v2 or Slack's Block Kit.
+- **Security relies on trust, not enforcement** — Malware scanning catches known patterns, but a malicious extension that passes the scan has full system access. Reporting mechanisms exist but are hard to find.
+- **Remote/web extension split** — Extensions must handle running in local, remote, or web contexts. API availability differs across contexts, creating complexity for extension authors who want broad compatibility.
+- **Extension conflicts** — No formal mechanism for detecting or preventing conflicts between extensions that modify the same features.
 
 ---
 
-## Common Pain Points Across All Three
+## Cross-Platform Comparison
 
-1. **Breaking changes without migration paths** — All three platforms frustrate developers with API changes that require rewrites.
+| | Discord | Slack | Obsidian | VS Code | Skrib (current) |
+|---|---|---|---|---|---|
+| **Plugin runs** | External server | External or Slack-hosted | In-process (same JS context) | Separate process (Extension Host) | In-process (same Python process) |
+| **Communication** | WebSocket + HTTP | HTTP + Socket Mode | Direct function calls | RPC over IPC | Namespaced event bus + HTTP routes |
+| **UI system** | Components v2 | Block Kit | Commands, views, editor extensions | Contribution points + Webviews | Manifest-declared frontend JS |
+| **Manifest** | Developer Portal | `manifest.yaml` (declarative) | `manifest.json` (simple) | `package.json` (declarative) | `manifest.json` |
+| **Database** | BYO | Built-in Datastores | File-based `data.json` | `globalState`/`workspaceState` (key-value) | Isolated SQLite per plugin |
+| **Sandboxing** | Iframes for Activities | Deno sandbox; Electron sandbox | None | Process isolation (no DOM access); Webviews sandboxed | None (planned Phase 5) |
+| **Auto-cleanup** | N/A (external) | N/A (external) | Yes (`register*` pattern) | Yes (`subscriptions` / `Disposable`) | No |
+| **Inter-plugin comms** | N/A (independent) | N/A (independent) | Unofficial hacks | Official (`activate()` exports + `extensionDependencies`) | Bus event subscriptions |
+| **Core as plugins** | No | No | Yes | Partially (built-in extensions) | Yes (`room-type-chat`, `room-type-todo`) |
+| **Permission enforcement** | OAuth scopes + intents | OAuth scopes per API method | None | None (full system access) | Declared but not enforced |
 
-2. **Opaque review/approval processes** — Discord verification, Slack marketplace, Obsidian's single reviewer — all have complaints about unclear criteria and slow turnaround.
+---
 
-3. **Documentation gaps** — Even the best-documented platform (Slack) has gaps. Obsidian developers rely on reading other plugins' source code.
+## Common Pain Points Across All Four
+
+1. **Breaking changes without migration paths** — All four platforms frustrate developers with API changes that require rewrites. VS Code's rapid release cycle (monthly) means APIs can shift frequently, though deprecation warnings are generally provided.
+
+2. **Opaque review/approval processes** — Discord verification, Slack marketplace, and Obsidian's single reviewer all have complaints about unclear criteria and slow turnaround. VS Code avoids this with instant publishing but trades it for weaker quality control.
+
+3. **Documentation gaps** — Even the best-documented platform (Slack) has gaps. Obsidian developers rely on reading other plugins' source code. VS Code has extensive official docs but complex patterns (multi-root workspaces, remote extensions) are under-documented.
 
 4. **Plugin abandonment** — No platform has a good answer for when maintainers disappear and users depend on the plugin.
 
-5. **Inter-plugin communication** — Obsidian has no official mechanism. Discord and Slack don't need it (apps are independent services), but their users still want integrations between apps.
+5. **Inter-plugin communication** — Obsidian has no official mechanism. Discord and Slack don't need it (apps are independent services). VS Code has the best story here with official API exports and `extensionDependencies`, but it breaks down across remote/local boundaries.
+
+6. **No permission granularity** — Obsidian and VS Code both give extensions full system access. Discord and Slack enforce scopes, but their models are complex. No platform has found the sweet spot between security and developer friction.
 
 ---
 
@@ -296,13 +463,13 @@ Limitations: no dependency resolution, no load ordering, no event bus between pl
 
 ### What Skrib Already Does Well
 
-Skrib's current plugin system has strong foundations drawing from patterns across all three platforms:
+Skrib's current plugin system has strong foundations drawing from patterns across all four platforms:
 
-- **Isolated databases per plugin** — Better than Obsidian's single `data.json`, comparable to Slack's Datastores.
-- **Namespaced event bus** — Cleaner than Obsidian's shared `app` object, similar to Discord's gateway.
-- **Core features as plugins** (`room-type-chat`, `room-type-todo`) — The Obsidian pattern that keeps the API honest.
-- **Manifest-driven config** — Aligns with Slack's manifest-as-source-of-truth approach.
-- **5-phase decoupling roadmap** — Heading toward Slack's model where plugins can be external processes.
+- **Isolated databases per plugin** — Better than Obsidian's single `data.json` or VS Code's key-value `globalState`, comparable to Slack's Datastores.
+- **Namespaced event bus** — Cleaner than Obsidian's shared `app` object, similar to Discord's gateway and VS Code's RPC model.
+- **Core features as plugins** (`room-type-chat`, `room-type-todo`) — The Obsidian pattern that keeps the API honest. VS Code does this partially with built-in extensions.
+- **Manifest-driven config** — Aligns with Slack's manifest-as-source-of-truth and VS Code's declarative `package.json` contribution points.
+- **5-phase decoupling roadmap** — Heading toward the process isolation that VS Code already achieves with Extension Hosts, and Slack's model where plugins can be external processes.
 
 ### What to Adopt
 
@@ -322,7 +489,7 @@ self.register_event("core:room_deleted", self.handle_delete)
 # Framework cleans up automatically on disable/shutdown
 ```
 
-This eliminates an entire class of resource leak bugs. Obsidian proves this pattern works at scale across 2000+ plugins.
+This eliminates an entire class of resource leak bugs. Both Obsidian (2000+ plugins) and VS Code (50,000+ extensions) prove this pattern works at scale — VS Code's `Disposable`/`subscriptions` pattern is essentially the same idea.
 
 #### 2. Slack's Declarative Permission Enforcement
 
@@ -386,19 +553,22 @@ Skrib's WebSocket bus already serves this role, but explicitly supporting a "dev
 
 - **Slack's scope-creep complexity** — Hundreds of scopes, multiple auth flows, and a confusing traditional-vs-new-platform split. Keep Skrib's permission model to a small, enforceable set of capabilities.
 
-- **Over-investing in marketplace/review infrastructure now** — All three platforms struggle with this. Since Skrib is early and plugins are first-party, don't build review processes yet.
+- **VS Code's "no permissions" model** — VS Code proves that a great developer experience can coexist with zero permission enforcement — but only because it's a single-user desktop app. Skrib is a multi-user server. Don't follow VS Code's lead here.
+
+- **Over-investing in marketplace/review infrastructure now** — All four platforms struggle with this. Since Skrib is early and plugins are first-party, don't build review processes yet. VS Code's instant-publish model is tempting but only works with automated malware scanning at scale.
 
 ### Recommended Priority Order
 
 | # | Action | Effort | Impact | Inspired By |
 |---|--------|--------|--------|-------------|
-| 1 | Auto-cleanup registration pattern | Low | Immediate reliability win | Obsidian |
+| 1 | Auto-cleanup registration pattern | Low | Immediate reliability win | Obsidian, VS Code |
 | 2 | Enforce manifest permissions on PluginBus | Medium | Security foundation | Slack |
-| 3 | Typed function exports between plugins | Medium | Solves coupling, enables composition | Slack new platform |
-| 4 | Frontend component declaration system | Higher | Safe plugin UI, visual consistency | Discord Components v2, Slack Block Kit |
-| 5 | Dev mode for out-of-process plugin testing | Low | Accelerates Phase 5 | Slack Socket Mode |
+| 3 | Typed function exports between plugins | Medium | Solves coupling, enables composition | Slack new platform, VS Code `activate()` exports |
+| 4 | Frontend component declaration system | Higher | Safe plugin UI, visual consistency | Discord Components v2, Slack Block Kit, VS Code contribution points |
+| 5 | Process isolation for plugins | Medium | Stability + security | VS Code Extension Host |
+| 6 | Dev mode for out-of-process plugin testing | Low | Accelerates Phase 5 | Slack Socket Mode |
 
-These align with the existing Phase 1-2 roadmap in [plugin-plan.md](plugin-plan.md) and would put Skrib's plugin system ahead of Obsidian on security, ahead of Discord on developer ergonomics, and comparable to Slack's new platform on composability — without the complexity overhead.
+These align with the existing Phase 1-2 roadmap in [plugin-plan.md](plugin-plan.md) and would put Skrib's plugin system ahead of Obsidian and VS Code on security (permission enforcement), ahead of Discord on developer ergonomics, and comparable to Slack's new platform on composability — without the complexity overhead. VS Code's Extension Host model validates that process isolation is achievable without sacrificing developer experience, reinforcing the Phase 5 roadmap.
 
 ---
 
@@ -450,3 +620,23 @@ These align with the existing Phase 1-2 roadmap in [plugin-plan.md](plugin-plan.
 - [Security of the Plugins — Obsidian Forum](https://forum.obsidian.md/t/security-of-the-plugins/7544)
 - [Obsidian's Reliance on Plugins — XDA Developers](https://www.xda-developers.com/obsidians-reliance-on-plugins/)
 - [On the Security of Plugins — Standard Notes Blog](https://standardnotes.com/blog/on-the-security-of-plugins)
+
+### VS Code
+
+- [VS Code Extension API — Overview](https://code.visualstudio.com/api)
+- [Extension Anatomy](https://code.visualstudio.com/api/get-started/extension-anatomy)
+- [Extension Capabilities Overview](https://code.visualstudio.com/api/extension-capabilities/overview)
+- [Activation Events Reference](https://code.visualstudio.com/api/references/activation-events)
+- [Contribution Points Reference](https://code.visualstudio.com/api/references/contribution-points)
+- [VS Code API Reference](https://code.visualstudio.com/api/references/vscode-api)
+- [Extension Host](https://code.visualstudio.com/api/advanced-topics/extension-host)
+- [Webview API Guide](https://code.visualstudio.com/api/extension-guides/webview)
+- [Extension Manifest (package.json)](https://code.visualstudio.com/api/references/extension-manifest)
+- [Publishing Extensions](https://code.visualstudio.com/api/working-with-extensions/publishing-extension)
+- [Extension Runtime Security](https://code.visualstudio.com/docs/configure/extensions/extension-runtime-security)
+- [Migrating VS Code to Process Sandboxing — VS Code Blog](https://code.visualstudio.com/blogs/2022/11/28/vscode-sandbox)
+- [Our Approach to Extensibility — VS Code Docs](https://vscode-docs.readthedocs.io/en/stable/extensions/our-approach/)
+- [Extension System — DeepWiki](https://deepwiki.com/microsoft/vscode/3-product-configuration-and-policy)
+- [Extension Permissions / Security Sandboxing Proposal — GitHub Issue #52116](https://github.com/microsoft/vscode/issues/52116)
+- [Developers Are Victims Too: Analysis of the VS Code Extension Ecosystem — arXiv](https://arxiv.org/html/2411.07479v1)
+- [Security and Trust in Visual Studio Marketplace — Microsoft Developer Blog](https://developer.microsoft.com/blog/security-and-trust-in-visual-studio-marketplace)
