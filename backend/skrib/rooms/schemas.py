@@ -64,24 +64,6 @@ class InviteRequest(BaseModel):
     username: str
 
 
-# Legacy schemas - kept for backwards compatibility, can be removed later
-class AddMemberRequest(BaseModel):
-    """Deprecated: use InviteRequest instead."""
-    username: str
-
-
-class AddMemberResponse(BaseModel):
-    """Deprecated: endpoints now return plain dicts."""
-    room_id: str
-    username: str
-
-
-class RemoveMemberResponse(BaseModel):
-    """Deprecated: endpoints now return plain dicts."""
-    room_id: str
-    username: str
-
-
 class StoreRoomKeyRequest(BaseModel):
     username: str
     encrypted_key: str
@@ -123,6 +105,8 @@ class RoomUpdateRequest(BaseModel):
     """Request body for updating room properties via PATCH."""
     topic: Optional[str] = None
     visibility: Optional[Literal['private', 'public']] = None
+    folder_id: Optional[str] = None
+    sort_position: Optional[float] = None
 
 
 class MemberUpdateRequest(BaseModel):
@@ -151,14 +135,3 @@ class JoinRequestInfo(BaseModel):
 class JoinRequestAction(BaseModel):
     action: Literal['approve', 'deny']
 
-
-# Legacy schemas - deprecated
-class SetTopicRequest(BaseModel):
-    """Deprecated: use RoomUpdateRequest with PATCH instead."""
-    topic: str
-
-
-class SetRoomRoleRequest(BaseModel):
-    """Deprecated: use MemberUpdateRequest with PATCH instead."""
-    username: str
-    role: Literal['op', 'voice', 'member']

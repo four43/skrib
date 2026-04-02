@@ -137,7 +137,7 @@ test.describe('App Page', () => {
         }),
       );
 
-      await page.route('**/api/room-folders', route =>
+      await page.route('**/api/rooms/folders', route =>
         route.fulfill({
           status: 200,
           contentType: 'application/json',

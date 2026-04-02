@@ -9,6 +9,21 @@ let currentRoom = null;
 let userRole = null; // User's role in this room
 let originalTopic = null; // Track original topic to detect changes
 
+function showToast(message) {
+    const container = document.getElementById('toast-container');
+    if (!container) return;
+
+    const toast = document.createElement('div');
+    toast.className = 'toast toast-error';
+    toast.textContent = message;
+    container.appendChild(toast);
+
+    setTimeout(() => {
+        toast.classList.add('toast-out');
+        toast.addEventListener('animationend', () => toast.remove());
+    }, 4000);
+}
+
 function getDmDisplayName(room) {
     if (!room.is_dm) return `#${room.room_id}`;
     const others = (room.members || [])
@@ -51,7 +66,6 @@ async function checkSession() {
             currentRoomId = urlParams.get('room');
 
             if (!currentRoomId) {
-                alert('No room specified');
                 window.location.href = '/app.html';
                 return;
             }
@@ -76,11 +90,6 @@ async function initializeRoomSettings() {
         });
 
         if (!roomResponse.ok) {
-            if (roomResponse.status === 404) {
-                alert('Room not found');
-            } else {
-                alert('Failed to load room settings');
-            }
             window.location.href = '/app.html';
             return;
         }
@@ -134,7 +143,6 @@ async function initializeRoomSettings() {
 
     } catch (error) {
         console.error('[HTTP] Error initializing room settings:', error);
-        alert('Failed to load room settings');
         window.location.href = '/app.html';
     }
 }
@@ -269,10 +277,11 @@ async function saveTopic() {
             currentRoom.topic = newTopic;
         } else {
             const error = await response.json();
-            console.error('[HTTP] Failed to update topic:', error.detail || 'Unknown error');
+            showToast(error.detail || 'Failed to update topic');
         }
     } catch (error) {
         console.error('[HTTP] Error updating topic:', error);
+        showToast('Failed to update topic');
     }
 }
 
@@ -287,15 +296,14 @@ async function toggleOp(username, makeOp) {
         );
 
         if (response.ok) {
-            alert(`${username} ${makeOp ? 'promoted to' : 'removed from'} op`);
             await reloadRoomData();
         } else {
             const error = await response.json();
-            alert(`Failed to update role: ${error.detail || 'Unknown error'}`);
+            showToast(error.detail || 'Failed to update role');
         }
     } catch (error) {
         console.error('[HTTP] Error updating member role:', error);
-        alert('Failed to update member role');
+        showToast('Failed to update role');
     }
 }
 
@@ -314,15 +322,14 @@ async function removeMember(username) {
         );
 
         if (response.ok) {
-            alert(`${username} removed from room`);
             await reloadRoomData();
         } else {
             const error = await response.json();
-            alert(`Failed to remove member: ${error.detail || 'Unknown error'}`);
+            showToast(error.detail || 'Failed to remove member');
         }
     } catch (error) {
         console.error('[HTTP] Error removing member:', error);
-        alert('Failed to remove member');
+        showToast('Failed to remove member');
     }
 }
 
@@ -344,11 +351,11 @@ async function leaveRoom() {
             window.location.href = '/app.html';
         } else {
             const error = await response.json();
-            alert(`Failed to leave room: ${error.detail || 'Unknown error'}`);
+            showToast(error.detail || 'Failed to leave room');
         }
     } catch (error) {
         console.error('[HTTP] Error leaving room:', error);
-        alert('Failed to leave room');
+        showToast('Failed to leave room');
     }
 }
 
@@ -364,15 +371,14 @@ async function deleteRoom() {
         });
 
         if (response.ok) {
-            alert('Room deleted successfully');
             window.location.href = '/app.html';
         } else {
             const error = await response.json();
-            alert(`Failed to delete room: ${error.detail || 'Unknown error'}`);
+            showToast(error.detail || 'Failed to delete room');
         }
     } catch (error) {
         console.error('[HTTP] Error deleting room:', error);
-        alert('Failed to delete room');
+        showToast('Failed to delete room');
     }
 }
 
@@ -450,11 +456,12 @@ async function saveVisibility() {
             currentRoom.visibility = newVisibility;
         } else {
             const error = await response.json();
-            alert(`Failed to update visibility: ${error.detail || 'Unknown error'}`);
+            showToast(error.detail || 'Failed to update visibility');
             select.value = currentRoom.visibility || 'private';
         }
     } catch (error) {
         console.error('[HTTP] Error updating visibility:', error);
+        showToast('Failed to update visibility');
         select.value = currentRoom.visibility || 'private';
     }
 }
@@ -555,7 +562,7 @@ async function handleJoinRequest(username, action) {
             await reloadRoomData();
         } else {
             const error = await response.json();
-            alert(`Failed to ${action} request: ${error.detail || 'Unknown error'}`);
+            showToast(error.detail || `Failed to ${action} request`);
         }
     } catch (error) {
         console.error(`[HTTP] Error ${action}ing join request:`, error);

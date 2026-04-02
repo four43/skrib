@@ -33,6 +33,7 @@ from .services import (
     store_room_key,
     get_room_keys,
     set_notify_level,
+    get_notify_level,
     set_topic,
     get_room_info,
     set_room_role,
@@ -49,8 +50,31 @@ from ..dependencies import require_auth
 from ..permissions import check_room_access as _check_room_access, get_global_role as _get_global_role, require_room_op_or_global_mod as _require_room_op_or_global_mod
 from ..database import get_setting
 from ..plugins import registry
+from ..room_folders import services as folder_services
+from ..room_folders.schemas import (
+    CreateFolderRequest,
+    CreateFolderResponse,
+    FolderTreeResponse,
+    FolderInfo,
+    ReorderRequest,
+    RoomPosition,
+    UpdateFolderRequest,
+)
 
 router = APIRouter(prefix="/rooms", tags=["rooms"])
+
+
+
+def _require_admin_or_mod(username: str):
+    """Raise 403 unless user is admin or moderator."""
+    role = _get_global_role(username)
+    if role not in ('admin', 'moderator'):
+        raise HTTPException(status_code=403, detail="Admin or moderator required")
+
+
+async def _broadcast_folder_update():
+    """Broadcast folder update to all connected users."""
+    await bus.notify_all_users({"type": "room:folders_updated"})
 
 
 @router.get("", response_model=list[RoomInfo])
@@ -137,7 +161,7 @@ async def create_dm(
                 (target,)
             )
             if not cursor.fetchone():
-                raise HTTPException(status_code=404, detail=f"User not found: {target}")
+                raise HTTPException(status_code=404, detail="One or more users not found")
 
     room = create_or_get_dm(username, targets, room_type=room_type)
 
@@ -156,7 +180,7 @@ async def search_rooms_endpoint(
     """Search for public rooms by name. Returns rooms the user is not already a member of."""
     if not q.strip():
         return []
-    results = search_rooms(q.strip().lower(), username)
+    results = search_rooms(q.strip().lower()[:100], username)
     return [RoomSearchResult(**r) for r in results]
 
 
@@ -171,12 +195,110 @@ async def check_room_name(
     return check_room_name_available(name.strip().lower())
 
 
+# ── Room Folders (under /rooms/folders) ──────────────────────────────────
+# These MUST be defined before any {room_id} path parameters to avoid
+# /rooms/folders being matched as room_id="folders".
+
+
+@router.get("/folders", response_model=FolderTreeResponse)
+async def get_folder_tree(username: str = Depends(require_auth)):
+    """Get the full folder tree and room positions."""
+    folders = folder_services.get_all_folders()
+    room_positions = folder_services.get_room_positions()
+    return FolderTreeResponse(
+        folders=[FolderInfo(**f) for f in folders],
+        room_positions=[RoomPosition(**r) for r in room_positions],
+    )
+
+
+@router.post("/folders", response_model=CreateFolderResponse)
+async def create_folder(
+    request: CreateFolderRequest,
+    username: str = Depends(require_auth),
+):
+    _require_admin_or_mod(username)
+    try:
+        folder_id = folder_services.create_folder(
+            name=request.name,
+            parent_folder_id=request.parent_folder_id,
+            created_by=username,
+        )
+    except ValueError as e:
+        raise HTTPException(status_code=400, detail=str(e))
+
+    await _broadcast_folder_update()
+    return CreateFolderResponse(folder_id=folder_id)
+
+
+@router.patch("/folders/{folder_id}")
+async def update_folder(
+    folder_id: str,
+    request: UpdateFolderRequest,
+    username: str = Depends(require_auth),
+):
+    _require_admin_or_mod(username)
+
+    kwargs = {}
+    if request.name is not None:
+        kwargs['name'] = request.name
+    if request.position is not None:
+        kwargs['position'] = request.position
+    raw = request.model_dump(exclude_unset=True)
+    if 'parent_folder_id' in raw:
+        kwargs['parent_folder_id'] = request.parent_folder_id
+    else:
+        kwargs['parent_folder_id'] = folder_services._SENTINEL
+
+    try:
+        found = folder_services.update_folder(folder_id, **kwargs)
+    except ValueError as e:
+        raise HTTPException(status_code=400, detail=str(e))
+
+    if not found:
+        raise HTTPException(status_code=404, detail="Folder not found")
+
+    await _broadcast_folder_update()
+    return {"ok": True}
+
+
+@router.delete("/folders/{folder_id}")
+async def delete_folder(
+    folder_id: str,
+    username: str = Depends(require_auth),
+):
+    _require_admin_or_mod(username)
+    if not folder_services.delete_folder(folder_id):
+        raise HTTPException(status_code=404, detail="Folder not found")
+
+    await _broadcast_folder_update()
+    return {"ok": True}
+
+
+@router.post("/folders/reorder")
+async def reorder(
+    request: ReorderRequest,
+    username: str = Depends(require_auth),
+):
+    _require_admin_or_mod(username)
+    folder_dicts = [f.model_dump() for f in request.folders]
+    room_dicts = [r.model_dump() for r in request.rooms]
+    try:
+        folder_services.batch_reorder(folder_dicts, room_dicts)
+    except ValueError as e:
+        raise HTTPException(status_code=400, detail=str(e))
+
+    await _broadcast_folder_update()
+    return {"ok": True}
+
+
 @router.delete("/{room_id}", response_model=DeleteRoomResponse)
 async def delete_room_endpoint(
     room_id: str,
     username: str = Depends(require_auth)
 ):
     """Delete a chat room and all associated data. Requires room owner or global admin."""
+    if is_dm(room_id):
+        raise HTTPException(status_code=400, detail="Cannot delete a DM")
     room_role = get_room_role(room_id, username)
     global_role = _get_global_role(username)
     if room_role != 'owner' and global_role != 'admin':
@@ -207,11 +329,13 @@ async def add_member(
 ):
     """Add a member to a room."""
     _check_room_access(room_id, username)
+    if not is_dm(room_id):
+        _require_room_op_or_global_mod(room_id, username)
 
     result = add_room_member(room_id, request.username)
 
     if result['status'] == 'user_not_found':
-        raise HTTPException(status_code=404, detail="User not found")
+        raise HTTPException(status_code=404, detail="User not found or does not exist")
     if result['status'] == 'room_not_found':
         raise HTTPException(status_code=404, detail="Room not found")
     if result['status'] == 'already_member':
@@ -247,7 +371,7 @@ async def remove_member(
     result = remove_room_member(room_id, target_username)
 
     if result['status'] == 'not_member':
-        raise HTTPException(status_code=400, detail="User is not a member of this room")
+        raise HTTPException(status_code=404, detail="User is not a member of this room")
     if result['status'] == 'room_not_found':
         raise HTTPException(status_code=404, detail="Room not found")
 
@@ -283,12 +407,16 @@ async def update_member(
             raise HTTPException(status_code=403, detail="You can only change your own notification settings")
         set_notify_level(room_id, target_username, updates.notify_level)
 
-    # Update room_role (requires op/mod/admin)
+    # Update room_role (requires op/mod/admin, not allowed in DMs)
     if updates.room_role is not None:
+        if is_dm(room_id):
+            raise HTTPException(status_code=400, detail="Cannot change roles in a DM")
         _require_room_op_or_global_mod(room_id, username)
         result = set_room_role(room_id, target_username, updates.room_role)
-        if result['status'] != 'ok':
-            raise HTTPException(status_code=400, detail="Failed to update role")
+        if result['status'] == 'not_member':
+            raise HTTPException(status_code=404, detail="User is not a member of this room")
+        if result['status'] == 'room_not_found':
+            raise HTTPException(status_code=404, detail="Room not found")
 
         # Notify room subscribers that membership changed
         await bus.broadcast_to_room(room_id, {
@@ -307,6 +435,14 @@ async def store_room_key_endpoint(
 ):
     """Store an encrypted room key for a user."""
     _check_room_access(room_id, username)
+
+    # Storing keys for another user requires op/owner/admin (e.g. during /invite)
+    if request.username != username:
+        _require_room_op_or_global_mod(room_id, username)
+        # Target must be a room member
+        if get_room_role(room_id, request.username) is None:
+            raise HTTPException(status_code=403, detail="Target user is not a member of this room")
+
     store_room_key(room_id, request.username, request.key_epoch, request.encrypted_key)
     return {}
 
@@ -407,7 +543,6 @@ async def get_member_detail(
 ):
     """Get a single member's details (role, notify_level) in a room."""
     _check_room_access(room_id, username)
-    from .services import get_room_role, get_notify_level
     role = get_room_role(room_id, target_username)
     if role is None:
         raise HTTPException(status_code=404, detail="User is not a member of this room")
@@ -442,33 +577,55 @@ async def update_room(
     updates: RoomUpdateRequest,
     username: str = Depends(require_auth),
 ):
-    """Update room properties (e.g., topic, visibility). Requires room owner/op or global admin."""
-    _check_room_access(room_id, username)
-    _require_room_op_or_global_mod(room_id, username)
+    """Update room properties (e.g., topic, visibility, folder).
 
-    if updates.topic is not None:
-        if not set_topic(room_id, updates.topic):
-            raise HTTPException(status_code=404, detail="Room not found")
+    Topic/visibility require room membership + op/owner/admin.
+    Folder placement requires global admin/moderator (no membership needed).
+    """
+    if not room_exists(room_id):
+        raise HTTPException(status_code=404, detail="Room not found")
 
-        await bus.broadcast_to_room(room_id, {
-            "type": "room:topic",
-            "room_id": room_id,
-            "topic": updates.topic,
-            "set_by": username,
-        })
+    raw = updates.model_dump(exclude_unset=True)
+    has_room_fields = updates.topic is not None or updates.visibility is not None
+    has_folder_fields = 'folder_id' in raw or 'sort_position' in raw
 
-    if updates.visibility is not None:
-        if is_dm(room_id):
-            raise HTTPException(status_code=400, detail="Cannot change visibility of a DM")
-        if not set_visibility(room_id, updates.visibility):
-            raise HTTPException(status_code=404, detail="Room not found")
+    # Topic/visibility changes need membership + op
+    if has_room_fields:
+        _check_room_access(room_id, username)
+        _require_room_op_or_global_mod(room_id, username)
 
-        await bus.broadcast_to_room(room_id, {
-            "type": "room:visibility_changed",
-            "room_id": room_id,
-            "visibility": updates.visibility,
-        })
+        if updates.topic is not None:
+            if not set_topic(room_id, updates.topic):
+                raise HTTPException(status_code=404, detail="Room not found")
+
+            await bus.broadcast_to_room(room_id, {
+                "type": "room:topic",
+                "room_id": room_id,
+                "topic": updates.topic,
+                "set_by": username,
+            })
+
+        if updates.visibility is not None:
+            if is_dm(room_id):
+                raise HTTPException(status_code=400, detail="Cannot change visibility of a DM")
+            if not set_visibility(room_id, updates.visibility):
+                raise HTTPException(status_code=404, detail="Room not found")
+
+            await bus.broadcast_to_room(room_id, {
+                "type": "room:visibility_changed",
+                "room_id": room_id,
+                "visibility": updates.visibility,
+            })
+
+    # Folder placement requires admin/mod (no membership needed)
+    if has_folder_fields:
+        _require_admin_or_mod(username)
+        folder_id = raw.get('folder_id')  # may be None (unfile)
+        sort_position = raw.get('sort_position', 0) or 0
+        try:
+            folder_services.move_room(room_id, folder_id, sort_position)
+        except ValueError as e:
+            raise HTTPException(status_code=400, detail=str(e))
+        await _broadcast_folder_update()
 
     return {}
-
-

@@ -256,11 +256,9 @@ test.describe('Room deletion', () => {
         await userA.page.locator('#room-content-name').click();
         await userA.page.waitForURL('**/room-settings.html**');
 
-        // Accept both confirm and success alert dialogs
-        userA.page.once('dialog', dialog => dialog.accept()); // confirm
+        // Accept confirm dialog, then wait for redirect
+        userA.page.once('dialog', dialog => dialog.accept());
         await userA.page.locator('#delete-room-btn').click();
-        // After confirm, success alert fires, then redirect
-        await userA.page.waitForEvent('dialog').then(d => d.accept()); // success alert
         await userA.page.waitForURL('**/app.html**');
 
         // Room disappears from User A's room list

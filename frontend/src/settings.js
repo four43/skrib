@@ -118,11 +118,11 @@ async function loadUserSettings() {
             }
             const statusEmojiInput = document.getElementById('user-status-emoji');
             if (statusEmojiInput) {
-                statusEmojiInput.value = data.status_emoji || '';
+                statusEmojiInput.value = data.status?.emoji || '';
             }
             const statusTextInput = document.getElementById('user-status-text');
             if (statusTextInput) {
-                statusTextInput.value = data.status_text || '';
+                statusTextInput.value = data.status?.text || '';
             }
             updateStatusEmojiDisplay();
             const colorInput = document.getElementById('user-color');

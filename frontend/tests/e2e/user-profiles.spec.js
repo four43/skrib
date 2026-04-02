@@ -71,8 +71,8 @@ test.describe('User profiles - Status message', () => {
             headers: { 'Authorization': `Bearer ${admin.sessionToken}` },
         });
         const data = await resp.json();
-        expect(data.status_emoji).toBe('🎉');
-        expect(data.status_text).toBe('Celebrating!');
+        expect(data.status.emoji).toBe('🎉');
+        expect(data.status.text).toBe('Celebrating!');
     });
 
     test('user clears status message', async ({ threeUsers, baseURL }) => {
@@ -107,8 +107,8 @@ test.describe('User profiles - Status message', () => {
             headers: { 'Authorization': `Bearer ${admin.sessionToken}` },
         });
         const data = await resp.json();
-        expect(data.status_emoji).toBeFalsy();
-        expect(data.status_text).toBeFalsy();
+        expect(data.status.emoji).toBeFalsy();
+        expect(data.status.text).toBeFalsy();
     });
 
     test('status message visible in member list', async ({ threeUsers, baseURL }) => {
@@ -151,13 +151,14 @@ test.describe('User profiles - Online presence', () => {
     test('bulk presence endpoint returns connected users', async ({ threeUsers, baseURL }) => {
         const { admin } = threeUsers;
 
-        const resp = await admin.page.request.get(`${baseURL}/api/users/presence`, {
+        const resp = await admin.page.request.get(`${baseURL}/api/users?include=presence`, {
             headers: { 'Authorization': `Bearer ${admin.sessionToken}` },
         });
         expect(resp.ok()).toBeTruthy();
-        const data = await resp.json();
+        const users = await resp.json();
         // Admin should be connected
-        expect(data[admin.username]).toBe(true);
+        const me = users.find(u => u.username === admin.username);
+        expect(me.connected).toBe(true);
     });
 
     test('member list shows online indicator for connected users', async ({ threeUsers }) => {
@@ -272,5 +273,56 @@ test.describe('User profiles - Profile modal', () => {
         expect(resp.ok()).toBeTruthy();
         const data = await resp.json();
         expect(data.username).toBe(admin.username);
+    });
+});
+
+// ── Tests: Display Name Colors ────────────────────────────────────────
+
+test.describe('User profiles - Display name colors', () => {
+
+    test('message usernames render with the correct user color', async ({ threeUsers, baseURL }) => {
+        const { admin: userA, userB } = threeUsers;
+        await userA.page.waitForLoadState('networkidle');
+
+        // Set distinct colors for both users
+        await userA.page.request.patch(`${baseURL}/api/users/${userA.username}`, {
+            headers: {
+                'Content-Type': 'application/json',
+                'Authorization': `Bearer ${userA.sessionToken}`,
+            },
+            data: { color: '#ff0000' },
+        });
+        await userA.page.request.patch(`${baseURL}/api/users/${userB.username}`, {
+            headers: {
+                'Content-Type': 'application/json',
+                'Authorization': `Bearer ${userA.sessionToken}`,
+            },
+            data: { color: '#00ff00' },
+        });
+
+        // Create room, invite userB, both send a message
+        await createRoom(userA.page, 'color-test');
+        await inviteUser(userA.page, userB.username);
+        await sendCommand(userA.page, 'Hello from A');
+
+        await navigateToRoom(userB.page, 'color-test');
+        await sendCommand(userB.page, 'Hello from B');
+
+        // Wait for both messages to appear on userA's page
+        await userA.page.reload();
+        await userA.page.waitForLoadState('networkidle');
+        await userA.page.locator(`.room-item[data-room-id="color-test"]`).click();
+        await expect(userA.page.locator('#messages')).toContainText('Hello from A');
+        await expect(userA.page.locator('#messages')).toContainText('Hello from B');
+
+        // Check userA's username span has #ff0000 color
+        const userASpan = userA.page.locator(`#messages .username[title="${userA.username}"]`).first();
+        const userAColor = await userASpan.evaluate(el => el.style.color);
+        expect(userAColor).toBe('rgb(255, 0, 0)');
+
+        // Check userB's username span has #00ff00 color
+        const userBSpan = userA.page.locator(`#messages .username[title="${userB.username}"]`).first();
+        const userBColor = await userBSpan.evaluate(el => el.style.color);
+        expect(userBColor).toBe('rgb(0, 255, 0)');
     });
 });

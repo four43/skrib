@@ -2,6 +2,17 @@ from pydantic import BaseModel
 from typing import List, Optional, Literal
 
 
+class UserStatus(BaseModel):
+    emoji: Optional[str] = None
+    text: Optional[str] = None
+
+
+class UserApproval(BaseModel):
+    code: Optional[str] = None
+    time: Optional[str] = None
+    by: Optional[str] = None
+
+
 class UserPreferences(BaseModel):
     color: str
     nickname: Optional[str] = None
@@ -47,6 +58,22 @@ class RejectUserRequest(BaseModel):
     approval_code: str
 
 
+class UserDisplayInfo(BaseModel):
+    """Default GET /users response — display metadata only."""
+    username: str
+    nickname: Optional[str] = None
+    color: str
+    status: UserStatus
+
+
+class UserAdminInfo(UserDisplayInfo):
+    """GET /users?detail=admin — includes admin-oriented fields."""
+    role: str
+    account_status: str
+    approval: UserApproval
+    created_at: Optional[str] = None
+
+
 class UserInfo(BaseModel):
     username: str
     role: str
@@ -61,13 +88,12 @@ class UserProfile(BaseModel):
     """Full user profile including preferences."""
     username: str
     role: str
-    status: str
     color: str
+    nickname: Optional[str] = None
+    status: UserStatus
+    # Private fields — only included when viewing own profile
     theme_name: Optional[str] = None
     color_scheme: Optional[str] = None
-    nickname: Optional[str] = None
-    status_emoji: Optional[str] = None
-    status_text: Optional[str] = None
 
 
 class UserUpdateRequest(BaseModel):

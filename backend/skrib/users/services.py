@@ -63,11 +63,63 @@ def update_user_preferences(username: str, color: Optional[str] = None, theme_na
     return True
 
 
-def get_all_user_preferences() -> Dict[str, Dict]:
-    """Get all user preferences as a dict mapping username -> {color, nickname}."""
+def get_all_users_display() -> List[Dict]:
+    """Get display metadata for all active users."""
     with get_db() as conn:
-        cursor = conn.execute("SELECT username, color, nickname, status_emoji, status_text FROM users WHERE status = 'active'")
-        return {row['username']: {'color': row['color'], 'nickname': row['nickname'], 'status_emoji': row['status_emoji'], 'status_text': row['status_text']} for row in cursor}
+        cursor = conn.execute(
+            "SELECT username, nickname, color, status_emoji, status_text FROM users WHERE status = 'active' ORDER BY created_at DESC, username"
+        )
+        return [
+            {
+                'username': row['username'],
+                'nickname': row['nickname'],
+                'color': row['color'],
+                'status': {
+                    'emoji': row['status_emoji'],
+                    'text': row['status_text'],
+                },
+            }
+            for row in cursor
+        ]
+
+
+def get_all_users_admin(account_status: Optional[str] = None) -> List[Dict]:
+    """Get full admin data for users, optionally filtered by account_status."""
+    with get_db() as conn:
+        query = '''
+            SELECT username, nickname, color, status_emoji, status_text,
+                   role, status, approval_code, approved_at, approved_by, created_at
+            FROM users
+        '''
+        params = []
+        if account_status:
+            query += ' WHERE status = ?'
+            params.append(account_status)
+        else:
+            query += " WHERE status = 'active'"
+        query += ' ORDER BY created_at DESC, username'
+
+        cursor = conn.execute(query, params)
+        return [
+            {
+                'username': row['username'],
+                'nickname': row['nickname'],
+                'color': row['color'],
+                'status': {
+                    'emoji': row['status_emoji'],
+                    'text': row['status_text'],
+                },
+                'role': row['role'],
+                'account_status': row['status'],
+                'approval': {
+                    'code': row['approval_code'],
+                    'time': row['approved_at'],
+                    'by': row['approved_by'],
+                },
+                'created_at': row['created_at'],
+            }
+            for row in cursor
+        ]
 
 
 def approve_user(approval_code: str, admin_username: str) -> bool:

@@ -201,12 +201,6 @@ def room_exists(room_id: str) -> bool:
         return room_id in ROOMS
 
 
-def ensure_room_exists(room_id: str):
-    """Ensure a room exists, create if it doesn't."""
-    with ROOMS_LOCK:
-        if room_id not in ROOMS:
-            ROOMS[room_id] = 'chat'
-
 
 def add_room_member(room_id: str, username: str, room_role: str = 'member') -> Dict:
     """Add a user as a member of a room.

@@ -9,14 +9,17 @@ from pydantic import BaseModel
 from .avatar import get_or_generate_avatar
 from .schemas import (
     UpdatePendingUserRequest,
-    UserInfo,
+    UserDisplayInfo,
+    UserAdminInfo,
     UserProfile,
+    UserStatus,
     UserUpdateRequest,
 )
 from .services import (
     get_user_preferences,
     update_user_preferences,
-    get_all_user_preferences,
+    get_all_users_display,
+    get_all_users_admin,
     approve_user,
     reject_user,
     get_all_users,
@@ -27,31 +30,42 @@ from .services import (
 router = APIRouter(prefix="/users", tags=["users"])
 
 
-# --- Bulk endpoints (must be before /{target_username} to avoid path collision) ---
-
-@router.get("/presence")
-async def get_all_presence(username: str = Depends(require_auth)):
-    """Get online/offline status for all active users."""
-    from ..ws import bus
-    users = get_all_users(status='active')
-    return {
-        u['username']: (
-            u['username'] in bus.user_connections
-            and bool(bus.user_connections[u['username']])
-        )
-        for u in users
-    }
-
-
 # --- User management (admin/moderator) ---
 
-@router.get("", response_model=list[UserInfo])
+@router.get("")
 async def list_all_users(
-    status: Optional[str] = None,
-    _: str = Depends(require_auth)
+    detail: Optional[str] = None,
+    account_status: Optional[str] = None,
+    include: Optional[str] = None,
+    username: str = Depends(require_auth),
 ):
-    """Get list of all users, optionally filtered by status (e.g., ?status=pending)."""
-    return get_all_users(status=status)
+    """Get list of users. Default returns display metadata for active users.
+    ?detail=admin adds role/status/approval (requires admin/moderator).
+    ?include=presence adds connected boolean.
+    ?account_status=pending filters by account status (requires detail=admin).
+    """
+    from ..database import get_db
+
+    if detail == 'admin':
+        # Check caller is admin or moderator
+        with get_db() as conn:
+            cursor = conn.execute('SELECT role FROM users WHERE username = ?', (username,))
+            row = cursor.fetchone()
+            if not row or row['role'] not in ('admin', 'moderator'):
+                raise HTTPException(status_code=403, detail="Admin or moderator required")
+        users = get_all_users_admin(account_status=account_status)
+    else:
+        users = get_all_users_display()
+
+    if include and 'presence' in include:
+        from ..ws import bus
+        for user in users:
+            user['connected'] = (
+                user['username'] in bus.user_connections
+                and bool(bus.user_connections[user['username']])
+            )
+
+    return users
 
 
 @router.patch("/pending/{approval_code}")
@@ -113,12 +127,14 @@ async def get_user_presence(
     return {"username": target_username, "connected": connected}
 
 
-@router.get("/{target_username}", response_model=UserProfile)
+@router.get("/{target_username}")
 async def get_user_profile(
     target_username: str,
     username: str = Depends(require_auth),
 ):
-    """Get user profile. Any authenticated user can view any profile."""
+    """Get user profile. Any authenticated user can view any profile.
+    Theme fields (theme_name, color_scheme) only included for own profile.
+    """
     from ..database import get_db
 
     prefs = get_user_preferences(target_username)
@@ -134,17 +150,23 @@ async def get_user_profile(
         if not row:
             raise HTTPException(status_code=404, detail="User not found")
 
-        return UserProfile(
-            username=row['username'],
-            role=row['role'],
-            status=row['status'],
-            color=prefs['color'],
-            theme_name=prefs.get('theme_name'),
-            color_scheme=prefs.get('color_scheme'),
-            nickname=prefs.get('nickname'),
-            status_emoji=prefs.get('status_emoji'),
-            status_text=prefs.get('status_text'),
-        )
+        result = {
+            'username': row['username'],
+            'role': row['role'],
+            'color': prefs['color'],
+            'nickname': prefs.get('nickname'),
+            'status': {
+                'emoji': prefs.get('status_emoji'),
+                'text': prefs.get('status_text'),
+            },
+        }
+
+        # Only include private theme fields for own profile
+        if target_username == username:
+            result['theme_name'] = prefs.get('theme_name')
+            result['color_scheme'] = prefs.get('color_scheme')
+
+        return result
 
 
 @router.patch("/{target_username}")
@@ -215,11 +237,3 @@ async def update_user(
             raise HTTPException(status_code=404, detail="User not found")
 
     return {}
-
-
-# --- Preferences ---
-
-@router.get("/preferences/colors")
-async def get_all_user_colors(username: str = Depends(require_auth)):
-    """Get all users' color preferences (for efficient message rendering)."""
-    return get_all_user_preferences()

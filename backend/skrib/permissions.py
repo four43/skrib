@@ -11,19 +11,16 @@ from .rooms.services import (
     is_dm,
     get_room_members,
     get_room_role,
-    ensure_room_exists,
 )
 
 
 def check_room_access(room_id: str, username: str):
-    """Verify room exists and user has access. For DMs, checks membership."""
+    """Verify room exists and user is a member."""
     if not room_exists(room_id):
-        ensure_room_exists(room_id)
-
-    if is_dm(room_id):
-        members = get_room_members(room_id)
-        if username not in members:
-            raise HTTPException(status_code=403, detail="Not a member of this DM")
+        raise HTTPException(status_code=404, detail="Room not found")
+    members = get_room_members(room_id)
+    if username not in members:
+        raise HTTPException(status_code=403, detail="Not a member of this room")
 
 
 def check_room_membership(room_id: str, username: str):

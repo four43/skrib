@@ -995,23 +995,23 @@ function logout() {
 
 async function loadUserColors() {
     try {
-        const response = await fetch(`${API_URL}/users/preferences/colors`, {
+        const response = await fetch(`${API_URL}/users`, {
             headers: {
                 'Authorization': `Bearer ${sessionToken}`
             }
         });
         if (response.ok) {
-            const data = await response.json();
+            const users = await response.json();
             userColors = {};
             userNicknames = {};
             userStatuses = {};
-            for (const [username, prefs] of Object.entries(data)) {
-                userColors[username] = prefs.color;
-                if (prefs.nickname) {
-                    userNicknames[username] = prefs.nickname;
+            for (const user of users) {
+                userColors[user.username] = user.color;
+                if (user.nickname) {
+                    userNicknames[user.username] = user.nickname;
                 }
-                if (prefs.status_emoji || prefs.status_text) {
-                    userStatuses[username] = { emoji: prefs.status_emoji || '', text: prefs.status_text || '' };
+                if (user.status?.emoji || user.status?.text) {
+                    userStatuses[user.username] = { emoji: user.status.emoji || '', text: user.status.text || '' };
                 }
             }
         }
@@ -1022,11 +1022,15 @@ async function loadUserColors() {
 
 async function loadUserPresence() {
     try {
-        const response = await fetch(`${API_URL}/users/presence`, {
+        const response = await fetch(`${API_URL}/users?include=presence`, {
             headers: { 'Authorization': `Bearer ${sessionToken}` }
         });
         if (response.ok) {
-            userPresence = await response.json();
+            const users = await response.json();
+            userPresence = {};
+            for (const user of users) {
+                userPresence[user.username] = user.connected;
+            }
         }
     } catch (error) {
         console.error('[HTTP] Error loading user presence:', error);
@@ -1075,9 +1079,9 @@ function openUserProfile(username) {
         const roleEl = document.getElementById('profile-role');
         roleEl.textContent = data.role !== 'user' ? data.role.toUpperCase() : '';
         // Update status from fresh data
-        if (data.status_emoji || data.status_text) {
-            statusEl.textContent = (data.status_emoji || '') + (data.status_emoji && data.status_text ? ' ' : '') + (data.status_text || '');
-            userStatuses[username] = { emoji: data.status_emoji || '', text: data.status_text || '' };
+        if (data.status?.emoji || data.status?.text) {
+            statusEl.textContent = (data.status.emoji || '') + (data.status.emoji && data.status.text ? ' ' : '') + (data.status.text || '');
+            userStatuses[username] = { emoji: data.status.emoji || '', text: data.status.text || '' };
         }
     }).catch(() => {});
 }
@@ -1161,7 +1165,7 @@ async function loadRooms() {
             fetch(`${API_URL}/rooms`, {
                 headers: { 'Authorization': `Bearer ${sessionToken}` }
             }),
-            fetch(`${API_URL}/room-folders`, {
+            fetch(`${API_URL}/rooms/folders`, {
                 headers: { 'Authorization': `Bearer ${sessionToken}` }
             }),
         ]);
@@ -1502,7 +1506,7 @@ async function handleDragEnd() {
     collectFromContainer(channelList, null);
 
     try {
-        await fetch(`${API_URL}/room-folders/reorder`, {
+        await fetch(`${API_URL}/rooms/folders/reorder`, {
             method: 'POST',
             headers: {
                 'Authorization': `Bearer ${sessionToken}`,
@@ -1534,7 +1538,7 @@ async function createFolder() {
     if (!name) return;
 
     try {
-        const response = await fetch(`${API_URL}/room-folders`, {
+        const response = await fetch(`${API_URL}/rooms/folders`, {
             method: 'POST',
             headers: {
                 'Authorization': `Bearer ${sessionToken}`,
@@ -1559,7 +1563,7 @@ async function renameFolder(folderId, currentName) {
     if (!newName || newName.trim() === currentName) return;
 
     try {
-        await fetch(`${API_URL}/room-folders/${folderId}`, {
+        await fetch(`${API_URL}/rooms/folders/${folderId}`, {
             method: 'PATCH',
             headers: {
                 'Authorization': `Bearer ${sessionToken}`,
@@ -1577,7 +1581,7 @@ async function deleteFolder(folderId, folderName) {
     if (!confirm(`Delete folder "${folderName}"? Rooms inside will become unfiled.`)) return;
 
     try {
-        await fetch(`${API_URL}/room-folders/${folderId}`, {
+        await fetch(`${API_URL}/rooms/folders/${folderId}`, {
             method: 'DELETE',
             headers: { 'Authorization': `Bearer ${sessionToken}` },
         });

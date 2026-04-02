@@ -507,7 +507,7 @@ async function deleteInvite(token) {
 
 async function loadPendingUsers() {
     try {
-        const resp = await fetch(`${API_URL}/users?status=pending`, {
+        const resp = await fetch(`${API_URL}/users?detail=admin&account_status=pending`, {
             headers: { 'Authorization': `Bearer ${sessionToken}` }
         });
         const data = await resp.json();
@@ -523,7 +523,7 @@ async function loadPendingUsers() {
             pendingList.innerHTML = data.map(user => `
                 <div class="pending-user">
                     <h4><iconify-icon icon="lucide:user" inline></iconify-icon> ${user.username}</h4>
-                    <div class="code">Code: ${user.approval_code}</div>
+                    <div class="code">Code: ${user.approval?.code || ''}</div>
                     <div style="font-size: 12px; color: #666;">${new Date(user.created_at).toLocaleString()}</div>
                     <div class="pending-user-actions">
                         <button class="approve-btn btn-sm" onclick="window.approveUser('${user.approval_code}')"><iconify-icon icon="lucide:check" inline></iconify-icon> Approve</button>
@@ -580,7 +580,7 @@ async function rejectUser(code) {
 
 async function loadAllUsers() {
     try {
-        const resp = await fetch(`${API_URL}/users`, {
+        const resp = await fetch(`${API_URL}/users?detail=admin`, {
             headers: { 'Authorization': `Bearer ${sessionToken}` }
         });
         const data = await resp.json();
@@ -679,22 +679,16 @@ async function deleteUser(username) {
 
 async function loadUserPreferences() {
     try {
-        const [usersResponse, colorsResponse] = await Promise.all([
-            fetch(`${API_URL}/users`, {
-                headers: { 'Authorization': `Bearer ${sessionToken}` }
-            }),
-            fetch(`${API_URL}/users/preferences/colors`, {
-                headers: { 'Authorization': `Bearer ${sessionToken}` }
-            }),
-        ]);
-        if (!usersResponse.ok) return;
+        const response = await fetch(`${API_URL}/users?detail=admin`, {
+            headers: { 'Authorization': `Bearer ${sessionToken}` }
+        });
+        if (!response.ok) return;
 
-        const users = await usersResponse.json();
-        const colors = colorsResponse.ok ? await colorsResponse.json() : {};
+        const users = await response.json();
         const preferencesList = document.getElementById('user-preferences-list');
 
         preferencesList.innerHTML = users.map(user => {
-            const color = colors[user.username]?.color || '#1976d2';
+            const color = user.color || '#1976d2';
             return `
             <div class="preference-item">
                 <span class="user-name" style="color: ${color};">${user.username}</span>

@@ -21,10 +21,9 @@ def check_room_access(room_id: str, username: str) -> str | None:
     if not room_exists(room_id):
         return "Room not found"
 
-    if is_dm(room_id):
-        members = get_room_members(room_id)
-        if username not in members:
-            return "Not a member of this DM"
+    members = get_room_members(room_id)
+    if username not in members:
+        return "Not a member of this room"
 
     return None
 
