@@ -834,7 +834,7 @@ async function checkSession() {
                 console.log('[E2E] Private key loaded successfully');
             } else {
                 console.warn('[E2E] No private key found in IndexedDB for user:', username);
-                // Check if server has a passphrase-wrapped key we can recover
+                // Check if server has a recoverable key — redirect to login for inline recovery
                 try {
                     const ekResp = await fetch(
                         `${API_URL}/auth/encryption-key/${encodeURIComponent(username)}`,
@@ -842,8 +842,12 @@ async function checkSession() {
                     );
                     const ekData = ekResp.ok ? await ekResp.json() : null;
                     if (ekData?.passphrase_encrypted_private_key || ekData?.encrypted_private_key) {
-                        console.log('[E2E] Server has recoverable key, redirecting to key-recovery...');
-                        window.location.href = '/key-recovery.html';
+                        console.log('[E2E] Server has recoverable key, redirecting to login for recovery...');
+                        // Clear session so login page doesn't redirect back to app.html
+                        localStorage.removeItem('session_token');
+                        localStorage.removeItem('username');
+                        localStorage.removeItem('role');
+                        window.location.href = '/login.html';
                         return;
                     }
                 } catch (_) { /* best-effort check */ }

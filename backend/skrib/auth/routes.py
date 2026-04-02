@@ -205,6 +205,17 @@ async def store_encryption_key(
 ):
     """Store the user's encryption public key (JWK) and optional wrapped private key backups."""
     with get_db() as conn:
+        # S4: Reject public key change if one already exists and differs
+        cursor = conn.execute(
+            'SELECT encryption_public_key FROM users WHERE username = ?', (username,)
+        )
+        row = cursor.fetchone()
+        if row and row['encryption_public_key'] and row['encryption_public_key'] != request.public_key:
+            raise HTTPException(
+                status_code=409,
+                detail="Public key mismatch: cannot change an existing encryption key. Generate a new key pair to rotate.",
+            )
+
         fields = ['encryption_public_key = ?']
         params = [request.public_key]
         if request.encrypted_private_key is not None:
@@ -225,9 +236,13 @@ async def store_encryption_key(
 @router.get("/encryption-key/{target_username}", response_model=EncryptionKeyResponse)
 async def get_encryption_key(
     target_username: str,
-    _: str = Depends(require_auth),
+    requesting_user: str = Depends(require_auth),
 ):
-    """Get a user's encryption public key and optional wrapped private key backups."""
+    """Get a user's encryption public key and optional wrapped private key backups.
+
+    Wrapped private keys (PRF-wrapped and passphrase-wrapped) are only returned
+    when the requesting user is the key owner. Other users only get the public key.
+    """
     with get_db() as conn:
         cursor = conn.execute(
             'SELECT encryption_public_key, encrypted_private_key, passphrase_encrypted_private_key FROM users WHERE username = ? AND status = ?',
@@ -236,9 +251,11 @@ async def get_encryption_key(
         row = cursor.fetchone()
     if not row or not row['encryption_public_key']:
         raise HTTPException(status_code=404, detail="Encryption key not found for user")
+
+    is_owner = requesting_user == target_username
     return EncryptionKeyResponse(
         username=target_username,
         public_key=row['encryption_public_key'],
-        encrypted_private_key=row['encrypted_private_key'],
-        passphrase_encrypted_private_key=row['passphrase_encrypted_private_key'],
+        encrypted_private_key=row['encrypted_private_key'] if is_owner else None,
+        passphrase_encrypted_private_key=row['passphrase_encrypted_private_key'] if is_owner else None,
     )

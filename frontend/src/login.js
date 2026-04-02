@@ -1,5 +1,5 @@
 import { API_URL, showStatus, arrayBufferToBase64, base64ToArrayBuffer, friendlyError } from './utils.js';
-import { loadPrivateKey, loadPrivateKeyJwk, generateEncryptionKeyPair, exportPublicKey, storePrivateKey, exportStoredPublicKey, PRF_SALT, deriveWrappingKey, wrapPrivateKey, unwrapPrivateKey } from './crypto.js';
+import { loadPrivateKey, loadPrivateKeyJwk, generateEncryptionKeyPair, exportPublicKey, storePrivateKey, exportStoredPublicKey, PRF_SALT, deriveWrappingKey, wrapPrivateKey, unwrapPrivateKey, passphraseUnwrapPrivateKey } from './crypto.js';
 import { loadTheme } from './theme-manager.js';
 
 // Load default theme (no authentication on login page)
@@ -104,35 +104,34 @@ async function login() {
                 let privKey = await loadPrivateKey(completeData.username);
 
                 if (privKey) {
-                    // Branch 1: Have local private key — re-upload matching public key
-                    const publicKeyJwk = await exportStoredPublicKey(completeData.username);
-                    if (publicKeyJwk) {
-                        const encKeyBody = { public_key: JSON.stringify(publicKeyJwk) };
-
-                        // If PRF available and server has no wrapped key, upload as backup
-                        if (prfResult) {
-                            try {
-                                const ekResp = await fetch(
-                                    `${API_URL}/auth/encryption-key/${encodeURIComponent(completeData.username)}`,
-                                    { headers: { 'Authorization': `Bearer ${completeData.session_token}` } }
-                                );
-                                const ekData = ekResp.ok ? await ekResp.json() : null;
-                                if (ekData && !ekData.encrypted_private_key) {
-                                    const wrappingKey = await deriveWrappingKey(prfResult);
-                                    const fullPrivJwk = await loadPrivateKeyJwk(completeData.username);
-                                    encKeyBody.encrypted_private_key = await wrapPrivateKey(wrappingKey, fullPrivJwk);
-                                    console.log('[E2E] Uploaded PRF-wrapped private key backup');
-                                }
-                            } catch (prfErr) {
-                                console.warn('[E2E] PRF backup upload failed:', prfErr);
+                    // Branch 1: Have local private key — only upload PRF backup if needed
+                    const prfBackupKey = `prf_backup_uploaded_${completeData.username}`;
+                    if (prfResult && !localStorage.getItem(prfBackupKey)) {
+                        try {
+                            const ekResp = await fetch(
+                                `${API_URL}/auth/encryption-key/${encodeURIComponent(completeData.username)}`,
+                                { headers: { 'Authorization': `Bearer ${completeData.session_token}` } }
+                            );
+                            const ekData = ekResp.ok ? await ekResp.json() : null;
+                            if (ekData && !ekData.encrypted_private_key) {
+                                const publicKeyJwk = await exportStoredPublicKey(completeData.username);
+                                const wrappingKey = await deriveWrappingKey(prfResult);
+                                const fullPrivJwk = await loadPrivateKeyJwk(completeData.username);
+                                const encKeyBody = {
+                                    public_key: JSON.stringify(publicKeyJwk),
+                                    encrypted_private_key: await wrapPrivateKey(wrappingKey, fullPrivJwk),
+                                };
+                                await fetch(`${API_URL}/auth/encryption-key`, {
+                                    method: 'POST',
+                                    headers: authHeaders,
+                                    body: JSON.stringify(encKeyBody),
+                                });
+                                console.log('[E2E] Uploaded PRF-wrapped private key backup');
                             }
+                            localStorage.setItem(prfBackupKey, '1');
+                        } catch (prfErr) {
+                            console.warn('[E2E] PRF backup upload failed:', prfErr);
                         }
-
-                        await fetch(`${API_URL}/auth/encryption-key`, {
-                            method: 'POST',
-                            headers: authHeaders,
-                            body: JSON.stringify(encKeyBody),
-                        });
                     }
                 } else {
                     // No local private key — check server state
@@ -177,10 +176,10 @@ async function login() {
                         }
                     }
 
-                    // Passphrase recovery needed — redirect to key-recovery page
+                    // Passphrase recovery needed — show inline recovery form
                     if (!recovered && ekData?.passphrase_encrypted_private_key) {
-                        console.log('[E2E] Passphrase-wrapped key available, redirecting to key-recovery...');
-                        window.location.href = '/key-recovery.html';
+                        console.log('[E2E] Passphrase-wrapped key available, showing inline recovery...');
+                        showInlineRecovery(completeData, authHeaders, prfResult);
                         return;
                     }
 
@@ -255,6 +254,110 @@ async function checkRegistrationMode() {
         showStatus('auth-status', 'Unable to connect to the server. Please try again later.', 'error');
         document.getElementById('login-button').disabled = true;
     }
+}
+
+/**
+ * Show inline passphrase recovery form on the login page.
+ * Replaces the old redirect to key-recovery.html.
+ */
+function showInlineRecovery(completeData, authHeaders, prfResult) {
+    const loginForm = document.getElementById('login-form');
+    const recoveryForm = document.getElementById('login-recovery-form');
+    const authActions = document.getElementById('auth-actions');
+
+    // Hide login buttons, show recovery form
+    if (authActions) authActions.style.display = 'none';
+    if (recoveryForm) recoveryForm.style.display = '';
+
+    // Populate hidden username for password managers
+    const usernameField = document.getElementById('login-recovery-username');
+    if (usernameField) usernameField.value = completeData.username;
+
+    const input = document.getElementById('login-recovery-passphrase');
+    if (input) input.focus();
+
+    // Handle passphrase submit
+    recoveryForm.addEventListener('submit', async (e) => {
+        e.preventDefault();
+        const passphrase = input.value;
+        if (!passphrase) {
+            showStatus('login-recovery-status', '❌ Please enter your password', 'error');
+            return;
+        }
+
+        const submitBtn = document.getElementById('login-recovery-submit');
+        submitBtn.disabled = true;
+        showStatus('login-recovery-status', 'Recovering encryption key...', 'info');
+
+        try {
+            const ekResp = await fetch(
+                `${API_URL}/auth/encryption-key/${encodeURIComponent(completeData.username)}`,
+                { headers: { 'Authorization': `Bearer ${completeData.session_token}` } }
+            );
+            if (!ekResp.ok) throw new Error('Could not fetch encryption key from server');
+            const ekData = await ekResp.json();
+
+            if (!ekData.passphrase_encrypted_private_key) {
+                showStatus('login-recovery-status', '❌ No passphrase-wrapped key on the server.', 'error');
+                submitBtn.disabled = false;
+                return;
+            }
+
+            const privateKeyJwk = await passphraseUnwrapPrivateKey(passphrase, ekData.passphrase_encrypted_private_key);
+            const importedKey = await crypto.subtle.importKey(
+                'jwk', privateKeyJwk,
+                { name: 'RSA-OAEP', hash: 'SHA-256' },
+                true, ['decrypt'],
+            );
+            await storePrivateKey(completeData.username, importedKey);
+
+            // Re-upload public key for consistency
+            const publicKeyJwk = {
+                kty: privateKeyJwk.kty, n: privateKeyJwk.n, e: privateKeyJwk.e,
+                alg: privateKeyJwk.alg, ext: true, key_ops: ['encrypt'],
+            };
+            await fetch(`${API_URL}/auth/encryption-key`, {
+                method: 'POST',
+                headers: authHeaders,
+                body: JSON.stringify({ public_key: JSON.stringify(publicKeyJwk) }),
+            });
+
+            console.log('[E2E] Private key recovered from server via passphrase (inline)');
+            window.location.href = '/app.html';
+        } catch (err) {
+            console.warn('[E2E] Passphrase recovery failed:', err);
+            showStatus('login-recovery-status', '❌ Wrong password. Please try again.', 'error');
+            submitBtn.disabled = false;
+            input.value = '';
+            input.focus();
+        }
+    });
+
+    // Handle skip — generate fresh key pair
+    document.getElementById('login-recovery-skip').addEventListener('click', async () => {
+        console.log('[E2E] User skipped passphrase recovery, generating fresh key pair');
+        const keyPair = await generateEncryptionKeyPair();
+        const publicKeyJwk = await exportPublicKey(keyPair);
+        await storePrivateKey(completeData.username, keyPair.privateKey);
+
+        const encKeyBody = { public_key: JSON.stringify(publicKeyJwk) };
+        if (prfResult) {
+            try {
+                const wrappingKey = await deriveWrappingKey(prfResult);
+                const privJwk = await crypto.subtle.exportKey('jwk', keyPair.privateKey);
+                encKeyBody.encrypted_private_key = await wrapPrivateKey(wrappingKey, privJwk);
+            } catch (prfErr) {
+                console.warn('[E2E] PRF wrapping failed:', prfErr);
+            }
+        }
+        await fetch(`${API_URL}/auth/encryption-key`, {
+            method: 'POST',
+            headers: authHeaders,
+            body: JSON.stringify(encKeyBody),
+        });
+        localStorage.setItem('e2e_key_regenerated', 'true');
+        window.location.href = '/app.html';
+    });
 }
 
 function goToRegister() {

@@ -4,7 +4,7 @@ WebAuthn/Passkey-based authentication with no passwords transmitted to the serve
 
 ## User Flows
 
-There are three primary user-facing flows. Each starts on its own HTML page and interacts with the backend API before landing the user in the app.
+There are two primary user-facing flows. Each starts on its own HTML page and interacts with the backend API before landing the user in the app.
 
 ### 1. Registration
 
@@ -38,11 +38,11 @@ User fills username + passphrase on register.html
 
 **Why two pages?** The registration form is a native `<form>` POST so the browser's credential manager detects the passphrase field and offers to save it. The passphrase has no `name` attribute so it's never sent to the server.
 
-### 2. Login via Passkey
+### 2. Login via Passkey (includes Key Recovery)
 
-**Purpose**: Authenticate with an existing passkey and recover/verify E2E encryption keys.
+**Purpose**: Authenticate with an existing passkey, recover/verify E2E encryption keys, and (if needed) prompt for passphrase recovery — all on a single page.
 
-**Pages**: `login.html` → `app.html` (or `key-recovery.html` if local key is missing)
+**Pages**: `login.html` → `app.html`
 
 ```
 User clicks "Sign In" on login.html
@@ -57,33 +57,16 @@ User clicks "Sign In" on login.html
   │   Server verifies challenge, looks up user by credential ID
   │   Returns session_token, username, role
   │
-  └─ Key recovery (4 branches):
-     ├─ Local key exists → re-upload public key, optionally upload PRF backup
+  └─ Key recovery (3 branches):
+     ├─ Local key exists → done (upload PRF backup if first time)
      ├─ PRF-wrapped key on server + PRF available → auto-recover, transparent
-     ├─ Passphrase-wrapped key on server → redirect to key-recovery.html
+     ├─ Passphrase-wrapped key on server → show inline recovery form
+     │   ├─ User enters passphrase → unwrap, store in IndexedDB → app.html
+     │   └─ User clicks "Skip" → generate fresh key pair → app.html
      └─ No recovery possible → generate fresh key pair (loses old messages)
 ```
 
-### 3. Key Recovery via Passphrase
-
-**Purpose**: Restore the E2E private key when the local IndexedDB key is lost but a passphrase-wrapped backup exists on the server.
-
-**Pages**: `key-recovery.html` → `app.html`
-
-```
-User is already authenticated (redirected here from login flow)
-  │
-  ├─ Page fetches GET /api/auth/encryption-key/{username}
-  │   Gets passphrase_encrypted_private_key blob from server
-  │
-  ├─ User enters their passphrase
-  │   Client unwraps private key, stores in IndexedDB
-  │   Client re-uploads public key for consistency
-  │   Redirect → app.html
-  │
-  └─ Alternative: user clicks "Skip" → generates fresh key pair
-     (loses ability to decrypt old messages)
-```
+Passphrase recovery is handled inline on `login.html` via a hidden form (`#login-recovery-form`) that appears after WebAuthn authentication when a passphrase-wrapped key exists on the server but no local key is found. This eliminates the previous redirect to a separate `key-recovery.html` page.
 
 ---
 
@@ -232,6 +215,8 @@ Returns `{ "authenticated": false }` if token is missing/invalid.
 
 Store the user's encryption public key and optional wrapped private key backups. Requires auth.
 
+**Public key immutability**: If a public key already exists for the user, the request must send the same key. Uploading a different public key returns `409 Conflict`. This prevents accidental or malicious key replacement — to rotate keys, the user must generate a fresh key pair (which is a separate flow that overwrites the old key).
+
 ```
 POST /api/auth/encryption-key
 Authorization: Bearer {token}
@@ -244,12 +229,19 @@ Authorization: Bearer {token}
 
 #### `GET /api/auth/encryption-key/{username}`
 
-Fetch any active user's public key (needed to encrypt messages to them). Also returns wrapped private key blobs (only useful to the key owner for recovery). Requires auth.
+Fetch an active user's public key (needed to encrypt messages to them). Requires auth.
+
+**Access control**: Wrapped private key blobs (`encrypted_private_key`, `passphrase_encrypted_private_key`) are only returned when the requesting user matches the target username. Other users receive `null` for both fields — they only need the `public_key`.
 
 ```
 GET /api/auth/encryption-key/{username}
 Authorization: Bearer {token}
-→ { "username": "...", "public_key": "...", "encrypted_private_key": "...", "passphrase_encrypted_private_key": "..." }
+
+# Requesting own keys:
+→ { "username": "alice", "public_key": "...", "encrypted_private_key": "...", "passphrase_encrypted_private_key": "..." }
+
+# Requesting another user's keys:
+→ { "username": "bob", "public_key": "...", "encrypted_private_key": null, "passphrase_encrypted_private_key": null }
 ```
 
 ## Challenge System
@@ -277,3 +269,47 @@ Authorization: Bearer {token}
 - Each user gets a deterministic color from a 10-color palette (round-robin by total user count)
 - Each user gets an auto-generated identicon avatar
 - Encryption keys can be provided at registration time or stored later via the encryption-key endpoint
+
+---
+
+## Remaining Security Issues
+
+Items from the original analysis that have not yet been addressed.
+
+### S2. No rate limiting on passphrase recovery attempts (MEDIUM)
+
+The inline passphrase recovery form retries on wrong passphrase with no throttle. An attacker with a forged session token (see Known Issue above) could script unlimited passphrase guesses against the client-side unwrap. The PBKDF2 cost (600k iterations) slows each attempt but there's no server-side limit.
+
+**Fix**: Rate-limit `GET /encryption-key/{username}` for the owner's own wrapped keys, or add attempt tracking (e.g., 5 attempts per 15 minutes). Fixing token forgery first would make this harder to exploit remotely.
+
+### S3. Session token forgery chains with key recovery (LOW)
+
+Combined with the token forgery issue (see Known Issues above), an attacker who sets `localStorage` values (via XSS) can authenticate, fetch their own wrapped keys, and brute-force offline. Wrapped keys are now restricted to the owner (S1), so the attacker must forge a token for the target user specifically.
+
+**Fix**: Fixing session token forgery breaks this chain. The inline recovery flow now requires a fresh WebAuthn assertion (passkey authentication) before the recovery form appears, which is an improvement over the old flow where a stale token was used directly.
+
+### S5. Skip recovery silently replaces encryption identity (LOW)
+
+When a user clicks "Skip" on the inline recovery form (or no recovery is possible), a fresh key pair is generated. The server rejects public key changes via `409 Conflict` (S4), so the old key is preserved — but a `displaySystemMessage` warns the user that old messages can't be decrypted. Other room members are not notified of the key change.
+
+**Fix**: Notify room members when a user's encryption key changes (similar to Signal's "safety number changed" alert). Consider requiring admin approval for key rotation.
+
+### S6. PRF salt is static, not per-user (LOW)
+
+`PRF_SALT` is hardcoded as `'skrib-e2e-key-wrapping'` for all users. If two users share an authenticator (shared device), the PRF-derived wrapping keys could collide if the authenticator returns the same PRF output for the same salt.
+
+**Fix**: Use `PRF_SALT = 'skrib-e2e-key-wrapping:' + username` to make the salt per-user. Low-probability issue but trivial to fix. Requires a migration path for existing PRF-wrapped keys (re-wrap with new salt on next login).
+
+---
+
+## Changelog
+
+Changes from the original analysis that have been implemented:
+
+| ID | Status | Description |
+|----|--------|-------------|
+| A | **Done** | Passphrase recovery merged into `login.html` as an inline form (`#login-recovery-form`). The separate `key-recovery.html` page is no longer used by the login or app flows. |
+| B | **Done** | Branch 1 (local key exists) no longer re-uploads the public key on every login. The server already has it from registration. |
+| C | **Done** | PRF backup upload status is cached in `localStorage` (`prf_backup_uploaded_{username}`). The server round-trip to check for an existing backup is skipped when the flag is set. |
+| S1 | **Done** | `GET /encryption-key/{username}` returns wrapped private keys only to the key owner. Other users get `null` for `encrypted_private_key` and `passphrase_encrypted_private_key`. |
+| S4 | **Done** | `POST /encryption-key` rejects public key changes with `409 Conflict` when an existing key differs from the uploaded one. Same-key re-uploads and first-time uploads are accepted. |

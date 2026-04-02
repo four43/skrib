@@ -48,6 +48,16 @@
                         <button id="go-to-register-button"><iconify-icon icon="lucide:user" inline></iconify-icon> Register</button>
                     </div>
                 </div>
+
+                <!-- Inline passphrase recovery (shown after login when local key is missing) -->
+                <form id="login-recovery-form" style="display:none">
+                    <input type="text" id="login-recovery-username" autocomplete="username" style="position:absolute;opacity:0;height:0;width:0;pointer-events:none" tabindex="-1" aria-hidden="true">
+                    <p class="auth-description">Your encryption key wasn't found on this device. Enter your password to recover it.</p>
+                    <div id="login-recovery-status"></div>
+                    <input type="password" id="login-recovery-passphrase" placeholder="Recovery password" autocomplete="current-password" required>
+                    <button type="submit" id="login-recovery-submit"><iconify-icon icon="lucide:key-round" inline></iconify-icon> Recover Key</button>
+                    <button type="button" id="login-recovery-skip" class="link-button">Skip — generate new key</button>
+                </form>
             </div>
         </div>
     </div>
