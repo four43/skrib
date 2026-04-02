@@ -447,6 +447,7 @@ const EmojiPickerPlugin = (function() {
                 if (resp.ok) {
                     form.reset();
                     await loadCustomEmoji();
+                    invalidateCustomMap();
                     renderManageList(overlay.querySelector('.emoji-manage-list'));
                 } else {
                     const data = await resp.json().catch(() => ({}));
@@ -499,12 +500,246 @@ const EmojiPickerPlugin = (function() {
                     headers: { 'Authorization': `Bearer ${token}` },
                 });
                 await loadCustomEmoji();
+                invalidateCustomMap();
                 renderManageList(listEl);
             });
 
             item.appendChild(delBtn);
             listEl.appendChild(item);
         }
+    }
+
+    // ── Inline Autocomplete ──────────────────────────────────────────
+
+    let emojiDropdown = null;
+    let emojiQuery = '';
+    let emojiStartIndex = -1;   // cursor position of the ':'
+    let emojiSelectedIndex = 0;
+    let emojiResults = [];
+    let emojiInputEl = null;
+    let observerActive = false;
+
+    const MAX_INLINE_RESULTS = 5;
+    const MIN_QUERY_LENGTH = 2;
+
+    /**
+     * Detect an emoji `:query` context at the cursor position.
+     * Returns { query, start } or null.
+     */
+    function getEmojiContext(input) {
+        const value = input.value;
+        const cursor = input.selectionStart;
+
+        // Walk backwards from cursor to find an unmatched ':'
+        let i = cursor - 1;
+        while (i >= 0) {
+            const ch = value[i];
+            if (ch === ':') {
+                // ':' must be at position 0 or preceded by whitespace
+                if (i === 0 || /\s/.test(value[i - 1])) {
+                    const query = value.substring(i + 1, cursor);
+                    // Query must be only valid shortcode chars (no spaces)
+                    if (/^[a-z0-9-]*$/i.test(query)) {
+                        return { query: query.toLowerCase(), start: i };
+                    }
+                }
+                return null;
+            }
+            // Stop if we hit whitespace (no ':' found in this word)
+            if (/\s/.test(ch)) return null;
+            i--;
+        }
+        return null;
+    }
+
+    function onEmojiInput() {
+        if (!emojiInputEl) return;
+
+        const emojiCtx = getEmojiContext(emojiInputEl);
+        if (!emojiCtx || emojiCtx.query.length < MIN_QUERY_LENGTH) {
+            dismissEmojiDropdown();
+            return;
+        }
+
+        emojiQuery = emojiCtx.query;
+        emojiStartIndex = emojiCtx.start;
+
+        const results = searchEmoji(emojiQuery);
+        if (!results || results.length === 0) {
+            dismissEmojiDropdown();
+            return;
+        }
+
+        emojiResults = results.slice(0, MAX_INLINE_RESULTS);
+        emojiSelectedIndex = 0;
+        renderEmojiDropdown();
+    }
+
+    function onEmojiKeydown(e) {
+        if (!emojiDropdown) return;
+
+        if (e.key === 'ArrowDown') {
+            e.preventDefault();
+            e.stopPropagation();
+            emojiSelectedIndex = (emojiSelectedIndex - 1 + emojiResults.length) % emojiResults.length;
+            updateEmojiSelection();
+        } else if (e.key === 'ArrowUp') {
+            e.preventDefault();
+            e.stopPropagation();
+            emojiSelectedIndex = (emojiSelectedIndex + 1) % emojiResults.length;
+            updateEmojiSelection();
+        } else if (e.key === 'Enter' || e.key === 'Tab') {
+            e.preventDefault();
+            e.stopPropagation();
+            acceptEmoji(emojiResults[emojiSelectedIndex]);
+        } else if (e.key === 'Escape') {
+            e.preventDefault();
+            e.stopPropagation();
+            dismissEmojiDropdown();
+        }
+    }
+
+    function renderEmojiDropdown() {
+        if (emojiDropdown) {
+            emojiDropdown.remove();
+            emojiDropdown = null;
+        }
+
+        const wrapper = emojiInputEl.closest('.input-wrapper');
+        if (!wrapper) return;
+
+        emojiDropdown = document.createElement('div');
+        emojiDropdown.className = 'emoji-inline-dropdown';
+
+        // Render in reverse order: best match (index 0) at the bottom,
+        // closest to the input field where the user is typing.
+        for (let i = emojiResults.length - 1; i >= 0; i--) {
+            const result = emojiResults[i];
+            const item = document.createElement('div');
+            item.className = 'emoji-inline-item' + (i === emojiSelectedIndex ? ' selected' : '');
+            item.dataset.index = i;
+
+            const preview = document.createElement('span');
+            preview.className = 'emoji-inline-preview';
+            if (result.isCustom && result.url) {
+                const img = document.createElement('img');
+                img.src = result.url;
+                img.alt = result.shortcode;
+                preview.appendChild(img);
+            } else {
+                preview.textContent = result.emoji;
+            }
+
+            const shortcode = document.createElement('span');
+            shortcode.className = 'emoji-inline-shortcode';
+            shortcode.textContent = `:${result.shortcode || result.name}:`;
+
+            item.appendChild(preview);
+            item.appendChild(shortcode);
+
+            item.addEventListener('mousedown', (e) => {
+                e.preventDefault();
+                acceptEmoji(result);
+            });
+
+            emojiDropdown.appendChild(item);
+        }
+
+        wrapper.appendChild(emojiDropdown);
+    }
+
+    function updateEmojiSelection() {
+        if (!emojiDropdown) return;
+        emojiDropdown.querySelectorAll('.emoji-inline-item').forEach((el) => {
+            const idx = parseInt(el.dataset.index, 10);
+            el.classList.toggle('selected', idx === emojiSelectedIndex);
+        });
+    }
+
+    function acceptEmoji(result) {
+        if (!emojiInputEl) return;
+
+        const shortcode = result.shortcode || result.name;
+        const replacement = `:${shortcode}: `;
+        const before = emojiInputEl.value.substring(0, emojiStartIndex);
+        const after = emojiInputEl.value.substring(emojiInputEl.selectionStart);
+
+        emojiInputEl.value = before + replacement + after;
+        const newCursor = before.length + replacement.length;
+        emojiInputEl.setSelectionRange(newCursor, newCursor);
+        emojiInputEl.focus();
+
+        // Add to recents
+        addRecent({
+            emoji: result.emoji || null,
+            shortcode: shortcode,
+            isCustom: result.isCustom || false,
+            url: result.url || null,
+        });
+
+        dismissEmojiDropdown();
+
+        // Trigger input event so textarea auto-resizes
+        emojiInputEl.dispatchEvent(new Event('input', { bubbles: true }));
+    }
+
+    function dismissEmojiDropdown() {
+        if (emojiDropdown) {
+            emojiDropdown.remove();
+            emojiDropdown = null;
+        }
+        emojiResults = [];
+        emojiQuery = '';
+        emojiStartIndex = -1;
+    }
+
+    /**
+     * Attach inline autocomplete listeners to #message-input.
+     * Uses capture phase for keydown so we intercept before the chat plugin.
+     */
+    function attachInlineAutocomplete(input) {
+        if (emojiInputEl === input) return; // already attached
+        detachInlineAutocomplete();
+
+        emojiInputEl = input;
+        input.addEventListener('input', onEmojiInput);
+        // Capture phase: fires before the chat plugin's bubble-phase keydown
+        input.addEventListener('keydown', onEmojiKeydown, true);
+        input.addEventListener('blur', () => {
+            setTimeout(dismissEmojiDropdown, 150);
+        });
+    }
+
+    function detachInlineAutocomplete() {
+        if (emojiInputEl) {
+            emojiInputEl.removeEventListener('input', onEmojiInput);
+            emojiInputEl.removeEventListener('keydown', onEmojiKeydown, true);
+            emojiInputEl = null;
+        }
+        dismissEmojiDropdown();
+    }
+
+    /**
+     * Watch for #message-input appearing/disappearing in the DOM.
+     */
+    function observeMessageInput() {
+        if (observerActive) return;
+        observerActive = true;
+
+        // Check if already present
+        const existing = document.getElementById('message-input');
+        if (existing) attachInlineAutocomplete(existing);
+
+        const observer = new MutationObserver(() => {
+            const input = document.getElementById('message-input');
+            if (input && input !== emojiInputEl) {
+                attachInlineAutocomplete(input);
+            } else if (!input && emojiInputEl) {
+                detachInlineAutocomplete();
+            }
+        });
+
+        observer.observe(document.body, { childList: true, subtree: true });
     }
 
     // ── Public API ────────────────────────────────────────────────────
@@ -569,6 +804,78 @@ const EmojiPickerPlugin = (function() {
         return searchEmoji(query) || [];
     }
 
+    // ── Shortcode Resolution ──────────────────────────────────────────
+
+    // Lazily-built lookup maps: shortcode → emoji char / custom url
+    let unicodeMap = null;
+    let customMap = null;
+
+    function buildUnicodeMap() {
+        if (unicodeMap) return;
+        unicodeMap = new Map();
+        if (emojiData) {
+            for (const e of emojiData) {
+                unicodeMap.set(e.name, e.emoji);
+            }
+        }
+    }
+
+    function buildCustomMap() {
+        customMap = new Map();
+        if (customEmoji) {
+            for (const e of customEmoji) {
+                customMap.set(e.shortcode, e.url);
+            }
+        }
+    }
+
+    /**
+     * Replace :shortcode: tokens in an HTML string with emoji.
+     *
+     * Unicode emoji → the character wrapped in a <span>.
+     * Custom emoji → an <img> tag.
+     * Unknown shortcodes are left as-is.
+     *
+     * Only replaces shortcodes in text nodes (not inside HTML tags/attributes).
+     */
+    function resolveShortcodes(html) {
+        if (!emojiData && !customEmoji) return html;
+        buildUnicodeMap();
+        buildCustomMap();
+
+        // Match :shortcode: but not inside HTML tags.
+        // We split on HTML tags to only process text segments.
+        const SHORTCODE_RE = /:([a-z0-9][a-z0-9-]*):/g;
+
+        // Split HTML into tags and text segments
+        const parts = html.split(/(<[^>]*>)/);
+        for (let i = 0; i < parts.length; i++) {
+            // Skip HTML tag segments (odd indices after split)
+            if (parts[i].startsWith('<')) continue;
+
+            parts[i] = parts[i].replace(SHORTCODE_RE, (match, code) => {
+                const unicode = unicodeMap.get(code);
+                if (unicode) {
+                    return `<span class="emoji-shortcode" title=":${code}:">${unicode}</span>`;
+                }
+                const url = customMap.get(code);
+                if (url) {
+                    return `<img class="emoji-shortcode emoji-custom-inline" src="${url}" alt=":${code}:" title=":${code}:">`;
+                }
+                return match; // Unknown shortcode — leave as-is
+            });
+        }
+
+        return parts.join('');
+    }
+
+    /**
+     * Invalidate the custom emoji lookup map (call after uploading/deleting).
+     */
+    function invalidateCustomMap() {
+        customMap = null;
+    }
+
     // ── Plugin init ───────────────────────────────────────────────────
 
     async function detectAdmin() {
@@ -588,11 +895,15 @@ const EmojiPickerPlugin = (function() {
     async function init(ctx) {
         context = ctx;
         await detectAdmin();
+        // Pre-load emoji data so inline autocomplete works immediately
+        await Promise.all([loadEmojiData(), loadCustomEmoji()]);
+        // Start watching for chat input element
+        observeMessageInput();
     }
 
     // Expose global API immediately so it works on any page
     // (not just app.html where plugins are loaded via init)
-    window.SkribEmojiPicker = { open, search };
+    window.SkribEmojiPicker = { open, search, resolveShortcodes };
 
     return { init };
 })();

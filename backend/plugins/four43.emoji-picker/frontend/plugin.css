@@ -388,3 +388,84 @@
     font-size: 13px;
     padding: 16px 0;
 }
+
+/* ═══════════════════════════════════════════
+   Emoji Shortcode Rendering in Messages
+   ═══════════════════════════════════════════ */
+
+.emoji-shortcode {
+    font-size: 1.2em;
+    vertical-align: middle;
+    line-height: 1;
+}
+
+img.emoji-custom-inline {
+    height: 1.4em;
+    width: auto;
+    vertical-align: middle;
+    object-fit: contain;
+    margin: 0 1px;
+}
+
+/* ═══════════════════════════════════════════
+   Inline Emoji Autocomplete Dropdown
+   (mirrors .command-dropdown from chat plugin)
+   ═══════════════════════════════════════════ */
+
+.emoji-inline-dropdown {
+    position: absolute;
+    bottom: 100%;
+    left: 0;
+    right: 0;
+    margin-bottom: 4px;
+    background: var(--bg-surface-elevated-dark);
+    backdrop-filter: blur(var(--blur-lg));
+    -webkit-backdrop-filter: blur(var(--blur-lg));
+    border: 1px solid var(--border-white);
+    border-radius: var(--radius-md);
+    box-shadow: 0 -4px 16px -4px rgba(0, 0, 0, 0.12),
+        0 2px 8px rgba(var(--theme-rgb), 0.08);
+    z-index: 50;
+    padding: 4px;
+}
+
+.emoji-inline-item {
+    display: flex;
+    align-items: center;
+    gap: 10px;
+    padding: 8px 10px;
+    border-radius: var(--radius-sm);
+    cursor: pointer;
+    transition: background 0.1s ease;
+}
+
+.emoji-inline-item:hover,
+.emoji-inline-item.selected {
+    background: rgba(var(--theme-rgb), 0.1);
+}
+
+.emoji-inline-preview {
+    font-size: 20px;
+    width: 24px;
+    height: 24px;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    flex-shrink: 0;
+    line-height: 1;
+}
+
+.emoji-inline-preview img {
+    width: 20px;
+    height: 20px;
+    object-fit: contain;
+}
+
+.emoji-inline-shortcode {
+    font-size: 13px;
+    color: var(--text-secondary);
+    font-family: var(--font-family-mono);
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+}

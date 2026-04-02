@@ -968,7 +968,11 @@ const RoomTypeChatPlugin = (function() {
             `;
         } else {
             const plaintext = await decryptContent(msg);
-            const messageBody = linkifyRoomRefs(renderMarkdown(plaintext));
+            let messageBody = linkifyRoomRefs(renderMarkdown(plaintext));
+            // Resolve :shortcode: → emoji (if emoji picker plugin is loaded)
+            if (window.SkribEmojiPicker?.resolveShortcodes) {
+                messageBody = window.SkribEmojiPicker.resolveShortcodes(messageBody);
+            }
 
             messageDiv.dataset.plaintext = plaintext;
 
