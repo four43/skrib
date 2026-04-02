@@ -19,7 +19,8 @@ from starlette.testclient import TestClient
 
 from skrib.main import app
 from skrib.config import DB_FILE
-from skrib.database import get_db, init_db, set_setting, thread_local
+from skrib.database import get_db, init_db, set_setting, close_all_connections
+from skrib.plugins.base import close_all_plugin_connections
 
 
 # ---------------------------------------------------------------------------
@@ -29,10 +30,9 @@ from skrib.database import get_db, init_db, set_setting, thread_local
 @pytest.fixture(autouse=True)
 def fresh_db():
     """Give every test a clean database."""
-    # Close any cached thread-local connection
-    if hasattr(thread_local, "connection") and thread_local.connection:
-        thread_local.connection.close()
-        thread_local.connection = None
+    # Close all connections from the previous test (any thread)
+    close_all_connections()
+    close_all_plugin_connections()
 
     # Delete the DB file so init_db creates a fresh one
     if os.path.exists(DB_FILE):
@@ -47,10 +47,9 @@ def fresh_db():
     init_db()
     yield
 
-    # Teardown: close connection for next test
-    if hasattr(thread_local, "connection") and thread_local.connection:
-        thread_local.connection.close()
-        thread_local.connection = None
+    # Teardown: close all connections (main thread + any leftover)
+    close_all_connections()
+    close_all_plugin_connections()
 
 
 @pytest.fixture

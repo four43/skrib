@@ -43,43 +43,49 @@ init_db()
 load_rooms_from_db()
 registry.discover_plugins()
 
-# Create FastAPI app
-app = FastAPI(title=APP_TITLE, version=APP_VERSION)
+# Create top-level app (no docs here — docs live under /api)
+app = FastAPI(title=APP_TITLE, version=APP_VERSION, docs_url=None, redoc_url=None)
 
-# Add CORS middleware
-app.add_middleware(
-    CORSMiddleware,
-    allow_origins=CORS_ORIGINS,
-    allow_credentials=CORS_ALLOW_CREDENTIALS,
-    allow_methods=CORS_ALLOW_METHODS,
-    allow_headers=CORS_ALLOW_HEADERS,
-)
+# API sub-application — mounted at /api, so docs are at /api/docs
+api = FastAPI(title=APP_TITLE, version=APP_VERSION)
 
-# Compress responses (JSON, HTML, CSS, JS) — ~50-70% size reduction
-app.add_middleware(GZipMiddleware, minimum_size=500)
+# Add CORS middleware (both apps — sub-app has its own middleware stack)
+for _app in (app, api):
+    _app.add_middleware(
+        CORSMiddleware,
+        allow_origins=CORS_ORIGINS,
+        allow_credentials=CORS_ALLOW_CREDENTIALS,
+        allow_methods=CORS_ALLOW_METHODS,
+        allow_headers=CORS_ALLOW_HEADERS,
+    )
+    _app.add_middleware(GZipMiddleware, minimum_size=500)
 
 # Pre-authenticate requests to plugin routes (injects x-skrib-* headers)
-app.add_middleware(PluginAuthMiddleware)
+api.add_middleware(PluginAuthMiddleware)
 
 # Cache-Control headers for slow-changing API endpoints and immutable assets
 _CACHEABLE_API_PATHS = {
-    "/api/server": "private, max-age=300",         # 5 min
-    "/api/plugins": "private, max-age=300",         # 5 min
-    "/api/users/preferences/colors": "private, max-age=60",  # 1 min
+    "/server": "private, max-age=300",         # 5 min
+    "/plugins": "private, max-age=300",         # 5 min
+    "/users/preferences/colors": "private, max-age=60",  # 1 min
 }
 
 
 @app.middleware("http")
-async def add_cache_headers(request, call_next):
+async def add_cache_headers_assets(request, call_next):
+    response = await call_next(request)
+    # Immutable hashed assets from Vite build
+    if request.url.path.startswith("/assets/"):
+        response.headers["Cache-Control"] = "public, max-age=31536000, immutable"
+    return response
+
+
+@api.middleware("http")
+async def add_cache_headers_api(request, call_next):
     response = await call_next(request)
     path = request.url.path
-
-    # Immutable hashed assets from Vite build
-    if path.startswith("/assets/"):
-        response.headers["Cache-Control"] = "public, max-age=31536000, immutable"
-    elif path in _CACHEABLE_API_PATHS:
+    if path in _CACHEABLE_API_PATHS:
         response.headers.setdefault("Cache-Control", _CACHEABLE_API_PATHS[path])
-
     return response
 
 
@@ -88,16 +94,16 @@ if STATIC_DIR.exists():
     app.mount("/assets", StaticFiles(directory=str(STATIC_DIR / "assets")), name="assets")
 
 # Register API routers
-app.include_router(auth_router, prefix="/api")
-app.include_router(rooms_router, prefix="/api")
-app.include_router(room_folders_router, prefix="/api")
-app.include_router(server_router, prefix="/api")
-app.include_router(preferences_router, prefix="/api")
-app.include_router(ws_router, prefix="/api")
-app.include_router(plugins_router, prefix="/api")
-app.include_router(themes_router, prefix="/api")
-app.include_router(backups_router, prefix="/api")
-app.include_router(log_router, prefix="/api")
+api.include_router(auth_router)
+api.include_router(rooms_router)
+api.include_router(room_folders_router)
+api.include_router(server_router)
+api.include_router(preferences_router)
+api.include_router(ws_router)
+api.include_router(plugins_router)
+api.include_router(themes_router)
+api.include_router(backups_router)
+api.include_router(log_router)
 
 # Register plugin routes at module level, before the static catch-all mount
 print("\n[Plugins] Initializing plugin system...")
@@ -105,7 +111,7 @@ for _plugin in registry.get_all_plugins():
     try:
         _plugin_router = _plugin.register_routes(app)
         if _plugin_router:
-            app.include_router(_plugin_router, prefix=f"/api/plugins/{_plugin.id}")
+            api.include_router(_plugin_router, prefix=f"/plugins/{_plugin.id}")
             print(f"[Plugins] Registered routes for: {_plugin.id} at /api/plugins/{_plugin.id}")
     except Exception as _e:
         print(f"[Plugins] Failed to register routes for {_plugin.id}: {_e}")
@@ -113,6 +119,10 @@ for _plugin in registry.get_all_plugins():
 _all_info = registry.get_all_plugin_info()
 print(f"[Plugins] Loaded {sum(1 for p in _all_info if p['enabled'])} plugins "
       f"({sum(1 for p in _all_info if not p['enabled'])} disabled)")
+
+
+# Mount API sub-app — docs at /api/docs, redoc at /api/redoc
+app.mount("/api", api)
 
 
 @app.get("/")
@@ -221,6 +231,12 @@ async def shutdown_event():
             await plugin._cleanup_all()
         except Exception as e:
             print(f"[Plugins] Error in cleanup for {plugin.id}: {e}")
+
+    # Close all database connections on this thread to avoid ResourceWarnings
+    from .database import close_all_connections
+    from .plugins.base import close_all_plugin_connections
+    close_all_connections()
+    close_all_plugin_connections()
 
 
 def signal_handler(sig, frame):

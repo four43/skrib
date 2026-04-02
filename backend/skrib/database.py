@@ -13,6 +13,10 @@ logger = logging.getLogger(__name__)
 # Thread-local storage for database connections
 thread_local = threading.local()
 
+# Registry of all open connections (for test cleanup)
+_all_connections: list[sqlite3.Connection] = []
+_all_connections_lock = threading.Lock()
+
 
 @contextmanager
 def get_db():
@@ -27,12 +31,26 @@ def get_db():
         # Enable WAL mode for better concurrency
         thread_local.connection.execute('PRAGMA journal_mode=WAL')
         thread_local.connection.execute('PRAGMA foreign_keys=ON')
+        with _all_connections_lock:
+            _all_connections.append(thread_local.connection)
 
     try:
         yield thread_local.connection
     except Exception:
         thread_local.connection.rollback()
         raise
+
+
+def close_all_connections():
+    """Close all tracked database connections. Used by test fixtures."""
+    with _all_connections_lock:
+        for conn in _all_connections:
+            try:
+                conn.close()
+            except Exception:
+                pass
+        _all_connections.clear()
+    thread_local.connection = None
 
 
 def init_db():
