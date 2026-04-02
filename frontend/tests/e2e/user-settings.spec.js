@@ -71,11 +71,9 @@ test.describe('User settings - Nickname', () => {
         const nicknameInput = admin.page.locator('#user-nickname');
         await nicknameInput.fill('Cool Admin');
 
-        // Trigger change event and dismiss the alert
-        admin.page.once('dialog', dialog => dialog.accept());
+        // Trigger change event (successful update shows no dialog)
         await nicknameInput.dispatchEvent('change');
-        await admin.page.waitForEvent('dialog').catch(() => {});
-        await admin.page.waitForTimeout(500);
+        await admin.page.waitForTimeout(1000);
 
         // Verify via API that nickname was saved
         const resp = await admin.page.request.get(`${baseURL}/api/users/${admin.username}`, {
@@ -127,9 +125,11 @@ test.describe('User settings - Nickname', () => {
         // Nickname should be populated
         await expect(admin.page.locator('#user-nickname')).toHaveValue('TempNick');
 
-        // Click clear button
+        // Clear nickname using the native search clear (type="search" fires 'search' event)
+        const nicknameInput = admin.page.locator('#user-nickname');
+        await nicknameInput.fill('');
         admin.page.once('dialog', dialog => dialog.accept());
-        await admin.page.locator('#clear-nickname-btn').click();
+        await nicknameInput.dispatchEvent('search');
         await admin.page.waitForTimeout(500);
 
         // Verify cleared via API

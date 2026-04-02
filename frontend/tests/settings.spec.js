@@ -19,7 +19,6 @@ test.describe('Settings Page', () => {
       await expect(page.locator('#current-user')).toBeVisible();
       await expect(page.locator('#admin-badge')).toBeAttached(); // hidden unless admin check runs
       await expect(page.locator('#user-nickname')).toBeVisible();
-      await expect(page.locator('#clear-nickname-btn')).toBeVisible();
       await expect(page.locator('#settings-logout-btn')).toBeVisible();
 
       // Appearance section (non-active tab, attached but not visible)
@@ -83,8 +82,9 @@ test.describe('Settings Page', () => {
       await page.goto('/settings.html');
       await expect(page.locator('#current-user')).not.toHaveText('');
 
-      // nickname group is in active account section
-      await expect(page.locator('#section-account .preference-input-group')).toHaveCount(1);
+      // preference-input-group is used in servers section for add-server
+      await page.locator('.settings-nav-item[data-section="servers"]').click();
+      await expect(page.locator('#section-servers .preference-input-group')).toHaveCount(1);
     });
 
     test('should have no inline styles in HTML', async ({ page }) => {

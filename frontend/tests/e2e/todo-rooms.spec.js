@@ -299,7 +299,7 @@ test.describe('Todo persistence', () => {
         await item.locator('.todo-checkbox').check();
 
         // Refresh
-        await userA.page.reload();
+        await userA.page.goto('/app.html');
         await userA.page.waitForLoadState('networkidle');
         await selectRoom(userA.page, 'todo-persist');
         await userA.page.locator('.todo-container').waitFor();

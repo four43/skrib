@@ -40,7 +40,7 @@ frontend/.env.local
 *.sqlite
 *.db-wal
 *.db-shm
-data/
+/data/
 
 # IDE
 .idea/

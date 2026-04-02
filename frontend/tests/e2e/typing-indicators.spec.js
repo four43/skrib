@@ -34,11 +34,12 @@ async function inviteUser(page, username) {
 }
 
 async function navigateToRoom(page, roomName) {
-    await page.reload();
+    await page.goto('/app.html');
     await page.waitForLoadState('networkidle');
     await page.locator(`.room-item[data-room-id="${roomName}"]`).waitFor();
     await page.locator(`.room-item[data-room-id="${roomName}"]`).click();
     await expect(page.locator('#room-content-name')).toHaveText(`#${roomName}`);
+    await page.locator('#message-input').waitFor();
 }
 
 async function selectRoom(page, roomName) {

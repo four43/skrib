@@ -55,19 +55,16 @@ test.describe('User profiles - Status message', () => {
         await admin.page.goto('/settings.html');
         await admin.page.waitForLoadState('networkidle');
 
-        // Set status emoji and text
-        const emojiInput = admin.page.locator('#user-status-emoji');
+        // Set status emoji via evaluate (hidden input can't be filled via Playwright)
+        await admin.page.evaluate(() => {
+            document.getElementById('user-status-emoji').value = '🎉';
+        });
+
+        // Set status text and trigger save
         const textInput = admin.page.locator('#user-status-text');
-
-        await emojiInput.fill('🎉');
-        admin.page.once('dialog', dialog => dialog.accept());
-        await emojiInput.dispatchEvent('change');
-        await admin.page.waitForTimeout(500);
-
         await textInput.fill('Celebrating!');
-        admin.page.once('dialog', dialog => dialog.accept());
         await textInput.dispatchEvent('change');
-        await admin.page.waitForTimeout(500);
+        await admin.page.waitForTimeout(1000);
 
         // Verify via API
         const resp = await admin.page.request.get(`${baseURL}/api/users/${admin.username}`, {
@@ -98,9 +95,11 @@ test.describe('User profiles - Status message', () => {
         await expect(admin.page.locator('#user-status-emoji')).toHaveValue('🔥');
         await expect(admin.page.locator('#user-status-text')).toHaveValue('On fire');
 
-        // Click clear button
+        // Clear status using the native search clear (type="search" fires 'search' event)
+        const statusTextInput = admin.page.locator('#user-status-text');
+        await statusTextInput.fill('');
         admin.page.once('dialog', dialog => dialog.accept());
-        await admin.page.locator('#clear-status-btn').click();
+        await statusTextInput.dispatchEvent('search');
         await admin.page.waitForTimeout(500);
 
         // Verify cleared via API
