@@ -86,6 +86,17 @@ def init_db():
         except Exception:
             pass
 
+        # Add status_emoji and status_text columns for user status
+        try:
+            conn.execute('ALTER TABLE users ADD COLUMN status_emoji TEXT')
+        except Exception:
+            pass
+
+        try:
+            conn.execute('ALTER TABLE users ADD COLUMN status_text TEXT')
+        except Exception:
+            pass
+
         # Challenges table for WebAuthn
         conn.execute('''
             CREATE TABLE IF NOT EXISTS challenges (

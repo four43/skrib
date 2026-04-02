@@ -66,6 +66,8 @@ class UserProfile(BaseModel):
     theme_name: Optional[str] = None
     color_scheme: Optional[str] = None
     nickname: Optional[str] = None
+    status_emoji: Optional[str] = None
+    status_text: Optional[str] = None
 
 
 class UserUpdateRequest(BaseModel):
@@ -74,6 +76,8 @@ class UserUpdateRequest(BaseModel):
     theme_name: Optional[str] = None
     color_scheme: Optional[str] = None
     nickname: Optional[str] = None
+    status_emoji: Optional[str] = None
+    status_text: Optional[str] = None
     role: Optional[str] = None  # Admin only
 
 

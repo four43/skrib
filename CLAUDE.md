@@ -124,6 +124,9 @@ cd frontend && npm test
 - Always use `./util/test-e2e` for e2e tests — it sets `SKRIB_TEST_DATA_DIR` and builds the frontend
 - Each e2e test gets its own backend + temp SQLite DB (fully isolated, parallel-safe)
 - WebAuthn is handled via CDP virtual authenticators (Chromium only)
+- **Debugging single tests**: Use `SKRIB_TEST_DATA_DIR=1 npx playwright test --project=e2e --grep "test name" --reporter=line` after building (`npm run build`) for verbose output including console.log
+- **Frontend deps must be installed** before running tests: `npm install && ./util/install-plugins`
+- **Worktree note**: In git worktrees, the backend venv lives in the main repo but `PYTHONPATH` is set to the worktree's backend, so worktree code changes take effect in tests
 
 ## Debugging
 

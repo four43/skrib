@@ -280,6 +280,30 @@
         </div>
     </div>
 
+    <!-- User Profile Modal -->
+    <div id="user-profile-modal" class="user-profile-modal">
+        <div class="user-profile-backdrop" onclick="closeUserProfile()"></div>
+        <div class="user-profile-content">
+            <div class="user-profile-header">
+                <h3>Profile</h3>
+                <button class="modal-close-btn" onclick="closeUserProfile()">
+                    <iconify-icon icon="lucide:x"></iconify-icon>
+                </button>
+            </div>
+            <div class="user-profile-body">
+                <div class="profile-avatar-wrapper">
+                    <img id="profile-avatar" class="profile-avatar" src="" alt="">
+                    <span id="profile-presence-dot" class="presence-dot"></span>
+                </div>
+                <div id="profile-username" class="profile-username"></div>
+                <div id="profile-nickname" class="profile-nickname"></div>
+                <div id="profile-role" class="profile-role"></div>
+                <div id="profile-presence" class="profile-presence-label"></div>
+                <div id="profile-status" class="profile-status"></div>
+            </div>
+        </div>
+    </div>
+
     <!-- Room Context Menu -->
     <div id="room-context-menu" class="room-context-menu hidden">
         <button id="ctx-open-room" class="room-context-item">Open</button>

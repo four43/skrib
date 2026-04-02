@@ -10,14 +10,14 @@ def get_user_preferences(username: str) -> Optional[Dict]:
     """Get preferences for a user. Returns None if not found."""
     with get_db() as conn:
         cursor = conn.execute(
-            'SELECT username, color, theme_name, color_scheme, nickname FROM users WHERE username = ? AND status = ?',
+            'SELECT username, color, theme_name, color_scheme, nickname, status_emoji, status_text FROM users WHERE username = ? AND status = ?',
             (username, 'active')
         )
         row = cursor.fetchone()
         return dict(row) if row else None
 
 
-def update_user_preferences(username: str, color: Optional[str] = None, theme_name: Optional[str] = None, color_scheme: Optional[str] = None, nickname: Optional[str] = None) -> bool:
+def update_user_preferences(username: str, color: Optional[str] = None, theme_name: Optional[str] = None, color_scheme: Optional[str] = None, nickname: Optional[str] = None, status_emoji: Optional[str] = None, status_text: Optional[str] = None) -> bool:
     """Update user preferences on the users table."""
     updates = []
     params = []
@@ -37,6 +37,14 @@ def update_user_preferences(username: str, color: Optional[str] = None, theme_na
         trimmed = nickname.strip()
         updates.append('nickname = ?')
         params.append(trimmed if trimmed and len(trimmed) <= 32 else None)
+    if status_emoji is not None:
+        trimmed = status_emoji.strip()
+        updates.append('status_emoji = ?')
+        params.append(trimmed[:8] if trimmed else None)
+    if status_text is not None:
+        trimmed = status_text.strip()
+        updates.append('status_text = ?')
+        params.append(trimmed[:128] if trimmed else None)
 
     if color is not None:
         # Regenerate identicon outside DB connection to avoid holding a write lock
@@ -58,8 +66,8 @@ def update_user_preferences(username: str, color: Optional[str] = None, theme_na
 def get_all_user_preferences() -> Dict[str, Dict]:
     """Get all user preferences as a dict mapping username -> {color, nickname}."""
     with get_db() as conn:
-        cursor = conn.execute("SELECT username, color, nickname FROM users WHERE status = 'active'")
-        return {row['username']: {'color': row['color'], 'nickname': row['nickname']} for row in cursor}
+        cursor = conn.execute("SELECT username, color, nickname, status_emoji, status_text FROM users WHERE status = 'active'")
+        return {row['username']: {'color': row['color'], 'nickname': row['nickname'], 'status_emoji': row['status_emoji'], 'status_text': row['status_text']} for row in cursor}
 
 
 def approve_user(approval_code: str, admin_username: str) -> bool:

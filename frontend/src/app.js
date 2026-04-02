@@ -28,6 +28,8 @@ const PONG_TIMEOUT_MS = 10000;   // Reconnect if no pong within 10s
 let connectionBannerTimeout = null;
 let userColors = {};  // Cache of username -> color mappings
 let userNicknames = {};  // Cache of username -> nickname (null if not set)
+let userPresence = {};  // Cache of username -> boolean (online/offline)
+let userStatuses = {};  // Cache of username -> { emoji, text }
 let serverColor = '#6366f1';  // Cached server color for theme reset
 
 let roomMeta = {};  // Cache of room_id -> { room_type, display_name, members }
@@ -815,10 +817,11 @@ async function checkSession() {
             currentRole = data.role;
             localStorage.setItem('role', data.role);
 
-            // Load theme, user colors, and E2E key in parallel
-            const [, , loadedKey] = await Promise.all([
+            // Load theme, user colors, presence, and E2E key in parallel
+            const [, , , loadedKey] = await Promise.all([
                 loadTheme(username, sessionToken),
                 loadUserColors(),
+                loadUserPresence(),
                 loadPrivateKey(username).catch(e => {
                     console.error('[E2E] Failed to load private key:', e);
                     return null;
@@ -997,16 +1000,87 @@ async function loadUserColors() {
             const data = await response.json();
             userColors = {};
             userNicknames = {};
+            userStatuses = {};
             for (const [username, prefs] of Object.entries(data)) {
                 userColors[username] = prefs.color;
                 if (prefs.nickname) {
                     userNicknames[username] = prefs.nickname;
+                }
+                if (prefs.status_emoji || prefs.status_text) {
+                    userStatuses[username] = { emoji: prefs.status_emoji || '', text: prefs.status_text || '' };
                 }
             }
         }
     } catch (error) {
         console.error('[HTTP] Error loading user colors:', error);
     }
+}
+
+async function loadUserPresence() {
+    try {
+        const response = await fetch(`${API_URL}/users/presence`, {
+            headers: { 'Authorization': `Bearer ${sessionToken}` }
+        });
+        if (response.ok) {
+            userPresence = await response.json();
+        }
+    } catch (error) {
+        console.error('[HTTP] Error loading user presence:', error);
+    }
+}
+
+function updatePresenceIndicators(username) {
+    document.querySelectorAll(`[data-presence-user="${username}"]`).forEach(el => {
+        el.classList.toggle('online', !!userPresence[username]);
+    });
+}
+
+function openUserProfile(username) {
+    const modal = document.getElementById('user-profile-modal');
+    if (!modal) return;
+
+    // Populate from caches (instant)
+    document.getElementById('profile-avatar').src = `${API_URL}/users/${encodeURIComponent(username)}/avatar`;
+    document.getElementById('profile-username').textContent = username;
+    document.getElementById('profile-nickname').textContent = userNicknames[username] || '';
+
+    const isOnline = !!userPresence[username];
+    const presenceDot = document.getElementById('profile-presence-dot');
+    presenceDot.classList.toggle('online', isOnline);
+    const presenceLabel = document.getElementById('profile-presence');
+    presenceLabel.textContent = isOnline ? 'Online' : 'Offline';
+    presenceLabel.className = 'profile-presence-label' + (isOnline ? ' online' : '');
+
+    const status = userStatuses[username];
+    const statusEl = document.getElementById('profile-status');
+    if (status && (status.emoji || status.text)) {
+        statusEl.textContent = (status.emoji || '') + (status.emoji && status.text ? ' ' : '') + (status.text || '');
+    } else {
+        statusEl.textContent = '';
+    }
+
+    modal.classList.add('open');
+
+    // Fetch fresh data for role
+    fetch(`${API_URL}/users/${encodeURIComponent(username)}`, {
+        headers: { 'Authorization': `Bearer ${sessionToken}` }
+    }).then(resp => {
+        if (resp.ok) return resp.json();
+    }).then(data => {
+        if (!data) return;
+        const roleEl = document.getElementById('profile-role');
+        roleEl.textContent = data.role !== 'user' ? data.role.toUpperCase() : '';
+        // Update status from fresh data
+        if (data.status_emoji || data.status_text) {
+            statusEl.textContent = (data.status_emoji || '') + (data.status_emoji && data.status_text ? ' ' : '') + (data.status_text || '');
+            userStatuses[username] = { emoji: data.status_emoji || '', text: data.status_text || '' };
+        }
+    }).catch(() => {});
+}
+
+function closeUserProfile() {
+    const modal = document.getElementById('user-profile-modal');
+    if (modal) modal.classList.remove('open');
 }
 
 function getDisplayName(username) {
@@ -1844,6 +1918,26 @@ function handleSystemMessage(action, data) {
             // Response to our client-side ping
             lastPongTime = Date.now();
             break;
+        case 'presence':
+            userPresence[data.username] = data.connected;
+            updatePresenceIndicators(data.username);
+            break;
+        case 'user_updated':
+            if (data.color !== undefined) userColors[data.username] = data.color;
+            if (data.nickname !== undefined) {
+                if (data.nickname) {
+                    userNicknames[data.username] = data.nickname;
+                } else {
+                    delete userNicknames[data.username];
+                }
+            }
+            if (data.status_emoji !== undefined || data.status_text !== undefined) {
+                userStatuses[data.username] = {
+                    emoji: data.status_emoji ?? (userStatuses[data.username]?.emoji || ''),
+                    text: data.status_text ?? (userStatuses[data.username]?.text || ''),
+                };
+            }
+            break;
         case 'error':
             console.error('[WS] System error:', data.message);
             break;
@@ -2518,9 +2612,14 @@ async function openMembersPanel() {
         members.forEach(member => {
             const memberDiv = document.createElement('div');
             memberDiv.className = 'member-item';
+            memberDiv.dataset.username = member.username;
+            memberDiv.addEventListener('click', () => openUserProfile(member.username));
 
             const memberInfo = document.createElement('div');
             memberInfo.className = 'member-info';
+
+            const avatarWrapper = document.createElement('div');
+            avatarWrapper.className = 'member-avatar-wrapper';
 
             const avatar = document.createElement('img');
             avatar.className = 'user-avatar';
@@ -2528,23 +2627,41 @@ async function openMembersPanel() {
             avatar.width = 28;
             avatar.height = 28;
             avatar.alt = '';
-            memberInfo.appendChild(avatar);
+            avatarWrapper.appendChild(avatar);
+
+            const presenceDot = document.createElement('span');
+            presenceDot.className = 'presence-dot' + (userPresence[member.username] ? ' online' : '');
+            presenceDot.dataset.presenceUser = member.username;
+            avatarWrapper.appendChild(presenceDot);
+
+            memberInfo.appendChild(avatarWrapper);
+
+            const memberDetails = document.createElement('div');
+            memberDetails.className = 'member-details';
 
             const memberName = document.createElement('span');
             memberName.className = 'member-name';
             memberName.style.color = member.color || 'var(--theme-color)';
             memberName.textContent = member.nickname || member.username;
             memberName.title = member.username;
-
-            memberInfo.appendChild(memberName);
+            memberDetails.appendChild(memberName);
 
             if (member.room_role && member.room_role !== 'member') {
                 const memberRole = document.createElement('span');
                 memberRole.className = 'member-role';
                 memberRole.textContent = member.room_role;
-                memberInfo.appendChild(memberRole);
+                memberDetails.appendChild(memberRole);
             }
 
+            const status = userStatuses[member.username];
+            if (status && (status.emoji || status.text)) {
+                const statusEl = document.createElement('span');
+                statusEl.className = 'member-status';
+                statusEl.textContent = (status.emoji || '') + (status.emoji && status.text ? ' ' : '') + (status.text || '');
+                memberDetails.appendChild(statusEl);
+            }
+
+            memberInfo.appendChild(memberDetails);
             memberDiv.appendChild(memberInfo);
             listEl.appendChild(memberDiv);
         });
@@ -2999,6 +3116,8 @@ window.closeAddMemberModal = closeAddMemberModal;
 window.addMembersFromModal = addMembersFromModal;
 window.toggleMembersPanel = toggleMembersPanel;
 window.closeMembersPanel = closeMembersPanel;
+window.openUserProfile = openUserProfile;
+window.closeUserProfile = closeUserProfile;
 
 // Event listeners
 document.addEventListener('DOMContentLoaded', () => {

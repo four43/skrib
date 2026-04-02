@@ -992,6 +992,16 @@ const RoomTypeChatPlugin = (function() {
             renderLinkPreviews(messageDiv, plaintext);
         }
 
+        // Make username clickable to open profile
+        const usernameEl = messageDiv.querySelector('.username');
+        if (usernameEl) {
+            usernameEl.style.cursor = 'pointer';
+            usernameEl.addEventListener('click', (e) => {
+                e.stopPropagation();
+                if (window.openUserProfile) window.openUserProfile(msg.username);
+            });
+        }
+
         return messageDiv;
     }
 

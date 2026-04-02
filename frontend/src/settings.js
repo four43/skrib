@@ -103,6 +103,14 @@ async function loadUserSettings() {
             if (nicknameInput) {
                 nicknameInput.value = data.nickname || '';
             }
+            const statusEmojiInput = document.getElementById('user-status-emoji');
+            if (statusEmojiInput) {
+                statusEmojiInput.value = data.status_emoji || '';
+            }
+            const statusTextInput = document.getElementById('user-status-text');
+            if (statusTextInput) {
+                statusTextInput.value = data.status_text || '';
+            }
             const colorInput = document.getElementById('user-color');
             if (colorInput) {
                 colorInput.value = data.color;
@@ -170,6 +178,33 @@ async function updateUserNickname() {
 async function clearUserNickname() {
     document.getElementById('user-nickname').value = '';
     await updateUserNickname();
+}
+
+async function updateUserStatus() {
+    const emoji = document.getElementById('user-status-emoji').value.trim();
+    const text = document.getElementById('user-status-text').value.trim();
+    try {
+        const response = await fetch(`${API_URL}/users/${encodeURIComponent(currentUsername)}`, {
+            method: 'PATCH',
+            headers: {
+                'Authorization': `Bearer ${sessionToken}`,
+                'Content-Type': 'application/json'
+            },
+            body: JSON.stringify({ status_emoji: emoji || '', status_text: text || '' })
+        });
+        if (response.ok) {
+            alert('Status updated!');
+        }
+    } catch (error) {
+        console.error('[HTTP] Error updating status:', error);
+        alert('Failed to update status');
+    }
+}
+
+async function clearUserStatus() {
+    document.getElementById('user-status-emoji').value = '';
+    document.getElementById('user-status-text').value = '';
+    await updateUserStatus();
 }
 
 async function loadThemeList() {
@@ -462,5 +497,21 @@ function setupEventListeners() {
     const nicknameInput = document.getElementById('user-nickname');
     if (nicknameInput) {
         nicknameInput.addEventListener('change', updateUserNickname);
+    }
+
+    // Status inputs - change event
+    const statusEmojiInput = document.getElementById('user-status-emoji');
+    if (statusEmojiInput) {
+        statusEmojiInput.addEventListener('change', updateUserStatus);
+    }
+    const statusTextInput = document.getElementById('user-status-text');
+    if (statusTextInput) {
+        statusTextInput.addEventListener('change', updateUserStatus);
+    }
+
+    // Clear status button
+    const clearStatusBtn = document.getElementById('clear-status-btn');
+    if (clearStatusBtn) {
+        clearStatusBtn.addEventListener('click', clearUserStatus);
     }
 }

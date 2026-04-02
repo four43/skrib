@@ -27,6 +27,22 @@ from .services import (
 router = APIRouter(prefix="/users", tags=["users"])
 
 
+# --- Bulk endpoints (must be before /{target_username} to avoid path collision) ---
+
+@router.get("/presence")
+async def get_all_presence(username: str = Depends(require_auth)):
+    """Get online/offline status for all active users."""
+    from ..ws import bus
+    users = get_all_users(status='active')
+    return {
+        u['username']: (
+            u['username'] in bus.user_connections
+            and bool(bus.user_connections[u['username']])
+        )
+        for u in users
+    }
+
+
 # --- User management (admin/moderator) ---
 
 @router.get("", response_model=list[UserInfo])
@@ -100,20 +116,11 @@ async def get_user_presence(
 @router.get("/{target_username}", response_model=UserProfile)
 async def get_user_profile(
     target_username: str,
-    username: str = Depends(get_username_from_token),
+    username: str = Depends(require_auth),
 ):
-    """Get user profile. Users can access their own, admins can access any."""
+    """Get user profile. Any authenticated user can view any profile."""
     from ..database import get_db
 
-    # Check permissions
-    if target_username != username:
-        with get_db() as conn:
-            cursor = conn.execute('SELECT role FROM users WHERE username = ?', (username,))
-            row = cursor.fetchone()
-            if not row or row['role'] != 'admin':
-                raise HTTPException(status_code=403, detail="Not authorized")
-
-    # Get user profile
     prefs = get_user_preferences(target_username)
     if not prefs:
         raise HTTPException(status_code=404, detail="User not found")
@@ -135,6 +142,8 @@ async def get_user_profile(
             theme_name=prefs.get('theme_name'),
             color_scheme=prefs.get('color_scheme'),
             nickname=prefs.get('nickname'),
+            status_emoji=prefs.get('status_emoji'),
+            status_text=prefs.get('status_text'),
         )
 
 
@@ -164,8 +173,8 @@ async def update_user(
             if not is_admin:
                 raise HTTPException(status_code=403, detail="Not authorized")
 
-    # Update preferences (color, theme_name, color_scheme, nickname) - users can update their own
-    pref_fields = [updates.color, updates.theme_name, updates.color_scheme, updates.nickname]
+    # Update preferences (color, theme_name, color_scheme, nickname, status) - users can update their own
+    pref_fields = [updates.color, updates.theme_name, updates.color_scheme, updates.nickname, updates.status_emoji, updates.status_text]
     if any(f is not None for f in pref_fields):
         if not is_self and not is_admin:
             raise HTTPException(status_code=403, detail="You can only change your own preferences")
@@ -174,8 +183,27 @@ async def update_user(
             color=updates.color,
             theme_name=updates.theme_name,
             color_scheme=updates.color_scheme,
-            nickname=updates.nickname
+            nickname=updates.nickname,
+            status_emoji=updates.status_emoji,
+            status_text=updates.status_text,
         )
+        # Broadcast user preference changes to all connected clients
+        from ..ws import bus
+        changed = {}
+        if updates.color is not None:
+            changed['color'] = updates.color
+        if updates.nickname is not None:
+            changed['nickname'] = updates.nickname if updates.nickname.strip() else None
+        if updates.status_emoji is not None:
+            changed['status_emoji'] = updates.status_emoji.strip()[:8] if updates.status_emoji.strip() else None
+        if updates.status_text is not None:
+            changed['status_text'] = updates.status_text.strip()[:128] if updates.status_text.strip() else None
+        if changed:
+            await bus.notify_all_users({
+                "type": "system:user_updated",
+                "username": target_username,
+                **changed,
+            })
 
     # Update role - admin only
     if updates.role is not None:
