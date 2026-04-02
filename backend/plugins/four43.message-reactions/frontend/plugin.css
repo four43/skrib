@@ -68,7 +68,7 @@
     border-radius: var(--radius-lg);
     background: var(--bg-surface-elevated);
     color: var(--text-secondary);
-    font-size: 12px;
+    font-size: 1rem;
     font-weight: normal;
     transition: all 0.15s ease;
     user-select: none;
@@ -91,7 +91,6 @@
 }
 
 .four43-reaction-btn .emoji {
-    font-size: 13px;
     line-height: 1;
 }
 
