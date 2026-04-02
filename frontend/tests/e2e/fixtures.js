@@ -247,7 +247,7 @@ export async function registerNewUser(browser, baseURL) {
     await page.locator('#recovery-passphrase').fill(passphrase);
     await page.locator('#recovery-passphrase-confirm').fill(passphrase);
 
-    // Submit — the form POSTs to /api/auth/register/step1 which redirects to enroll-passkey.html
+    // Submit — the form POSTs to /api/auth/register which redirects to enroll-passkey.html
     await page.locator('#register-submit-button').click();
 
     // Wait for enroll-passkey page

@@ -5,28 +5,30 @@ import { loadTheme } from './theme-manager.js';
 loadTheme();
 
 const urlParams = new URLSearchParams(window.location.search);
-const regToken = urlParams.get('token');
+const regToken = urlParams.get('registration_token');
 const inviteToken = urlParams.get('invite');
 
 if (!regToken) {
     showStatus('enroll-status', 'Missing registration token. Please start from the registration page.', 'error');
 }
 
-// Fetch username from the registration token
+// Username + challenge are fetched from /register/begin on page load
 let username = null;
+let beginData = null;
 
 async function init() {
     if (!regToken) return;
 
     try {
-        const resp = await fetch(`${API_URL}/auth/register/token-info?token=${encodeURIComponent(regToken)}`);
+        const beginUrl = `${API_URL}/auth/register/begin?registration_token=${encodeURIComponent(regToken)}`;
+        const resp = await fetch(beginUrl);
         if (!resp.ok) {
             showStatus('enroll-status', 'Invalid or expired registration token. Please register again.', 'error');
             document.getElementById('enroll-passkey-button').disabled = true;
             return;
         }
-        const data = await resp.json();
-        username = data.username;
+        beginData = await resp.json();
+        username = beginData.username;
         document.getElementById('enroll-username').textContent = username;
     } catch (err) {
         showStatus('enroll-status', 'Failed to verify registration token.', 'error');
@@ -45,21 +47,14 @@ async function enrollPasskey() {
         return;
     }
 
+    if (!beginData) {
+        showStatus('enroll-status', 'Registration not initialized. Please refresh and try again.', 'error');
+        btn.disabled = false;
+        return;
+    }
+
     try {
         showStatus('enroll-status', 'Starting passkey enrollment...', 'info');
-
-        // Begin WebAuthn registration
-        const beginUrl = inviteToken
-            ? `${API_URL}/auth/register/begin?invite=${encodeURIComponent(inviteToken)}`
-            : `${API_URL}/auth/register/begin`;
-        const beginResp = await fetch(beginUrl);
-        const beginData = await beginResp.json();
-
-        if (beginData.detail) {
-            showStatus('enroll-status', beginData.detail, 'error');
-            btn.disabled = false;
-            return;
-        }
 
         const challenge = base64ToArrayBuffer(beginData.challenge);
         const userId = new TextEncoder().encode(username);
@@ -110,7 +105,7 @@ async function enrollPasskey() {
 
         // Complete registration on the backend (includes encryption keys)
         const completeBody = {
-            username: username,
+            registration_token: regToken,
             credentialId: arrayBufferToBase64(credential.rawId),
             publicKey: arrayBufferToBase64(credential.response.getPublicKey()),
             challenge: beginData.challenge,

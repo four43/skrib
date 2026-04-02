@@ -2,7 +2,7 @@
 import re
 import secrets
 import base64
-from datetime import datetime
+from datetime import datetime, timedelta
 from typing import Optional, Tuple
 
 from ..database import get_db, get_setting
@@ -22,6 +22,10 @@ USER_COLOR_PALETTE = [
     '#8c564b',  # brown
     '#f7b6d2',  # light pink
 ]
+
+# TTL for challenges and registration tokens
+REGISTRATION_TOKEN_TTL = timedelta(minutes=5)
+CHALLENGE_TTL = timedelta(minutes=5)
 
 # Username rules (Twitter/X-style)
 USERNAME_RE = re.compile(r'^[a-zA-Z0-9_]{4,15}$')
@@ -65,16 +69,38 @@ def create_registration_token(username: str) -> str:
 
 
 def get_registration_token_info(token: str) -> Optional[dict]:
-    """Look up a step-1 registration token. Returns {'username': ...} or None."""
+    """Look up a step-1 registration token. Returns {'username': ...} or None.
+
+    Enforces a TTL — tokens older than REGISTRATION_TOKEN_TTL are rejected.
+    """
     with get_db() as conn:
         cursor = conn.execute('''
-            SELECT username FROM challenges
+            SELECT username, timestamp FROM challenges
             WHERE challenge = ? AND type = 'registration_step1'
         ''', (token,))
         row = cursor.fetchone()
         if row:
+            created = datetime.fromisoformat(row['timestamp'])
+            if datetime.now() - created > REGISTRATION_TOKEN_TTL:
+                # Expired — clean it up
+                conn.execute('DELETE FROM challenges WHERE challenge = ?', (token,))
+                conn.commit()
+                return None
             return {'username': row['username']}
     return None
+
+
+def consume_registration_token(token: str) -> Optional[dict]:
+    """Look up and delete a registration token. Returns {'username': ...} or None."""
+    info = get_registration_token_info(token)
+    if info:
+        with get_db() as conn:
+            conn.execute(
+                "DELETE FROM challenges WHERE challenge = ? AND type = 'registration_step1'",
+                (token,),
+            )
+            conn.commit()
+    return info
 
 
 def generate_challenge() -> str:
@@ -82,18 +108,33 @@ def generate_challenge() -> str:
     return base64.urlsafe_b64encode(secrets.token_bytes(32)).decode('utf-8').rstrip('=')
 
 
-def store_challenge(challenge: str, challenge_type: str, username: Optional[str] = None):
-    """Store a challenge in the database."""
+def store_challenge(challenge: str, challenge_type: str,
+                    username: Optional[str] = None,
+                    registration_token: Optional[str] = None):
+    """Store a challenge in the database.
+
+    If registration_token is provided, the challenge is bound to that token
+    and can only be verified with the same token.
+    """
+    # Store the registration_token in the username field for binding
+    # (registration challenges use this to bind challenge → token)
+    bound_value = registration_token if registration_token else username
     with get_db() as conn:
         conn.execute('''
             INSERT INTO challenges (challenge, type, username, timestamp)
             VALUES (?, ?, ?, ?)
-        ''', (challenge, challenge_type, username, datetime.now().isoformat()))
+        ''', (challenge, challenge_type, bound_value, datetime.now().isoformat()))
         conn.commit()
 
 
-def verify_challenge(challenge: str, challenge_type: str, username: Optional[str] = None) -> bool:
-    """Verify and consume a challenge."""
+def verify_challenge(challenge: str, challenge_type: str,
+                     username: Optional[str] = None,
+                     registration_token: Optional[str] = None) -> bool:
+    """Verify and consume a challenge.
+
+    Enforces TTL — challenges older than CHALLENGE_TTL are rejected.
+    If registration_token is provided, the challenge must be bound to that token.
+    """
     with get_db() as conn:
         cursor = conn.execute('''
             SELECT * FROM challenges
@@ -104,7 +145,19 @@ def verify_challenge(challenge: str, challenge_type: str, username: Optional[str
         if not row:
             return False
 
-        if username and row['username'] and row['username'] != username:
+        # TTL check
+        created = datetime.fromisoformat(row['timestamp'])
+        if datetime.now() - created > CHALLENGE_TTL:
+            conn.execute('DELETE FROM challenges WHERE challenge = ?', (challenge,))
+            conn.commit()
+            return False
+
+        # Binding check: if a registration_token was provided, the stored
+        # value (in the username column) must match it.
+        if registration_token:
+            if row['username'] != registration_token:
+                return False
+        elif username and row['username'] and row['username'] != username:
             return False
 
         # Delete used challenge
@@ -163,73 +216,57 @@ def create_pending_user(username: str, credential_id: str, public_key: str,
                         encryption_public_key: Optional[str] = None,
                         passphrase_encrypted_private_key: Optional[str] = None,
                         encrypted_private_key: Optional[str] = None) -> tuple[str, bool]:
-    """Create a pending user and return approval code and whether auto-approved.
+    """Create a user and return (approval_code, is_auto_approved).
 
-    Returns:
-        tuple: (approval_code, is_auto_approved)
+    Determines role/status/approved_by from the registration mode and user count.
     """
     approval_code = generate_approval_code()
     mode = get_registration_mode()
-
     now = datetime.now().isoformat()
 
     # Read user counts to pick a color (read-only, no write lock)
     with get_db() as conn:
-        cursor = conn.execute("SELECT COUNT(*) as count FROM users WHERE status = 'active'")
-        user_count = cursor.fetchone()['count']
-
-        cursor = conn.execute("SELECT COUNT(*) as count FROM users")
-        total_users = cursor.fetchone()['count']
+        active_count = conn.execute(
+            "SELECT COUNT(*) as c FROM users WHERE status = 'active'"
+        ).fetchone()['c']
+        total_count = conn.execute(
+            "SELECT COUNT(*) as c FROM users"
+        ).fetchone()['c']
 
     # Generate identicon outside DB connection to avoid holding a write lock
-    color = USER_COLOR_PALETTE[total_users % len(USER_COLOR_PALETTE)]
+    color = USER_COLOR_PALETTE[total_count % len(USER_COLOR_PALETTE)]
     avatar_data = generate_identicon(username, color)
 
-    # Short write-only transactions below
+    # Determine role, status, and approval source
+    if active_count == 0:
+        role, status, approved_by = 'admin', 'active', 'system'
+    elif mode == 'open':
+        role, status, approved_by = 'user', 'active', 'open'
+    elif mode == 'invite_only' and invite_token:
+        consume_invite_token(invite_token, username)
+        role, status, approved_by = 'user', 'active', 'invite'
+    else:
+        # approval_required (or any other mode)
+        role, status, approved_by = 'user', 'pending', None
+
+    is_auto_approved = status == 'active'
+
     with get_db() as conn:
-        if user_count == 0:
-            # First user - auto-approve as admin
-            conn.execute('''
-                INSERT INTO users (username, credential_id, public_key, role, status, color, avatar_data, created_at, approved_at, approved_by,
-                                   encryption_public_key, passphrase_encrypted_private_key, encrypted_private_key)
-                VALUES (?, ?, ?, 'admin', 'active', ?, ?, ?, ?, 'system', ?, ?, ?)
-            ''', (username, credential_id, public_key, color, avatar_data, now, now,
-                  encryption_public_key, passphrase_encrypted_private_key, encrypted_private_key))
-            conn.commit()
-            return (approval_code, True)
-
-        if mode == 'open':
-            # Open mode - auto-approve immediately
-            conn.execute('''
-                INSERT INTO users (username, credential_id, public_key, role, status, color, avatar_data, created_at, approved_at, approved_by,
-                                   encryption_public_key, passphrase_encrypted_private_key, encrypted_private_key)
-                VALUES (?, ?, ?, 'user', 'active', ?, ?, ?, ?, 'OPEN_STATE', ?, ?, ?)
-            ''', (username, credential_id, public_key, color, avatar_data, now, now,
-                  encryption_public_key, passphrase_encrypted_private_key, encrypted_private_key))
-            conn.commit()
-            return (approval_code, True)
-
-        if mode == 'invite_only' and invite_token:
-            # Invite-only mode with valid token - auto-approve
-            consume_invite_token(invite_token, username)
-            conn.execute('''
-                INSERT INTO users (username, credential_id, public_key, role, status, color, avatar_data, created_at, approved_at, approved_by,
-                                   encryption_public_key, passphrase_encrypted_private_key, encrypted_private_key)
-                VALUES (?, ?, ?, 'user', 'active', ?, ?, ?, ?, 'INVITE', ?, ?, ?)
-            ''', (username, credential_id, public_key, color, avatar_data, now, now,
-                  encryption_public_key, passphrase_encrypted_private_key, encrypted_private_key))
-            conn.commit()
-            return (approval_code, True)
-
-        # approval_required mode - require approval
         conn.execute('''
-            INSERT INTO users (username, credential_id, public_key, status, color, avatar_data, approval_code, created_at,
-                               encryption_public_key, passphrase_encrypted_private_key, encrypted_private_key)
-            VALUES (?, ?, ?, 'pending', ?, ?, ?, ?, ?, ?, ?)
-        ''', (username, credential_id, public_key, color, avatar_data, approval_code, now,
-              encryption_public_key, passphrase_encrypted_private_key, encrypted_private_key))
+            INSERT INTO users (
+                username, credential_id, public_key, role, status, color,
+                avatar_data, approval_code, created_at, approved_at, approved_by,
+                encryption_public_key, passphrase_encrypted_private_key, encrypted_private_key
+            ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+        ''', (
+            username, credential_id, public_key, role, status, color,
+            avatar_data, approval_code if not is_auto_approved else None,
+            now, now if is_auto_approved else None, approved_by,
+            encryption_public_key, passphrase_encrypted_private_key, encrypted_private_key,
+        ))
         conn.commit()
-        return (approval_code, False)
+
+    return (approval_code, is_auto_approved)
 
 
 def get_user_credentials(username: str) -> Optional[dict]:

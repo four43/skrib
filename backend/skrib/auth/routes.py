@@ -14,7 +14,6 @@ from .schemas import (
     SessionResponse,
     StoreEncryptionKeyRequest,
     EncryptionKeyResponse,
-    RegistrationTokenInfoResponse,
 )
 from .services import (
     generate_challenge,
@@ -29,6 +28,7 @@ from .services import (
     is_username_taken,
     create_registration_token,
     get_registration_token_info,
+    consume_registration_token,
 )
 from ..dependencies import get_username_from_token, require_auth
 from ..database import get_db
@@ -37,12 +37,12 @@ from ..config import WEBAUTHN_RP_NAME, WEBAUTHN_RP_ID
 router = APIRouter(prefix="/auth", tags=["authentication"])
 
 
-@router.post("/register/step1")
-async def register_step1(
+@router.post("/register")
+async def register(
     username: str = Form(...),
     invite: Optional[str] = Form(None),
 ):
-    """Step 1: Accept form POST with username.
+    """Accept form POST with username to start registration.
 
     The form also contains a password field (type=password, autocomplete=new-password)
     so that password managers detect the submission and offer to save credentials.
@@ -74,64 +74,53 @@ async def register_step1(
         return _register_error("Username is already taken", username, invite or "")
 
     token = create_registration_token(username)
-    params = {'token': token}
+    params = {'registration_token': token}
     if invite:
         params['invite'] = invite
     return RedirectResponse(url=f"/enroll-passkey.html?{urlencode(params)}", status_code=303)
 
 
-@router.get("/register/token-info", response_model=RegistrationTokenInfoResponse)
-async def register_token_info(token: str = Query(...)):
-    """Return the username associated with a step-1 registration token."""
-    info = get_registration_token_info(token)
+@router.get("/register/begin", response_model=RegistrationBeginResponse)
+async def begin_registration(registration_token: str = Query(...)):
+    """Begin WebAuthn registration.
+
+    Validates the registration token from step 1 and returns the challenge
+    along with the username (replacing the old token-info endpoint).
+    """
+    info = get_registration_token_info(registration_token)
     if not info:
         raise HTTPException(status_code=404, detail="Invalid or expired registration token")
-    return RegistrationTokenInfoResponse(username=info['username'])
-
-
-@router.get("/register/begin", response_model=RegistrationBeginResponse)
-async def begin_registration(invite: Optional[str] = Query(None)):
-    """Begin WebAuthn registration process."""
-    if not is_registration_allowed(invite_token=invite):
-        mode = get_registration_mode()
-        if mode == 'closed':
-            raise HTTPException(status_code=403, detail="Registration is currently closed")
-        elif mode == 'invite_only':
-            raise HTTPException(status_code=403, detail="Registration requires a valid invite link")
-        else:
-            raise HTTPException(status_code=403, detail="Registration is not available")
 
     challenge = generate_challenge()
-    store_challenge(challenge, 'registration')
+    store_challenge(challenge, 'registration', registration_token=registration_token)
 
     return RegistrationBeginResponse(
         challenge=challenge,
-        rp={'name': WEBAUTHN_RP_NAME, 'id': WEBAUTHN_RP_ID}
+        rp={'name': WEBAUTHN_RP_NAME, 'id': WEBAUTHN_RP_ID},
+        username=info['username'],
     )
 
 
 @router.post("/register/complete", response_model=RegistrationCompleteResponse)
 async def complete_registration(request: RegistrationCompleteRequest):
-    """Complete WebAuthn registration."""
-    if not is_registration_allowed(invite_token=request.invite_token):
-        mode = get_registration_mode()
-        if mode == 'closed':
-            raise HTTPException(status_code=403, detail="Registration is currently closed")
-        elif mode == 'invite_only':
-            raise HTTPException(status_code=403, detail="Registration requires a valid invite link")
-        else:
-            raise HTTPException(status_code=403, detail="Registration is not available")
+    """Complete WebAuthn registration.
 
-    if not verify_challenge(request.challenge, 'registration'):
+    Username is derived from the registration token, not from the request body.
+    The token is consumed (deleted) on success.
+    """
+    info = get_registration_token_info(request.registration_token)
+    if not info:
+        raise HTTPException(status_code=400, detail="Invalid or expired registration token")
+
+    username = info['username']
+
+    if not verify_challenge(request.challenge, 'registration',
+                            registration_token=request.registration_token):
         raise HTTPException(status_code=400, detail="Invalid or expired challenge")
-
-    username_error = validate_username(request.username)
-    if username_error:
-        raise HTTPException(status_code=400, detail=username_error)
 
     try:
         approval_code, is_auto_approved = create_pending_user(
-            request.username,
+            username,
             request.credentialId,
             request.publicKey,
             invite_token=request.invite_token,
@@ -139,6 +128,9 @@ async def complete_registration(request: RegistrationCompleteRequest):
             passphrase_encrypted_private_key=request.passphrase_encrypted_private_key,
             encrypted_private_key=request.encrypted_private_key,
         )
+
+        # Consume the registration token now that the user is created
+        consume_registration_token(request.registration_token)
 
         if is_auto_approved:
             return RegistrationCompleteResponse(

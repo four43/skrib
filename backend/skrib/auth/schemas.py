@@ -22,10 +22,11 @@ class AllowCredential(BaseModel):
 class RegistrationBeginResponse(BaseModel):
     challenge: str
     rp: RPInfo
+    username: str
 
 
 class RegistrationCompleteRequest(BaseModel):
-    username: str
+    registration_token: str
     credentialId: str
     publicKey: str
     challenge: str
@@ -76,5 +77,3 @@ class EncryptionKeyResponse(BaseModel):
     passphrase_encrypted_private_key: Optional[str] = None
 
 
-class RegistrationTokenInfoResponse(BaseModel):
-    username: str
