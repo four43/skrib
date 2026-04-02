@@ -30,6 +30,71 @@
 }
 
 /* ═══════════════════════════════════════════
+   Search Input Clear Button
+   ═══════════════════════════════════════════ */
+
+input[type="search"]::-webkit-search-cancel-button {
+    -webkit-appearance: searchfield-cancel-button;
+    cursor: pointer;
+}
+
+/* ═══════════════════════════════════════════
+   Combined Status Input
+   ═══════════════════════════════════════════ */
+
+.status-input-wrapper {
+    display: flex;
+    align-items: center;
+    border: 1px solid rgba(var(--theme-rgb), 0.2);
+    border-radius: 10px;
+    background: var(--bg-surface-dim);
+    overflow: hidden;
+    flex: 1;
+}
+
+.status-input-wrapper:focus-within {
+    border-color: var(--theme-color);
+    box-shadow: 0 0 0 2px rgba(var(--theme-rgb), 0.15);
+}
+
+.status-emoji-btn {
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    width: 40px;
+    height: 100%;
+    min-height: 38px;
+    padding: 0;
+    margin: 0;
+    border: none;
+    border-right: 1px solid rgba(var(--theme-rgb), 0.1);
+    background: transparent;
+    font-size: 18px;
+    cursor: pointer;
+    flex-shrink: 0;
+    color: var(--text-secondary);
+    box-shadow: none;
+}
+
+.status-emoji-btn:hover {
+    background: rgba(var(--theme-rgb), 0.06);
+}
+
+.status-text-input {
+    border: none !important;
+    border-radius: 0 !important;
+    background: transparent !important;
+    box-shadow: none !important;
+    outline: none !important;
+    flex: 1;
+    min-width: 0;
+}
+
+.status-text-input:focus {
+    box-shadow: none !important;
+}
+
+/* ═══════════════════════════════════════════
    Color Scheme Picker
    ═══════════════════════════════════════════ */
 

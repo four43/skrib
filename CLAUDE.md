@@ -117,7 +117,7 @@ cd frontend && ./util/test-e2e tests/e2e/core.spec.js       # run a specific tes
 cd frontend && ./util/test-e2e --grep "room members"        # filter by test name
 
 # DOM/unit tests
-cd frontend && npm test
+cd frontend && ./util/test
 ```
 
 - E2E tests live in `frontend/tests/e2e/*.spec.js`, fixtures in `frontend/tests/e2e/fixtures.js`

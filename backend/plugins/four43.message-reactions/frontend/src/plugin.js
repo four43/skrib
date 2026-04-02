@@ -108,6 +108,23 @@ const ReactionsPlugin = (function() {
                 };
                 hoverBar.insertBefore(btn, firstExistingBtn);
             });
+
+            // Add "+" button to open full emoji picker (if available)
+            const plusBtn = document.createElement('button');
+            plusBtn.className = 'four43-hover-emoji-btn four43-hover-emoji-plus';
+            plusBtn.textContent = '+';
+            plusBtn.title = 'More emoji';
+            plusBtn.onclick = async (e) => {
+                e.stopPropagation();
+                if (!window.SkribEmojiPicker) return;
+                const result = await window.SkribEmojiPicker.open({ anchor: plusBtn });
+                if (result) {
+                    const emojiValue = result.isCustom ? `:${result.shortcode}:` : result.emoji;
+                    addReaction(messageId, emojiValue);
+                }
+                hoverBar.classList.remove('active');
+            };
+            hoverBar.insertBefore(plusBtn, firstExistingBtn);
         }
 
         // Create reactions container (shows existing reaction pills below message)
@@ -265,7 +282,18 @@ const ReactionsPlugin = (function() {
 
             const emojiSpan = document.createElement('span');
             emojiSpan.className = 'emoji';
-            emojiSpan.textContent = emoji;
+            const customMatch = emoji.match(/^:([a-z0-9-]+):$/);
+            if (customMatch) {
+                const img = document.createElement('img');
+                img.src = `/api/plugins/four43.emoji-picker/custom-emoji/${customMatch[1]}`;
+                img.alt = emoji;
+                img.width = 16;
+                img.height = 16;
+                img.style.verticalAlign = 'middle';
+                emojiSpan.appendChild(img);
+            } else {
+                emojiSpan.textContent = emoji;
+            }
 
             const countSpan = document.createElement('span');
             countSpan.className = 'count';

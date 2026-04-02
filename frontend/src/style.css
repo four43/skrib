@@ -625,12 +625,18 @@ html[data-theme-dark] .settings-nav {
 
 .preference-input {
     flex: 1;
-    padding: 4px 8px;
-    border: 1px solid rgba(255, 255, 255, 0.2);
-    border-radius: 4px;
+    padding: 8px 12px;
+    border: 1px solid rgba(var(--theme-rgb), 0.2);
+    border-radius: 10px;
     font-size: 14px;
-    background: rgba(255, 255, 255, 0.1);
-    color: inherit;
+    background: var(--bg-surface-dim);
+    color: var(--text-primary);
+}
+
+.preference-input:focus {
+    outline: none;
+    border-color: var(--theme-color);
+    box-shadow: 0 0 0 2px rgba(var(--theme-rgb), 0.15);
 }
 
 /* ═══════════════════════════════════════════

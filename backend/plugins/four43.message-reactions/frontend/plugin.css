@@ -32,6 +32,16 @@
     transform: scale(1.2);
 }
 
+.four43-hover-emoji-plus {
+    font-size: 18px;
+    color: var(--text-muted);
+    font-weight: 300;
+}
+
+.four43-hover-emoji-plus:hover {
+    color: var(--theme-color);
+}
+
 /* ── Reaction pills (existing reactions below message) ──────────────── */
 
 .four43-reactions-container {

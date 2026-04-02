@@ -1,0 +1,15 @@
+{
+  "id": "four43.emoji-picker",
+  "name": "Emoji Picker",
+  "version": "1.0.0",
+  "description": "Searchable emoji picker with categories, custom emoji support, and reusable picker component",
+  "author": "Four43",
+  "entry": "frontend/dist/plugin.js",
+  "permissions": [
+    "http.routes",
+    "storage.read",
+    "storage.write"
+  ],
+  "hooks": {},
+  "styles": ["frontend/plugin.css"]
+}

@@ -12,6 +12,19 @@ let currentRole = null;
 let currentThemeName = null;
 let currentColorScheme = 'auto';
 
+// Load emoji picker plugin (for status emoji button)
+(function loadEmojiPicker() {
+    const pluginId = 'four43.emoji-picker';
+    const css = document.createElement('link');
+    css.rel = 'stylesheet';
+    css.href = `/api/plugins/${pluginId}/file/frontend/plugin.css`;
+    document.head.appendChild(css);
+
+    const script = document.createElement('script');
+    script.src = `/api/plugins/${pluginId}/file/frontend/dist/plugin.js`;
+    document.head.appendChild(script);
+})();
+
 // Check session and redirect if not authenticated
 checkSession();
 
@@ -111,6 +124,7 @@ async function loadUserSettings() {
             if (statusTextInput) {
                 statusTextInput.value = data.status_text || '';
             }
+            updateStatusEmojiDisplay();
             const colorInput = document.getElementById('user-color');
             if (colorInput) {
                 colorInput.value = data.color;
@@ -146,8 +160,8 @@ async function updateUserColor() {
             },
             body: JSON.stringify({ color })
         });
-        if (response.ok) {
-            alert('Color updated successfully! Return to chat to see the changes.');
+        if (!response.ok) {
+            alert('Failed to update color preference');
         }
     } catch (error) {
         console.error('[HTTP] Error updating color:', error);
@@ -166,8 +180,8 @@ async function updateUserNickname() {
             },
             body: JSON.stringify({ nickname: nickname || '' })
         });
-        if (response.ok) {
-            alert('Nickname updated successfully! Return to chat to see the changes.');
+        if (!response.ok) {
+            alert('Failed to update nickname');
         }
     } catch (error) {
         console.error('[HTTP] Error updating nickname:', error);
@@ -175,9 +189,33 @@ async function updateUserNickname() {
     }
 }
 
-async function clearUserNickname() {
-    document.getElementById('user-nickname').value = '';
-    await updateUserNickname();
+function updateStatusEmojiDisplay() {
+    const emoji = document.getElementById('user-status-emoji').value.trim();
+    const display = document.getElementById('status-emoji-display');
+    if (display) {
+        display.textContent = emoji || '☺';
+    }
+}
+
+async function promptStatusEmoji() {
+    const btn = document.getElementById('status-emoji-btn');
+    if (window.SkribEmojiPicker) {
+        const result = await window.SkribEmojiPicker.open({ anchor: btn });
+        if (result) {
+            const value = result.isCustom ? `:${result.shortcode}:` : result.emoji;
+            document.getElementById('user-status-emoji').value = value;
+            updateStatusEmojiDisplay();
+            updateUserStatus();
+        }
+    } else {
+        const current = document.getElementById('user-status-emoji').value;
+        const result = prompt('Enter an emoji for your status:', current);
+        if (result !== null) {
+            document.getElementById('user-status-emoji').value = result.trim();
+            updateStatusEmojiDisplay();
+            updateUserStatus();
+        }
+    }
 }
 
 async function updateUserStatus() {
@@ -192,19 +230,13 @@ async function updateUserStatus() {
             },
             body: JSON.stringify({ status_emoji: emoji || '', status_text: text || '' })
         });
-        if (response.ok) {
-            alert('Status updated!');
+        if (!response.ok) {
+            alert('Failed to update status');
         }
     } catch (error) {
         console.error('[HTTP] Error updating status:', error);
         alert('Failed to update status');
     }
-}
-
-async function clearUserStatus() {
-    document.getElementById('user-status-emoji').value = '';
-    document.getElementById('user-status-text').value = '';
-    await updateUserStatus();
 }
 
 async function loadThemeList() {
@@ -487,31 +519,29 @@ function setupEventListeners() {
         userColorInput.addEventListener('change', updateUserColor);
     }
 
-    // Clear nickname button
-    const clearNicknameBtn = document.getElementById('clear-nickname-btn');
-    if (clearNicknameBtn) {
-        clearNicknameBtn.addEventListener('click', clearUserNickname);
-    }
-
-    // Nickname input - change event
+    // Nickname input - change and search (native clear X) events
     const nicknameInput = document.getElementById('user-nickname');
     if (nicknameInput) {
         nicknameInput.addEventListener('change', updateUserNickname);
+        nicknameInput.addEventListener('search', updateUserNickname);
     }
 
-    // Status inputs - change event
-    const statusEmojiInput = document.getElementById('user-status-emoji');
-    if (statusEmojiInput) {
-        statusEmojiInput.addEventListener('change', updateUserStatus);
-    }
+    // Status text input - change and search (native clear X) events
     const statusTextInput = document.getElementById('user-status-text');
     if (statusTextInput) {
         statusTextInput.addEventListener('change', updateUserStatus);
+        statusTextInput.addEventListener('search', () => {
+            if (!statusTextInput.value) {
+                document.getElementById('user-status-emoji').value = '';
+                updateStatusEmojiDisplay();
+            }
+            updateUserStatus();
+        });
     }
 
-    // Clear status button
-    const clearStatusBtn = document.getElementById('clear-status-btn');
-    if (clearStatusBtn) {
-        clearStatusBtn.addEventListener('click', clearUserStatus);
+    // Status emoji button
+    const statusEmojiBtn = document.getElementById('status-emoji-btn');
+    if (statusEmojiBtn) {
+        statusEmojiBtn.addEventListener('click', promptStatusEmoji);
     }
 }
