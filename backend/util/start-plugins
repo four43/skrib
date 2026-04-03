@@ -1,0 +1,57 @@
+#!/usr/bin/env bash
+# Start all out-of-process plugins.
+# Run from backend/ directory.
+#
+# Usage:
+#   ./util/start-plugins          # start all plugins
+#   ./util/start-plugins --stop   # stop all plugins
+
+set -euo pipefail
+
+BACKEND_DIR="$(cd "$(dirname "$0")/.." && pwd)"
+PLUGINS_DIR="$BACKEND_DIR/plugins"
+BUS_URL="${SKRIB_BUS_URL:-ws://127.0.0.1:9000}"
+PID_DIR="$BACKEND_DIR/data/plugin-pids"
+
+if [ "${1:-}" = "--stop" ]; then
+    if [ -d "$PID_DIR" ]; then
+        for pidfile in "$PID_DIR"/*.pid; do
+            [ -f "$pidfile" ] || continue
+            pid=$(cat "$pidfile")
+            name=$(basename "$pidfile" .pid)
+            if kill -0 "$pid" 2>/dev/null; then
+                kill "$pid"
+                echo "[Plugins] Stopped $name (pid $pid)"
+            fi
+            rm -f "$pidfile"
+        done
+    fi
+    exit 0
+fi
+
+mkdir -p "$PID_DIR"
+
+for plugin_dir in "$PLUGINS_DIR"/four43.*/; do
+    [ -f "$plugin_dir/__main__.py" ] || continue
+    plugin_name=$(basename "$plugin_dir")
+
+    # Kill existing process if running
+    pidfile="$PID_DIR/$plugin_name.pid"
+    if [ -f "$pidfile" ]; then
+        old_pid=$(cat "$pidfile")
+        if kill -0 "$old_pid" 2>/dev/null; then
+            kill "$old_pid" 2>/dev/null || true
+        fi
+        rm -f "$pidfile"
+    fi
+
+    SKRIB_BUS_URL="$BUS_URL" \
+    PYTHONPATH="$BACKEND_DIR" \
+        python "$plugin_dir/__main__.py" &
+    pid=$!
+    echo "$pid" > "$pidfile"
+    echo "[Plugins] Started $plugin_name (pid $pid)"
+done
+
+echo "[Plugins] All plugins started. Bus URL: $BUS_URL"
+echo "[Plugins] Stop with: $0 --stop"

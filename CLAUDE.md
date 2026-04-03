@@ -11,6 +11,7 @@ Read these files on demand when working on specific areas:
   - **WebAuthn testing via Playwright**: `docs/playwright-webauthn-testing.md`
 - **Feature planning**: `docs/planning-feature-list.md`
 - **E2E encryption design**: `docs/end-to-end-encryption.md`
+- **Plugin system & bus architecture**: `docs/plugin-system.md`
 - **Plugins**: Each plugin has a `README.md` — read on demand when working on a specific plugin:
   - `backend/plugins/four43.room-type-chat/README.md` — Chat messaging (room type)
   - `backend/plugins/four43.room-type-todo/README.md` — Todo lists (room type)
@@ -30,10 +31,30 @@ backend/skrib/       # FastAPI app
   rooms/                 # Chat rooms, DMs, IRC features (topic, roles)
   ws/                    # Unified WebSocket bus (single connection per client)
   messages/              # Message search
-  admin/                 # User management, settings
+  admin/                 # Plugin approval admin API
+  plugins/               # Plugin registry, routes, middleware, core API, settings
+  plugin_bus/            # Out-of-process plugin bus (server, bridge, protocol, approvals, settings)
   database.py            # SQLite + WAL mode
   dependencies.py        # Auth middleware
   main.py                # App entry & router registration
+
+backend/skrib_plugin_sdk/  # SDK for writing out-of-process plugins
+  plugin.py              # SkribPlugin base class
+  client.py              # WebSocket bus client
+  bus.py                 # PluginBus (broadcast, notify, reply, emit)
+  core_api.py            # CoreAPI client over bus frames
+  database.py            # Plugin database helpers
+  http.py                # HTTP server helper
+  loader.py              # Plugin package loader
+
+backend/plugins/         # Plugin implementations (each has backend/ + frontend/)
+  four43.room-type-chat/ # Chat messaging (room type)
+  four43.room-type-todo/ # Todo lists (room type)
+  four43.chat-typing/    # Typing indicators (feature)
+  four43.message-reactions/ # Emoji reactions (feature)
+  four43.web-push/       # Web Push notifications (feature)
+  four43.attachments/    # File attachments (feature)
+  four43.emoji-picker/   # Custom emoji (feature)
 
 data/                    # SQLite database files, clear these as needed for testing
 
@@ -72,6 +93,22 @@ frontend/src/            # Vanilla JS (Vite build)
 - Messages sent via `room.message` (from client) or HTTP `POST /rooms/{room_id}/messages`
 - Implementation in `backend/skrib/ws/` (manager.py, handlers.py, routes.py)
 
+## Out-of-Process Plugin Bus
+
+Plugins can run as separate processes communicating over a WebSocket bus on port 9000:
+
+- **Bus server** (`backend/skrib/plugin_bus/server.py`) — accepts plugin connections, enforces permissions, rate-limits, routes frames
+- **Bridge** (`backend/skrib/plugin_bus/bridge.py`) — translates bus frames to/from the UnifiedConnectionManager and CoreAPI
+- **Protocol** (`backend/skrib/plugin_bus/protocol.py`) — frame types, validation, permissions
+- **Approvals** (`backend/skrib/plugin_bus/approvals.py`) — admin must approve new plugins before activation; manifest changes re-trigger approval
+- **Settings** (`backend/skrib/plugin_bus/settings.py`) — typed plugin settings (server-scoped and user-scoped)
+- **SDK** (`backend/skrib_plugin_sdk/`) — Python SDK for writing out-of-process plugins
+- **Admin API** (`backend/skrib/admin/routes.py`) — `GET/POST /api/admin/plugins/*` for approval management
+- **Settings API** (`backend/skrib/plugins/settings_routes.py`) — `GET/PATCH /api/plugins/{id}/settings/*`
+- **CoreAPI HTTP** (`backend/skrib/plugins/core_api_routes.py`) — `GET /api/core/rooms/*`, `GET /api/core/users/*`
+
+Each plugin has a `backend/plugin_bus.py` (SDK version) and `__main__.py` (entry point). The `ws/handlers.py` dispatcher tries bus-connected plugins first, then falls back to in-process.
+
 ## Plugins — Frontend Build
 
 Each plugin with a frontend is its own npm + Vite project under `backend/plugins/{id}/frontend/`:
@@ -99,6 +136,10 @@ These are wired into the main frontend `package.json` scripts (`npm run dev`, `n
 # Backend
 cd backend && pip install -e . && uvicorn skrib.main:app --reload --host 0.0.0.0 --port 8000
 
+# Out-of-process plugins (optional — connects to bus on port 9000)
+cd backend && ./util/start-plugins          # start all plugin processes
+cd backend && ./util/start-plugins --stop   # stop all plugin processes
+
 # Frontend (installs plugin deps, builds plugins, starts dev server)
 cd frontend && npm install && ./util/install-plugins && npm run dev  # port 5173
 
@@ -118,6 +159,9 @@ cd frontend && ./util/test-e2e --grep "room members"        # filter by test nam
 
 # DOM/unit tests
 cd frontend && ./util/test
+
+# Plugin bus unit tests (bus server, bridge, SDK, approvals, settings)
+cd backend && python -m pytest test_plugin_bus/ -v
 ```
 
 - E2E tests live in `frontend/tests/e2e/*.spec.js`, fixtures in `frontend/tests/e2e/fixtures.js`

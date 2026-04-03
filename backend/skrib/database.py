@@ -240,6 +240,33 @@ def init_db():
             )
         ''')
 
+        # Plugin approvals — tracks admin approval state for out-of-process plugins
+        conn.execute('''
+            CREATE TABLE IF NOT EXISTS plugin_approvals (
+                plugin_id TEXT PRIMARY KEY,
+                status TEXT NOT NULL DEFAULT 'pending',
+                manifest_hash TEXT NOT NULL,
+                manifest_json TEXT NOT NULL,
+                approved_by TEXT,
+                approved_at TEXT,
+                created_at TEXT NOT NULL,
+                updated_at TEXT NOT NULL
+            )
+        ''')
+
+        # Plugin settings — typed key-value store for plugin configuration
+        # username is '' (empty string) for server-scoped settings
+        conn.execute('''
+            CREATE TABLE IF NOT EXISTS plugin_settings (
+                plugin_id TEXT NOT NULL,
+                key TEXT NOT NULL,
+                scope TEXT NOT NULL,
+                username TEXT NOT NULL DEFAULT '',
+                value TEXT NOT NULL,
+                PRIMARY KEY (plugin_id, key, scope, username)
+            )
+        ''')
+
         # Set default registration mode (env var override on first startup only)
         cursor = conn.execute("SELECT value FROM settings WHERE key = 'registration_mode'")
         if not cursor.fetchone():

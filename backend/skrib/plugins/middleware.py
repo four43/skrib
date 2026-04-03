@@ -4,21 +4,38 @@ Injects x-skrib-username, x-skrib-user-role, and x-skrib-room-role
 headers into requests to /api/plugins/* routes. Plugins read these
 headers via the helpers in skrib.plugins.auth instead of importing
 core auth/permission functions directly.
+
+For bus-connected plugins with ``http_base_url``, this middleware also
+proxies HTTP requests to the plugin's external process.
 """
 import re
 import time
 import threading
 from urllib.parse import unquote
 
+import httpx
+
 # Match /rooms/{room_id} segment in plugin route paths
 _ROOM_ID_RE = re.compile(r'/rooms/([^/]+)')
 _SKRIB_HEADER_PREFIX = b'x-skrib-'
+# Match /api/plugins/{plugin_id}/... to extract plugin_id and sub-path
+_PLUGIN_ROUTE_RE = re.compile(r'^/api/plugins/([^/]+)(/.*)?$')
 
 # Short-lived cache for token→(username, role) lookups (30s TTL).
 # Avoids 2 DB queries per plugin request for the same session.
 _AUTH_CACHE_TTL = 30
 _auth_cache = {}  # token -> (username, role, expires_at)
 _auth_cache_lock = threading.Lock()
+
+# Shared async HTTP client for proxying (created lazily)
+_http_client: httpx.AsyncClient | None = None
+
+
+def _get_http_client() -> httpx.AsyncClient:
+    global _http_client
+    if _http_client is None:
+        _http_client = httpx.AsyncClient(timeout=30.0)
+    return _http_client
 
 
 def _get_cached_auth(token: str):
@@ -43,7 +60,12 @@ def _set_cached_auth(token: str, username: str, role: str):
 
 
 class PluginAuthMiddleware:
-    """Pre-authenticate plugin HTTP requests and inject auth context headers."""
+    """Pre-authenticate plugin HTTP requests and inject auth context headers.
+
+    For bus-connected plugins that have an ``http_base_url``, requests to
+    ``/api/plugins/{plugin_id}/...`` are proxied to the plugin's HTTP server
+    with auth headers injected.
+    """
 
     def __init__(self, app):
         self.app = app
@@ -54,7 +76,82 @@ class PluginAuthMiddleware:
             if path.startswith("/api/plugins/"):
                 scope = self._inject_auth(scope, path)
 
+                # Check if this plugin is bus-connected with an HTTP server
+                proxy_url = self._get_proxy_url(scope, path)
+                if proxy_url:
+                    await self._proxy_request(scope, receive, send, proxy_url)
+                    return
+
         await self.app(scope, receive, send)
+
+    def _get_proxy_url(self, scope: dict, path: str) -> str | None:
+        """Check if this request should be proxied to a bus-connected plugin."""
+        m = _PLUGIN_ROUTE_RE.match(path)
+        if not m:
+            return None
+
+        plugin_id = m.group(1)
+        sub_path = m.group(2) or ""
+
+        try:
+            from ..main import app as main_app
+            plugin_bus = getattr(main_app.state, 'plugin_bus', None)
+            if not plugin_bus:
+                return None
+            conn = plugin_bus.get_plugin(plugin_id)
+            if not conn or not conn.http_base_url:
+                return None
+            return f"{conn.http_base_url.rstrip('/')}{sub_path}"
+        except Exception:
+            return None
+
+    async def _proxy_request(self, scope: dict, receive, send, proxy_url: str) -> None:
+        """Proxy an HTTP request to a bus-connected plugin's HTTP server."""
+        # Collect the request body
+        body = b""
+        while True:
+            message = await receive()
+            body += message.get("body", b"")
+            if not message.get("more_body", False):
+                break
+
+        # Build headers from scope, including injected x-skrib-* headers
+        headers = {}
+        for k, v in scope.get("headers", []):
+            name = k.decode("latin-1")
+            # Skip hop-by-hop headers
+            if name.lower() in ("host", "transfer-encoding"):
+                continue
+            headers[name] = v.decode("latin-1")
+
+        method = scope.get("method", "GET")
+        query_string = scope.get("query_string", b"")
+        url = proxy_url
+        if query_string:
+            url += "?" + query_string.decode("latin-1")
+
+        client = _get_http_client()
+        try:
+            resp = await client.request(method, url, headers=headers, content=body)
+        except Exception as e:
+            # Return 502 Bad Gateway
+            await send({"type": "http.response.start", "status": 502, "headers": [
+                [b"content-type", b"application/json"],
+            ]})
+            import json
+            await send({"type": "http.response.body", "body": json.dumps(
+                {"detail": f"Plugin proxy error: {e}"}
+            ).encode()})
+            return
+
+        # Forward response headers (exclude hop-by-hop)
+        resp_headers = [
+            [k.encode("latin-1"), v.encode("latin-1")]
+            for k, v in resp.headers.items()
+            if k.lower() not in ("transfer-encoding", "connection")
+        ]
+        await send({"type": "http.response.start", "status": resp.status_code, "headers": resp_headers})
+        await send({"type": "http.response.body", "body": resp.content})
 
     def _inject_auth(self, scope, path: str):
         from ..dependencies import verify_token

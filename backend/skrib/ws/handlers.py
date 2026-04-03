@@ -13,6 +13,15 @@ from ..rooms.services import (
 )
 
 
+def _get_bridge():
+    """Get the plugin bus bridge if available."""
+    try:
+        from ..main import app
+        return getattr(app.state, 'plugin_bus_bridge', None)
+    except Exception:
+        return None
+
+
 def check_room_access(room_id: str, username: str) -> str | None:
     """Check if a user can access a room.
 
@@ -82,23 +91,44 @@ async def handle_room(bus, ws: WebSocket, username: str, msg: dict):
             return
 
         room_type = get_room_type(room_id)
-        plugin = registry.get_plugin_for_room_type(room_type)
-        if plugin:
-            room_bus = PluginBus(bus, plugin.id)
-            user_role = get_global_role(username)
-            room_role = get_room_role(room_id, username)
-            reply_to = bus.create_reply_token(ws)
-            try:
+        user_role = get_global_role(username)
+        room_role = get_room_role(room_id, username)
+        reply_to = bus.create_reply_token(ws)
+
+        try:
+            # First check bus-connected plugins (out-of-process)
+            bridge = _get_bridge()
+            if bridge:
+                bus_plugin_id = bridge.get_bus_plugin_for_room_type(room_type)
+                if bus_plugin_id:
+                    sent = await bridge.dispatch_room_action(
+                        plugin_id=bus_plugin_id,
+                        room_id=room_id,
+                        action=action,
+                        username=username,
+                        msg=msg,
+                        reply_to=reply_to,
+                        user_role=user_role,
+                        room_role=room_role,
+                    )
+                    if sent:
+                        return
+                    # Fall through to in-process if send failed
+
+            # Fall back to in-process plugin
+            plugin = registry.get_plugin_for_room_type(room_type)
+            if plugin:
+                room_bus = PluginBus(bus, plugin.id)
                 await plugin.handle_room_action(room_bus, reply_to, username, msg, action,
                                                 user_role=user_role, room_role=room_role)
-            finally:
-                bus.invalidate_reply_token(reply_to)
-        else:
-            await ws.send_json({
-                "type": "room:error",
-                "room_id": room_id,
-                "message": f"No plugin handles room type '{room_type}'",
-            })
+            else:
+                await ws.send_json({
+                    "type": "room:error",
+                    "room_id": room_id,
+                    "message": f"No plugin handles room type '{room_type}'",
+                })
+        finally:
+            bus.invalidate_reply_token(reply_to)
 
 
 def register_core_handlers(bus):

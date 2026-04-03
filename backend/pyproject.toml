@@ -18,17 +18,23 @@ dependencies = [
     "pywebpush",
     "py-vapid",
     "Pillow",
+    "websockets",
+    "httpx",
 ]
 
 [project.optional-dependencies]
 dev = [
     "pytest~=9.0",
     "pytest-cov",
+    "pytest-asyncio",
     "httpx",
 ]
 
 [tool.setuptools.packages.find]
 include = ["skrib*"]
+
+[tool.pytest.ini_options]
+asyncio_mode = "auto"
 
 [tool.xwe_build]
 modules = [

@@ -65,27 +65,65 @@ def load_plugin_manifest(plugin_id: str) -> PluginInfo:
 # Plugin listing and admin endpoints (literal routes first)
 # ============================================================================
 
+def _get_bus_plugins() -> list[dict]:
+    """Get plugin info for bus-connected plugins."""
+    try:
+        from ..main import app
+        plugin_bus = getattr(app.state, 'plugin_bus', None)
+        if not plugin_bus:
+            return []
+        result = []
+        for pid, conn in plugin_bus.plugins.items():
+            manifest = conn.manifest
+            result.append({
+                "id": pid,
+                "name": manifest.get("name", pid),
+                "version": conn.version,
+                "description": manifest.get("description", ""),
+                "author": manifest.get("author", ""),
+                "entry": "",  # served via bus
+                "permissions": list(conn.permissions),
+                "hooks": manifest.get("hooks", {}),
+                "enabled": True,
+                "room_types": conn.room_types,
+                "styles": conn.frontend_styles,
+                "bus_connected": True,
+            })
+        return result
+    except Exception:
+        return []
+
+
 @router.get("", response_model=List[PluginInfo])
 async def list_plugins():
     """List all plugins with their manifests and enabled state."""
-    if not PLUGINS_DIR.exists():
-        return []
-
     plugins = []
-    for plugin_dir in PLUGINS_DIR.iterdir():
-        if plugin_dir.is_dir() and (plugin_dir / "manifest.json").exists():
-            plugin_id = plugin_dir.name
+
+    # In-process plugins (from filesystem)
+    if PLUGINS_DIR.exists():
+        for plugin_dir in PLUGINS_DIR.iterdir():
+            if plugin_dir.is_dir() and (plugin_dir / "manifest.json").exists():
+                plugin_id = plugin_dir.name
+                try:
+                    plugin_info = load_plugin_manifest(plugin_id)
+                    plugin_info.enabled = registry.is_plugin_enabled(plugin_id)
+                    # Enrich with runtime data from the loaded plugin instance
+                    plugin_instance = registry.get_plugin(plugin_id)
+                    if plugin_instance:
+                        plugin_info.room_types = plugin_instance.room_types
+                    plugins.append(plugin_info)
+                except Exception as e:
+                    print(f"[Plugins] Failed to load plugin {plugin_id}: {e}")
+                    continue
+
+    # Bus-connected plugins (out-of-process) — only add if not already listed
+    in_process_ids = {p.id for p in plugins}
+    for bus_info in _get_bus_plugins():
+        if bus_info["id"] not in in_process_ids:
             try:
-                plugin_info = load_plugin_manifest(plugin_id)
-                plugin_info.enabled = registry.is_plugin_enabled(plugin_id)
-                # Enrich with runtime data from the loaded plugin instance
-                plugin_instance = registry.get_plugin(plugin_id)
-                if plugin_instance:
-                    plugin_info.room_types = plugin_instance.room_types
-                plugins.append(plugin_info)
+                plugins.append(PluginInfo(**{k: v for k, v in bus_info.items() if k != "bus_connected"}))
             except Exception as e:
-                print(f"[Plugins] Failed to load plugin {plugin_id}: {e}")
-                continue
+                print(f"[Plugins] Failed to add bus plugin {bus_info['id']}: {e}")
 
     return plugins
 
@@ -126,10 +164,37 @@ async def get_plugin_manifest(plugin_id: str):
 async def get_plugin_file(plugin_id: str, file_path: str):
     """Serve a plugin file (JS, CSS, etc.).
 
+    For in-process plugins: serves from the filesystem.
+    For bus-connected plugins: proxies to the plugin's HTTP server.
+
     Security:
         Only files within the plugin directory are allowed.
         Path traversal is prevented.
     """
+    # Check if this is a bus-connected plugin first
+    try:
+        from ..main import app
+        plugin_bus = getattr(app.state, 'plugin_bus', None)
+        if plugin_bus:
+            conn = plugin_bus.get_plugin(plugin_id)
+            if conn and conn.http_base_url:
+                import httpx
+                url = f"{conn.http_base_url.rstrip('/')}/file/{file_path}"
+                async with httpx.AsyncClient(timeout=10.0) as client:
+                    resp = await client.get(url)
+                if resp.status_code == 200:
+                    from fastapi.responses import Response
+                    return Response(
+                        content=resp.content,
+                        media_type=resp.headers.get("content-type", "application/octet-stream"),
+                        headers={"Cache-Control": "no-cache"},
+                    )
+                raise HTTPException(status_code=resp.status_code, detail="File not found on plugin server")
+    except HTTPException:
+        raise
+    except Exception:
+        pass  # Fall through to filesystem serving
+
     plugin_dir = get_plugin_dir(plugin_id)
 
     # Resolve the requested file path and ensure it's within the plugin directory

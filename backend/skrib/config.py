@@ -31,3 +31,7 @@ APP_VERSION = "1.0.0"
 # WebAuthn settings
 WEBAUTHN_RP_NAME = "Skrīb"
 WEBAUTHN_RP_ID = os.getenv('SKRIB_RP_ID', 'localhost')
+
+# Plugin Bus settings
+PLUGIN_BUS_HOST = os.getenv('SKRIB_PLUGIN_BUS_HOST', '127.0.0.1')
+PLUGIN_BUS_PORT = int(os.getenv('SKRIB_PLUGIN_BUS_PORT', '9000'))

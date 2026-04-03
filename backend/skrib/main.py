@@ -27,6 +27,9 @@ from .database import init_db
 from .plugins import registry
 from .plugins.middleware import PluginAuthMiddleware
 from .plugins.routes import router as plugins_router
+from .plugins.core_api_routes import router as core_api_router
+from .plugins.settings_routes import router as settings_router
+from .admin.routes import router as admin_plugins_router
 from .rooms.routes import router as rooms_router
 from .rooms.services import load_rooms_from_db
 from .server.routes import router as server_router
@@ -99,6 +102,9 @@ api.include_router(server_router)
 api.include_router(preferences_router)
 api.include_router(ws_router)
 api.include_router(plugins_router)
+api.include_router(core_api_router)
+api.include_router(settings_router)
+api.include_router(admin_plugins_router)
 api.include_router(themes_router)
 api.include_router(backups_router)
 api.include_router(log_router)
@@ -205,6 +211,29 @@ async def startup_event():
     # Start WebSocket heartbeat (periodic ping to detect dead connections)
     ws.bus.start_heartbeat()
 
+    # Start Plugin Bus server (out-of-process plugin communication)
+    from .config import PLUGIN_BUS_HOST, PLUGIN_BUS_PORT
+    from .plugin_bus.server import PluginBusServer
+    from .plugin_bus.bridge import PluginBusBridge
+    from .plugin_bus.protocol import ApprovalStatus
+    from .plugin_bus.approvals import check_plugin_approval
+    from websockets.asyncio.server import serve as ws_serve
+
+    async def _approve_plugin(plugin_id: str, manifest: dict) -> ApprovalStatus:
+        status = check_plugin_approval(plugin_id, manifest)
+        return ApprovalStatus({"approved": "approved", "pending": "pending_approval",
+                               "rejected": "rejected", "disabled": "rejected"}[status])
+
+    plugin_bus = PluginBusServer(approve_plugin=_approve_plugin)
+    plugin_bus_server = await ws_serve(plugin_bus.handle_connection, PLUGIN_BUS_HOST, PLUGIN_BUS_PORT)
+    app.state.plugin_bus = plugin_bus
+    app.state.plugin_bus_server = plugin_bus_server
+
+    # Create the bridge that translates between bus frames and the WS manager
+    bridge = PluginBusBridge(plugin_bus, ws.bus, core_api)
+    app.state.plugin_bus_bridge = bridge
+    print(f"[PluginBus] Listening on ws://{PLUGIN_BUS_HOST}:{PLUGIN_BUS_PORT}")
+
     # Start backup scheduler
     from .backups.services import start_backup_scheduler
     await start_backup_scheduler()
@@ -229,6 +258,14 @@ async def shutdown_event():
             await plugin._cleanup_all()
         except Exception as e:
             print(f"[Plugins] Error in cleanup for {plugin.id}: {e}")
+
+    # Stop Plugin Bus bridge and server
+    if hasattr(app.state, 'plugin_bus_bridge'):
+        app.state.plugin_bus_bridge.teardown()
+    if hasattr(app.state, 'plugin_bus_server'):
+        app.state.plugin_bus_server.close()
+        await app.state.plugin_bus_server.wait_closed()
+        print("[PluginBus] Stopped")
 
     # Close all database connections on this thread to avoid ResourceWarnings
     from .database import close_all_connections
