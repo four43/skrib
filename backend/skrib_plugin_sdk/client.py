@@ -32,6 +32,7 @@ class BusClient:
         secret: str,
         manifest: dict,
         http_base_url: str | None = None,
+        on_connect_callback: Callable[[], Awaitable[None]] | None = None,
     ):
         self._bus_url = bus_url
         self._plugin_id = plugin_id
@@ -39,6 +40,7 @@ class BusClient:
         self._secret = secret
         self._manifest = manifest
         self._http_base_url = http_base_url
+        self._on_connect_callback = on_connect_callback
 
         self._ws: ClientConnection | None = None
         self._connected = asyncio.Event()
@@ -94,7 +96,7 @@ class BusClient:
             raise ConnectionError("Plugin was rejected by the bus server")
 
         self._connected.set()
-        logger.info("[SDK] Connected to bus as '%s' (status: %s)", self._plugin_id, ack.get("status"))
+        print(f"[Plugins] {self._plugin_id} connected to bus (status: {ack.get('status')})")
         return ack
 
     async def run(self) -> None:
@@ -143,13 +145,19 @@ class BusClient:
         backoff = INITIAL_BACKOFF
         while not self._closing:
             try:
-                await self.connect()
+                ack = await self.connect()
+                if ack.get("status") != "approved":
+                    logger.warning("[SDK] Plugin '%s' not approved (status=%s)",
+                                   self._plugin_id, ack.get("status"))
+                    return
                 backoff = INITIAL_BACKOFF  # Reset on successful connect
+                if self._on_connect_callback:
+                    await self._on_connect_callback()
                 await self.run()
             except (ConnectionError, OSError, websockets.ConnectionClosed) as e:
                 if self._closing:
                     break
-                logger.warning("[SDK] Disconnected (%s), reconnecting in %.1fs", e, backoff)
+                print(f"[Plugins] {self._plugin_id} disconnected ({e}), reconnecting in {backoff:.1f}s")
                 await asyncio.sleep(backoff)
                 backoff = min(backoff * BACKOFF_MULTIPLIER, MAX_BACKOFF)
 

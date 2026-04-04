@@ -91,6 +91,7 @@ function switchSection(sectionId, { updateHash = true } = {}) {
         history.replaceState(null, '', `#${sectionId}`);
     }
     // Lazy-load data for sections
+    if (sectionId === 'plugins') loadPlugins();
     if (sectionId === 'logs') loadSystemLog(1);
     if (sectionId === 'backups') loadBackups();
 }
@@ -917,6 +918,158 @@ async function loadSystemLog(page = 1) {
     }
 }
 
+// ── Plugins ──────────────────────────────────────────────────────────
+
+async function loadPlugins() {
+    try {
+        const resp = await fetch(`${API_URL}/admin/plugins`, {
+            headers: { 'Authorization': `Bearer ${sessionToken}` }
+        });
+        if (!resp.ok) return;
+        const plugins = await resp.json();
+
+        const pending = plugins.filter(p => p.status === 'pending');
+        const approved = plugins.filter(p => p.status === 'approved');
+        const inactive = plugins.filter(p => p.status === 'rejected' || p.status === 'disabled');
+
+        // Pending
+        const pendingList = document.getElementById('plugin-pending-list');
+        const pendingCount = document.getElementById('plugin-pending-count');
+        if (pendingCount) pendingCount.textContent = pending.length;
+
+        if (pending.length === 0) {
+            pendingList.innerHTML = '<p style="color: var(--text-muted, #999); font-size: 13px;">No plugins awaiting approval</p>';
+        } else {
+            pendingList.innerHTML = pending.map(p => renderPluginCard(p, 'pending')).join('');
+        }
+
+        // Active
+        const activeList = document.getElementById('plugin-active-list');
+        const activeCount = document.getElementById('plugin-active-count');
+        if (activeCount) activeCount.textContent = approved.length;
+
+        if (approved.length === 0) {
+            activeList.innerHTML = '<p style="color: var(--text-muted, #999); font-size: 13px;">No active plugins</p>';
+        } else {
+            activeList.innerHTML = approved.map(p => renderPluginCard(p, 'approved')).join('');
+        }
+
+        // Inactive
+        const inactiveList = document.getElementById('plugin-inactive-list');
+        if (inactive.length === 0) {
+            inactiveList.innerHTML = '<p style="color: var(--text-muted, #999); font-size: 13px;">None</p>';
+        } else {
+            inactiveList.innerHTML = inactive.map(p => renderPluginCard(p, p.status)).join('');
+        }
+
+    } catch (error) {
+        console.error('[HTTP] Error loading plugins:', error);
+    }
+}
+
+function renderPluginCard(plugin, status) {
+    const manifest = plugin.manifest || {};
+    const permissions = manifest.permissions || [];
+    const connectedBadge = plugin.connected
+        ? '<span class="plugin-badge plugin-connected">Connected</span>'
+        : '<span class="plugin-badge plugin-disconnected">Disconnected</span>';
+
+    const permissionTags = permissions.map(p =>
+        `<span class="plugin-permission-tag">${escapeHtml(p)}</span>`
+    ).join('');
+
+    let actions = '';
+    if (status === 'pending') {
+        actions = `
+            <button class="approve-btn btn-sm" onclick="window.approvePlugin('${escapeHtml(plugin.plugin_id)}')">
+                <iconify-icon icon="lucide:check" inline></iconify-icon> Approve
+            </button>
+            <button class="reject-btn btn-sm" onclick="window.rejectPlugin('${escapeHtml(plugin.plugin_id)}')">
+                <iconify-icon icon="lucide:x" inline></iconify-icon> Reject
+            </button>`;
+    } else if (status === 'approved') {
+        actions = `
+            <button class="reject-btn btn-sm" onclick="window.disablePlugin('${escapeHtml(plugin.plugin_id)}')">
+                <iconify-icon icon="lucide:power-off" inline></iconify-icon> Disable
+            </button>`;
+    } else {
+        actions = `
+            <button class="approve-btn btn-sm" onclick="window.approvePlugin('${escapeHtml(plugin.plugin_id)}')">
+                <iconify-icon icon="lucide:check" inline></iconify-icon> Re-approve
+            </button>`;
+    }
+
+    return `
+        <div class="plugin-card">
+            <div class="plugin-card-header">
+                <div class="plugin-card-title">
+                    <strong>${escapeHtml(manifest.name || plugin.plugin_id)}</strong>
+                    <span class="plugin-version">v${escapeHtml(manifest.version || plugin.manifest_hash?.slice(0, 8) || '?')}</span>
+                    ${connectedBadge}
+                </div>
+                <div class="plugin-card-id">${escapeHtml(plugin.plugin_id)}</div>
+            </div>
+            ${permissions.length > 0 ? `<div class="plugin-permissions">${permissionTags}</div>` : ''}
+            ${manifest.room_types?.length ? `<div class="plugin-meta">Room types: ${manifest.room_types.map(r => `<strong>${escapeHtml(r)}</strong>`).join(', ')}</div>` : ''}
+            ${plugin.approved_by ? `<div class="plugin-meta">Approved by ${escapeHtml(plugin.approved_by)} on ${new Date(plugin.approved_at).toLocaleDateString()}</div>` : ''}
+            <div class="plugin-card-actions">${actions}</div>
+        </div>
+    `;
+}
+
+async function approvePlugin(pluginId) {
+    try {
+        const resp = await fetch(`${API_URL}/admin/plugins/${encodeURIComponent(pluginId)}/approve`, {
+            method: 'POST',
+            headers: { 'Authorization': `Bearer ${sessionToken}` }
+        });
+        if (resp.ok) {
+            loadPlugins();
+        } else {
+            const data = await resp.json();
+            alert(`Failed: ${data.detail || 'Unknown error'}`);
+        }
+    } catch (error) {
+        console.error('[HTTP] Error approving plugin:', error);
+    }
+}
+
+async function rejectPlugin(pluginId) {
+    if (!confirm(`Reject plugin "${pluginId}"? It will be disconnected.`)) return;
+    try {
+        const resp = await fetch(`${API_URL}/admin/plugins/${encodeURIComponent(pluginId)}/reject`, {
+            method: 'POST',
+            headers: { 'Authorization': `Bearer ${sessionToken}` }
+        });
+        if (resp.ok) {
+            loadPlugins();
+        } else {
+            const data = await resp.json();
+            alert(`Failed: ${data.detail || 'Unknown error'}`);
+        }
+    } catch (error) {
+        console.error('[HTTP] Error rejecting plugin:', error);
+    }
+}
+
+async function disablePlugin(pluginId) {
+    if (!confirm(`Disable plugin "${pluginId}"? It will be disconnected.`)) return;
+    try {
+        const resp = await fetch(`${API_URL}/admin/plugins/${encodeURIComponent(pluginId)}/disable`, {
+            method: 'POST',
+            headers: { 'Authorization': `Bearer ${sessionToken}` }
+        });
+        if (resp.ok) {
+            loadPlugins();
+        } else {
+            const data = await resp.json();
+            alert(`Failed: ${data.detail || 'Unknown error'}`);
+        }
+    } catch (error) {
+        console.error('[HTTP] Error disabling plugin:', error);
+    }
+}
+
 // Expose functions to window for inline event handlers
 window.updateRegModeLabel = updateRegModeLabel;
 window.setRegistrationMode = setRegistrationMode;
@@ -931,6 +1084,9 @@ window.updateUserColorAdmin = updateUserColorAdmin;
 window.triggerBackup = triggerBackup;
 window.deleteBackup = deleteBackup;
 window.loadSystemLog = loadSystemLog;
+window.approvePlugin = approvePlugin;
+window.rejectPlugin = rejectPlugin;
+window.disablePlugin = disablePlugin;
 
 // Event listeners
 document.addEventListener('DOMContentLoaded', () => {

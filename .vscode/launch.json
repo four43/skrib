@@ -23,6 +23,19 @@
       "jinja": true
     },
     {
+      "name": "Plugins: Start All",
+      "type": "debugpy",
+      "request": "launch",
+      "program": "${workspaceFolder}/backend/util/run-plugins.py",
+      "cwd": "${workspaceFolder}/backend",
+      "env": {
+        "PYTHONUNBUFFERED": "1",
+        "SKRIB_BUS_URL": "ws://127.0.0.1:9000"
+      },
+      "console": "integratedTerminal",
+      "justMyCode": false
+    },
+    {
       "name": "FastAPI: Run API Server (No Reload)",
       "type": "debugpy",
       "request": "launch",

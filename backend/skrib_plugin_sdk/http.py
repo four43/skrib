@@ -7,13 +7,9 @@ from __future__ import annotations
 
 import asyncio
 import logging
-from typing import TYPE_CHECKING
+import socket
 
-import uvicorn
-from fastapi import FastAPI, Request, HTTPException
-
-if TYPE_CHECKING:
-    pass
+from fastapi import FastAPI
 
 logger = logging.getLogger(__name__)
 
@@ -36,24 +32,30 @@ def create_plugin_app(plugin_id: str, router=None) -> FastAPI:
     return app
 
 
-async def run_http_server(app: FastAPI, host: str = "127.0.0.1", port: int = 0) -> tuple[asyncio.Server, int]:
+async def run_http_server(app: FastAPI, host: str = "127.0.0.1", port: int = 0) -> tuple:
     """Start the HTTP server and return (server, actual_port).
 
     If port is 0, an ephemeral port is chosen automatically.
     """
-    config = uvicorn.Config(app, host=host, port=port, log_level="warning")
+    import uvicorn
+
+    # Pre-bind a socket to discover the ephemeral port
+    sock = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
+    sock.setsockopt(socket.SOL_SOCKET, socket.SO_REUSEADDR, 1)
+    sock.bind((host, port))
+    actual_port = sock.getsockname()[1]
+    sock.close()
+
+    config = uvicorn.Config(app, host=host, port=actual_port, log_level="warning")
     server = uvicorn.Server(config)
 
-    # Start serving without blocking
-    await server.startup()
+    # Run in a background task
+    task = asyncio.create_task(server.serve())
 
-    # Get the actual bound port
-    actual_port = port
-    for sock in server.servers:
-        for s in sock.sockets:
-            addr = s.getsockname()
-            actual_port = addr[1]
+    # Wait for the server to start accepting connections
+    for _ in range(50):
+        await asyncio.sleep(0.05)
+        if server.started:
             break
-        break
 
     return server, actual_port

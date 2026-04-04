@@ -299,6 +299,7 @@ class SkribPlugin:
             secret=self.secret,
             manifest=self._build_manifest(),
             http_base_url=http_base_url,
+            on_connect_callback=self._on_bus_connect,
         )
         self._bus = PluginBus(self._client, self.id)
         self._core_api = CoreAPI(self._client)
@@ -314,7 +315,14 @@ class SkribPlugin:
         try:
             await self._client.run_with_reconnect()
         finally:
+            await self.on_disconnect()
             await self._stop_http_server()
+
+    async def _on_bus_connect(self) -> None:
+        """Called by BusClient after each successful connect during run_forever."""
+        await self._send_registrations()
+        await self.on_connect()
+        print(f"[Plugins] {self.id} connected and running")
 
     async def _start_http_server(self) -> str | None:
         """Start the plugin's HTTP server if routes are registered."""
@@ -332,7 +340,10 @@ class SkribPlugin:
         """Stop the plugin's HTTP server."""
         if self._http_server:
             self._http_server.should_exit = True
-            await self._http_server.shutdown()
+            try:
+                await self._http_server.shutdown()
+            except Exception:
+                pass
             self._http_server = None
 
     async def _send_registrations(self) -> None:

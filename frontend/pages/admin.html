@@ -46,6 +46,10 @@
                     <span class="settings-nav-icon"><iconify-icon icon="lucide:link"></iconify-icon></span>
                     Invites
                 </button>
+                <button class="settings-nav-item admin-only" data-section="plugins">
+                    <span class="settings-nav-icon"><iconify-icon icon="lucide:puzzle"></iconify-icon></span>
+                    Plugins
+                </button>
                 <button class="settings-nav-item admin-only" data-section="backups">
                     <span class="settings-nav-icon"><iconify-icon icon="lucide:hard-drive"></iconify-icon></span>
                     Backups
@@ -141,6 +145,30 @@
                         <h3>Invite Links</h3>
                         <button id="generate-invite-btn" class="invite-generate-btn">Generate Invite Link</button>
                         <div id="invite-list"></div>
+                    </div>
+                </div>
+
+                <!-- Plugins Section -->
+                <div class="settings-panel-section admin-only" id="section-plugins">
+                    <div class="page-section">
+                        <h3>Pending Approval (<span id="plugin-pending-count">0</span>)</h3>
+                        <div id="plugin-pending-list">
+                            <p style="color: var(--text-muted, #999); font-size: 13px;">No plugins awaiting approval</p>
+                        </div>
+                    </div>
+
+                    <div class="page-section">
+                        <h3>Active Plugins (<span id="plugin-active-count">0</span>)</h3>
+                        <div id="plugin-active-list">
+                            <p style="color: var(--text-muted, #999); font-size: 13px;">No active plugins</p>
+                        </div>
+                    </div>
+
+                    <div class="page-section">
+                        <h3>Disabled / Rejected</h3>
+                        <div id="plugin-inactive-list">
+                            <p style="color: var(--text-muted, #999); font-size: 13px;">None</p>
+                        </div>
                     </div>
                 </div>
 

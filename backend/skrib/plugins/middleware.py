@@ -76,11 +76,16 @@ class PluginAuthMiddleware:
             if path.startswith("/api/plugins/"):
                 scope = self._inject_auth(scope, path)
 
-                # Check if this plugin is bus-connected with an HTTP server
-                proxy_url = self._get_proxy_url(scope, path)
-                if proxy_url:
-                    await self._proxy_request(scope, receive, send, proxy_url)
-                    return
+                # Check if this plugin is bus-connected with an HTTP server.
+                # File and manifest requests are always served from the core
+                # server (filesystem), not proxied to the plugin process.
+                m = _PLUGIN_ROUTE_RE.match(path)
+                sub_path = m.group(2) if m else ""
+                if not (sub_path.startswith("/file/") or sub_path == "/manifest"):
+                    proxy_url = self._get_proxy_url(scope, path)
+                    if proxy_url:
+                        await self._proxy_request(scope, receive, send, proxy_url)
+                        return
 
         await self.app(scope, receive, send)
 

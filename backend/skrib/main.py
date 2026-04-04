@@ -26,7 +26,7 @@ from .database import init_db
 # Import plugin system
 from .plugins import registry
 from .plugins.middleware import PluginAuthMiddleware
-from .plugins.routes import router as plugins_router
+from .plugins.routes import router as plugins_router, fallback_router as plugins_fallback_router
 from .plugins.core_api_routes import router as core_api_router
 from .plugins.settings_routes import router as settings_router
 from .admin.routes import router as admin_plugins_router
@@ -115,14 +115,37 @@ for _plugin in registry.get_all_plugins():
     try:
         _plugin_router = _plugin.register_routes(app)
         if _plugin_router:
+            # Add file/manifest routes to each plugin's sub-router so they
+            # aren't shadowed by the sub-router's prefix match (Starlette
+            # doesn't fall through to the fallback_router once a sub-router
+            # with a matching prefix is entered).
+            from .plugins.routes import get_plugin_file, load_plugin_manifest as _load_manifest
+
+            @_plugin_router.get("/manifest", name=f"manifest_{_plugin.id}")
+            async def _manifest(*, _pid=_plugin.id):
+                return _load_manifest(_pid)
+
+            @_plugin_router.get("/file/{file_path:path}", name=f"file_{_plugin.id}")
+            async def _file(file_path: str, *, _pid=_plugin.id):
+                return await get_plugin_file(_pid, file_path)
+
             api.include_router(_plugin_router, prefix=f"/plugins/{_plugin.id}")
-            print(f"[Plugins] Registered routes for: {_plugin.id} at /api/plugins/{_plugin.id}")
+            _route_names = [r.name for r in _plugin_router.routes if hasattr(r, 'name')]
+            print(f"[Plugins] Registered routes for: {_plugin.id} at /api/plugins/{_plugin.id} "
+                  f"({len(_plugin_router.routes)} routes: {_route_names})")
+        else:
+            print(f"[Plugins] No sub-router for: {_plugin.id} (will use fallback routes)")
     except Exception as _e:
+        import traceback
         print(f"[Plugins] Failed to register routes for {_plugin.id}: {_e}")
+        traceback.print_exc()
 
 _all_info = registry.get_all_plugin_info()
 print(f"[Plugins] Loaded {sum(1 for p in _all_info if p['enabled'])} plugins "
       f"({sum(1 for p in _all_info if not p['enabled'])} disabled)")
+
+# Fallback parametric routes for plugins without sub-routers
+api.include_router(plugins_fallback_router)
 
 
 # Mount API sub-app — docs at /api/docs, redoc at /api/redoc

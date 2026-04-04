@@ -151,16 +151,21 @@ async def update_plugin(
 
 
 # ============================================================================
-# Parametric routes (must come after literal routes)
+# Parametric routes — separate router so they can be registered AFTER
+# plugin-specific sub-routers (otherwise Starlette's prefix matching
+# enters a plugin sub-router and 404s without falling back to these).
 # ============================================================================
 
-@router.get("/{plugin_id}/manifest")
+fallback_router = APIRouter(prefix="/plugins", tags=["plugins"])
+
+
+@fallback_router.get("/{plugin_id}/manifest")
 async def get_plugin_manifest(plugin_id: str):
     """Get a plugin's manifest."""
     return load_plugin_manifest(plugin_id)
 
 
-@router.get("/{plugin_id}/file/{file_path:path}")
+@fallback_router.get("/{plugin_id}/file/{file_path:path}")
 async def get_plugin_file(plugin_id: str, file_path: str):
     """Serve a plugin file (JS, CSS, etc.).
 
@@ -171,6 +176,7 @@ async def get_plugin_file(plugin_id: str, file_path: str):
         Only files within the plugin directory are allowed.
         Path traversal is prevented.
     """
+    print(f"[Plugins] Serving file: plugin={plugin_id} path={file_path}")
     # Check if this is a bus-connected plugin first
     try:
         from ..main import app
@@ -189,13 +195,16 @@ async def get_plugin_file(plugin_id: str, file_path: str):
                         media_type=resp.headers.get("content-type", "application/octet-stream"),
                         headers={"Cache-Control": "no-cache"},
                     )
-                raise HTTPException(status_code=resp.status_code, detail="File not found on plugin server")
+                # Fall through to filesystem serving if plugin HTTP server
+                # doesn't have this file (e.g. static assets live on disk)
+                print(f"[Plugins] Bus proxy returned {resp.status_code} for {file_path}, trying filesystem")
     except HTTPException:
         raise
     except Exception:
         pass  # Fall through to filesystem serving
 
     plugin_dir = get_plugin_dir(plugin_id)
+    print(f"[Plugins] File lookup: dir={plugin_dir} file={file_path}")
 
     # Resolve the requested file path and ensure it's within the plugin directory
     requested_file = (plugin_dir / file_path).resolve()
