@@ -247,6 +247,7 @@ def init_db():
                 status TEXT NOT NULL DEFAULT 'pending',
                 manifest_hash TEXT NOT NULL,
                 manifest_json TEXT NOT NULL,
+                secret TEXT,
                 approved_by TEXT,
                 approved_at TEXT,
                 created_at TEXT NOT NULL,

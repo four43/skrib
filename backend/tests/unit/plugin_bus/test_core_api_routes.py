@@ -5,7 +5,7 @@ from unittest.mock import patch, MagicMock
 from fastapi.testclient import TestClient
 from fastapi import FastAPI
 
-from skrib.plugins.core_api_routes import router
+from skrib.plugins.core_api_routes import router, require_plugin_auth
 
 
 # ---------------------------------------------------------------------------
@@ -35,9 +35,12 @@ def mock_core_api():
 
 @pytest.fixture
 def client(mock_core_api):
-    """FastAPI test client with mocked CoreAPI."""
+    """FastAPI test client with mocked CoreAPI and plugin auth bypassed."""
     app = FastAPI()
     app.include_router(router)
+
+    # Override plugin auth to always return a test plugin ID
+    app.dependency_overrides[require_plugin_auth] = lambda: "test.plugin"
 
     with patch("skrib.plugins.core_api_routes._get_core_api", return_value=mock_core_api):
         yield TestClient(app)

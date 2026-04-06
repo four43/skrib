@@ -16,6 +16,7 @@ from skrib.plugin_bus.approvals import (
     reject_plugin,
     disable_plugin,
     get_approval,
+    get_plugin_secret,
     list_by_status,
     get_manifest_diff,
     _manifest_hash,
@@ -40,6 +41,7 @@ def temp_db(tmp_path, monkeypatch):
             status TEXT NOT NULL DEFAULT 'pending',
             manifest_hash TEXT NOT NULL,
             manifest_json TEXT NOT NULL,
+            secret TEXT,
             approved_by TEXT,
             approved_at TEXT,
             created_at TEXT NOT NULL,
@@ -374,3 +376,49 @@ class TestAdminAPI:
         resp = client.get("/admin/plugins")
         assert resp.status_code == 200
         assert len(resp.json()) == 2
+
+    def test_approve_returns_secret(self, admin_client):
+        client, _ = admin_client
+        check_plugin_approval("test.plugin", SAMPLE_MANIFEST)
+
+        resp = client.post("/admin/plugins/test.plugin/approve")
+        assert resp.status_code == 200
+        data = resp.json()
+        assert "secret" in data
+        assert data["secret"] is not None
+        assert len(data["secret"]) == 64  # token_hex(32) = 64 chars
+
+
+# ---------------------------------------------------------------------------
+# Tests: Plugin secret generation and retrieval
+# ---------------------------------------------------------------------------
+
+class TestPluginSecrets:
+    def test_pending_plugin_has_no_secret(self):
+        check_plugin_approval("test.plugin", SAMPLE_MANIFEST)
+        assert get_plugin_secret("test.plugin") is None
+
+    def test_approved_plugin_gets_secret(self):
+        check_plugin_approval("test.plugin", SAMPLE_MANIFEST)
+        approve_plugin("test.plugin", "admin1")
+        secret = get_plugin_secret("test.plugin")
+        assert secret is not None
+        assert len(secret) == 64  # token_hex(32) = 64 hex chars
+
+    def test_secret_preserved_on_re_approval(self):
+        check_plugin_approval("test.plugin", SAMPLE_MANIFEST)
+        approve_plugin("test.plugin", "admin1")
+        secret1 = get_plugin_secret("test.plugin")
+
+        # Change manifest -> re-enters pending
+        changed = {**SAMPLE_MANIFEST, "permissions": ["bus.send", "bus.receive", "core_api"]}
+        check_plugin_approval("test.plugin", changed)
+        assert get_approval("test.plugin")["status"] == "pending"
+
+        # Re-approve -> same secret
+        approve_plugin("test.plugin", "admin1")
+        secret2 = get_plugin_secret("test.plugin")
+        assert secret1 == secret2
+
+    def test_nonexistent_plugin_returns_none(self):
+        assert get_plugin_secret("nonexistent") is None

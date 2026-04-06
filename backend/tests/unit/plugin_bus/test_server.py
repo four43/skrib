@@ -302,7 +302,7 @@ class TestRoomTypeRegistration:
     @pytest.mark.asyncio
     async def test_register_room_type(self, bus, bus_url):
         server, _ = bus
-        hello = make_hello(permissions=["bus.send", "room_type.register"])
+        hello = make_hello(permissions=["bus.send", "room_type.register"], room_types=["chat"])
         ws, ack = await connect_and_hello(bus_url, hello)
         try:
             await ws.send(json.dumps({
@@ -318,7 +318,7 @@ class TestRoomTypeRegistration:
     @pytest.mark.asyncio
     async def test_conflict(self, bus, bus_url):
         server, _ = bus
-        hello1 = make_hello(plugin_id="plugin.a", permissions=["bus.send", "room_type.register"])
+        hello1 = make_hello(plugin_id="plugin.a", permissions=["bus.send", "room_type.register"], room_types=["chat"])
         ws1, _ = await connect_and_hello(bus_url, hello1)
         await ws1.send(json.dumps({
             "type": "register.room_type",
@@ -328,7 +328,7 @@ class TestRoomTypeRegistration:
         await asyncio.sleep(0.05)
 
         try:
-            hello2 = make_hello(plugin_id="plugin.b", permissions=["bus.send", "room_type.register"])
+            hello2 = make_hello(plugin_id="plugin.b", permissions=["bus.send", "room_type.register"], room_types=["chat"])
             ws2, _ = await connect_and_hello(bus_url, hello2)
             await ws2.send(json.dumps({
                 "type": "register.room_type",
@@ -341,6 +341,25 @@ class TestRoomTypeRegistration:
             await ws2.close()
         finally:
             await ws1.close()
+
+    @pytest.mark.asyncio
+    async def test_room_type_not_in_manifest_rejected(self, bus, bus_url):
+        """Plugin cannot register a room type not declared in its manifest."""
+        server, _ = bus
+        hello = make_hello(permissions=["bus.send", "room_type.register"], room_types=["chat"])
+        ws, ack = await connect_and_hello(bus_url, hello)
+        try:
+            await ws.send(json.dumps({
+                "type": "register.room_type",
+                "room_type": "hijacked_type",
+                "display_name": "Hijacked",
+            }))
+            resp = json.loads(await ws.recv())
+            assert resp["type"] == "error"
+            assert resp["code"] == "room_type_not_in_manifest"
+            assert "hijacked_type" not in server.room_type_map
+        finally:
+            await ws.close()
 
 
 # ---------------------------------------------------------------------------
@@ -403,11 +422,270 @@ class TestFrameRouting:
 # Cleanup tests
 # ---------------------------------------------------------------------------
 
+# ---------------------------------------------------------------------------
+# Secret validation tests
+# ---------------------------------------------------------------------------
+
+# ---------------------------------------------------------------------------
+# Event subscription ACL tests
+# ---------------------------------------------------------------------------
+
+class TestEventSubscriptionACL:
+    @pytest.mark.asyncio
+    async def test_event_delivered_when_published(self, bus, bus_url):
+        """Event is delivered to subscribers when publisher declared it."""
+        server, _ = bus
+        # Plugin A publishes "notify" event
+        hello_a = make_hello(
+            plugin_id="plugin.a",
+            permissions=["bus.send"],
+            published_events=["notify"],
+        )
+        ws_a, _ = await connect_and_hello(bus_url, hello_a)
+
+        # Plugin B subscribes to plugin.a:notify
+        hello_b = make_hello(
+            plugin_id="plugin.b",
+            permissions=["bus.receive"],
+            subscriptions=["plugin.a:notify"],
+        )
+        ws_b, _ = await connect_and_hello(bus_url, hello_b)
+
+        try:
+            await server.broadcast_to_subscribers(
+                "plugin.a:notify",
+                {"type": "event", "event_type": "plugin.a:notify", "data": "hello"},
+            )
+            resp = json.loads(await asyncio.wait_for(ws_b.recv(), timeout=1.0))
+            assert resp["event_type"] == "plugin.a:notify"
+        finally:
+            await ws_a.close()
+            await ws_b.close()
+
+    @pytest.mark.asyncio
+    async def test_event_dropped_when_not_published(self, bus, bus_url):
+        """Event is NOT delivered if publisher didn't declare it."""
+        server, _ = bus
+        # Plugin A does NOT declare "secret_event" in published_events
+        hello_a = make_hello(
+            plugin_id="plugin.a",
+            permissions=["bus.send"],
+            published_events=["notify"],
+        )
+        ws_a, _ = await connect_and_hello(bus_url, hello_a)
+
+        # Plugin B subscribes to it anyway
+        hello_b = make_hello(
+            plugin_id="plugin.b",
+            permissions=["bus.receive"],
+            subscriptions=["plugin.a:secret_event"],
+        )
+        ws_b, _ = await connect_and_hello(bus_url, hello_b)
+
+        try:
+            await server.broadcast_to_subscribers(
+                "plugin.a:secret_event",
+                {"type": "event", "event_type": "plugin.a:secret_event", "data": "leaked"},
+            )
+            # Plugin B should NOT receive anything
+            with pytest.raises(asyncio.TimeoutError):
+                await asyncio.wait_for(ws_b.recv(), timeout=0.2)
+        finally:
+            await ws_a.close()
+            await ws_b.close()
+
+
+# ---------------------------------------------------------------------------
+# Manifest validation tests
+# ---------------------------------------------------------------------------
+
+class TestManifestValidation:
+    @pytest.mark.asyncio
+    async def test_invalid_room_type_rejected(self, bus_url):
+        hello = make_hello(room_types=["<script>"])
+        ws = await websockets.connect(bus_url)
+        try:
+            await ws.send(json.dumps(hello))
+            resp = json.loads(await ws.recv())
+            assert resp["type"] == "error"
+            assert resp["code"] == "invalid_manifest"
+        finally:
+            await ws.close()
+
+    @pytest.mark.asyncio
+    async def test_valid_manifest_accepted(self, bus, bus_url):
+        hello = make_hello(
+            room_types=["chat"],
+            published_events=["message.sent"],
+            subscriptions=["four43.web-push"],
+        )
+        ws, ack = await connect_and_hello(bus_url, hello)
+        try:
+            assert ack["status"] == "approved"
+        finally:
+            await ws.close()
+
+
+# ---------------------------------------------------------------------------
+# Secret validation tests
+# ---------------------------------------------------------------------------
+
+class TestSecretValidation:
+    @pytest.mark.asyncio
+    async def test_correct_secret_accepted(self):
+        stored_secrets = {"test.plugin": "correct_secret_123"}
+        server = PluginBusServer(get_plugin_secret=lambda pid: stored_secrets.get(pid))
+        ws_server, port = await start_bus_server(server)
+        url = f"ws://127.0.0.1:{port}"
+        try:
+            hello = make_hello(secret="correct_secret_123")
+            ws, ack = await connect_and_hello(url, hello)
+            try:
+                assert ack["status"] == "approved"
+            finally:
+                await ws.close()
+        finally:
+            ws_server.close()
+            await ws_server.wait_closed()
+
+    @pytest.mark.asyncio
+    async def test_wrong_secret_rejected(self):
+        stored_secrets = {"test.plugin": "correct_secret_123"}
+        server = PluginBusServer(get_plugin_secret=lambda pid: stored_secrets.get(pid))
+        ws_server, port = await start_bus_server(server)
+        url = f"ws://127.0.0.1:{port}"
+        try:
+            hello = make_hello(secret="wrong_secret")
+            ws = await websockets.connect(url)
+            await ws.send(json.dumps(hello))
+            resp = json.loads(await ws.recv())
+            assert resp["type"] == "error"
+            assert resp["code"] == "invalid_secret"
+            await ws.close()
+        finally:
+            ws_server.close()
+            await ws_server.wait_closed()
+
+    @pytest.mark.asyncio
+    async def test_pending_plugin_skips_secret_check(self):
+        """Pending plugins don't have a secret yet, so check is skipped."""
+        async def pend_all(pid, m):
+            return ApprovalStatus.PENDING
+
+        server = PluginBusServer(
+            approve_plugin=pend_all,
+            get_plugin_secret=lambda pid: None,
+        )
+        ws_server, port = await start_bus_server(server)
+        url = f"ws://127.0.0.1:{port}"
+        try:
+            hello = make_hello(secret="anything")
+            ws, ack = await connect_and_hello(url, hello)
+            try:
+                assert ack["status"] == "pending_approval"
+            finally:
+                await ws.close()
+        finally:
+            ws_server.close()
+            await ws_server.wait_closed()
+
+    @pytest.mark.asyncio
+    async def test_no_secret_callback_skips_validation(self):
+        """When no get_plugin_secret callback is set, all secrets accepted (backwards compat)."""
+        server = PluginBusServer()
+        ws_server, port = await start_bus_server(server)
+        url = f"ws://127.0.0.1:{port}"
+        try:
+            hello = make_hello(secret="anything")
+            ws, ack = await connect_and_hello(url, hello)
+            try:
+                assert ack["status"] == "approved"
+            finally:
+                await ws.close()
+        finally:
+            ws_server.close()
+            await ws_server.wait_closed()
+
+
+# ---------------------------------------------------------------------------
+# Cleanup tests
+# ---------------------------------------------------------------------------
+
+# ---------------------------------------------------------------------------
+# Connection rate limiting tests
+# ---------------------------------------------------------------------------
+
+# ---------------------------------------------------------------------------
+# Confirming tests: pending plugins cannot access CoreAPI (vuln #2)
+# ---------------------------------------------------------------------------
+
+class TestPendingPluginCoreAPIBlocked:
+    @pytest.mark.asyncio
+    async def test_pending_plugin_core_api_blocked(self):
+        """Pending plugins get pending_approval error for CORE_API_REQUEST frames."""
+        async def pend_all(pid, m):
+            return ApprovalStatus.PENDING
+
+        server = PluginBusServer(approve_plugin=pend_all)
+        ws_server, port = await start_bus_server(server)
+        url = f"ws://127.0.0.1:{port}"
+        try:
+            hello = make_hello(permissions=["core_api"])
+            ws, ack = await connect_and_hello(url, hello)
+            assert ack["status"] == "pending_approval"
+            try:
+                await ws.send(json.dumps({
+                    "type": "core_api.request",
+                    "method": "get_room_members",
+                    "request_id": "req1",
+                    "params": {"room_id": "room1"},
+                }))
+                resp = json.loads(await ws.recv())
+                assert resp["type"] == "error"
+                assert resp["code"] == "pending_approval"
+            finally:
+                await ws.close()
+        finally:
+            ws_server.close()
+            await ws_server.wait_closed()
+
+
+class TestConnectionRateLimiting:
+    @pytest.mark.asyncio
+    async def test_rate_limited_after_burst(self):
+        server = PluginBusServer()
+        server.CONNECTION_RATE_LIMIT = 3
+        server.CONNECTION_RATE_WINDOW = 60.0
+        ws_server, port = await start_bus_server(server)
+        url = f"ws://127.0.0.1:{port}"
+
+        connections = []
+        try:
+            # First 3 connections should succeed
+            for i in range(3):
+                hello = make_hello(plugin_id=f"plugin.{i}")
+                ws, ack = await connect_and_hello(url, hello)
+                assert ack["status"] == "approved"
+                connections.append(ws)
+
+            # 4th connection should be rate limited
+            ws4 = await websockets.connect(url)
+            resp = json.loads(await ws4.recv())
+            assert resp["type"] == "error"
+            assert resp["code"] == "rate_limited"
+            await ws4.close()
+        finally:
+            for ws in connections:
+                await ws.close()
+            ws_server.close()
+            await ws_server.wait_closed()
+
+
 class TestCleanup:
     @pytest.mark.asyncio
     async def test_cleanup_on_disconnect(self, bus, bus_url):
         server, _ = bus
-        hello = make_hello(permissions=["bus.send", "room_type.register"])
+        hello = make_hello(permissions=["bus.send", "room_type.register"], room_types=["whiteboard"])
         ws, ack = await connect_and_hello(bus_url, hello)
         await ws.send(json.dumps({
             "type": "register.room_type",

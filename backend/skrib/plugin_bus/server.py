@@ -9,6 +9,7 @@ runs on its own port, independent of the FastAPI app.
 from __future__ import annotations
 
 import asyncio
+import hmac
 import json
 import logging
 from dataclasses import dataclass, field
@@ -22,6 +23,7 @@ from .protocol import (
     ApprovalStatus,
     VALID_PERMISSIONS,
     validate_frame,
+    validate_manifest,
     check_permission,
     error_frame,
     FrameValidationError,
@@ -73,15 +75,22 @@ class PluginBusServer:
     - Track room type registrations and published events
     """
 
+    # Connection rate limiting: max attempts per IP within window
+    CONNECTION_RATE_LIMIT = 10
+    CONNECTION_RATE_WINDOW = 60.0  # seconds
+
     def __init__(
         self,
         approve_plugin: Callable[[str, dict], Awaitable[ApprovalStatus]] | None = None,
+        get_plugin_secret: Callable[[str], str | None] | None = None,
     ):
         self._plugins: dict[str, PluginConnection] = {}
         self._room_type_map: dict[str, str] = {}
         self._approve_plugin = approve_plugin or self._auto_approve
+        self._get_plugin_secret = get_plugin_secret
         self._core_handler: Callable[[str, dict], Awaitable[None]] | None = None
         self._lock = asyncio.Lock()
+        self._connection_attempts: dict[str, list[float]] = {}
 
     @staticmethod
     async def _auto_approve(plugin_id: str, manifest: dict) -> ApprovalStatus:
@@ -106,11 +115,37 @@ class PluginBusServer:
     # WebSocket endpoint handler
     # ------------------------------------------------------------------
 
+    def _check_connection_rate(self, remote_ip: str) -> bool:
+        """Check if a remote IP has exceeded the connection rate limit.
+
+        Returns True if the connection should be allowed.
+        """
+        import time
+        now = time.monotonic()
+        attempts = self._connection_attempts.get(remote_ip, [])
+        # Prune old entries
+        cutoff = now - self.CONNECTION_RATE_WINDOW
+        attempts = [t for t in attempts if t > cutoff]
+        self._connection_attempts[remote_ip] = attempts
+
+        if len(attempts) >= self.CONNECTION_RATE_LIMIT:
+            return False
+
+        attempts.append(now)
+        return True
+
     async def handle_connection(self, ws: ServerConnection) -> None:
         """Handle a single plugin WebSocket connection lifecycle.
 
         This is the handler passed to ``websockets.serve()``.
         """
+        # Rate limit connections per IP
+        remote_ip = ws.remote_address[0] if ws.remote_address else "unknown"
+        if not self._check_connection_rate(remote_ip):
+            await self._send(ws, error_frame("rate_limited", "Too many connection attempts"))
+            await ws.close(4029, "rate_limited")
+            return
+
         conn: PluginConnection | None = None
         try:
             conn = await self._handle_hello(ws)
@@ -172,6 +207,13 @@ class PluginBusServer:
             await ws.close(4003, "invalid_permissions")
             return None
 
+        try:
+            validate_manifest(manifest)
+        except FrameValidationError as e:
+            await self._send(ws, error_frame(e.code, e.message))
+            await ws.close(4003, "invalid_manifest")
+            return None
+
         async with self._lock:
             if plugin_id in self._plugins:
                 await self._send(ws, error_frame(
@@ -182,6 +224,19 @@ class PluginBusServer:
                 return None
 
         status = await self._approve_plugin(plugin_id, manifest)
+
+        # Validate secret for approved plugins
+        if status == ApprovalStatus.APPROVED and self._get_plugin_secret:
+            expected_secret = self._get_plugin_secret(plugin_id)
+            if expected_secret:
+                provided_secret = data.get("secret", "")
+                if not hmac.compare_digest(str(expected_secret), str(provided_secret)):
+                    await self._send(ws, error_frame(
+                        "invalid_secret",
+                        f"Invalid secret for plugin '{plugin_id}'",
+                    ))
+                    await ws.close(4006, "invalid_secret")
+                    return None
 
         conn = PluginConnection(
             plugin_id=plugin_id,
@@ -342,6 +397,13 @@ class PluginBusServer:
 
     async def _handle_register_room_type(self, conn: PluginConnection, data: dict) -> None:
         room_type = data["room_type"]
+        manifest_room_types = conn.manifest.get("room_types", [])
+        if room_type not in manifest_room_types:
+            await self._send(conn.ws, error_frame(
+                "room_type_not_in_manifest",
+                f"Room type '{room_type}' not declared in plugin manifest",
+            ))
+            return
         async with self._lock:
             existing = self._room_type_map.get(room_type)
             if existing and existing != conn.plugin_id:
@@ -387,7 +449,22 @@ class PluginBusServer:
             return False
 
     async def broadcast_to_subscribers(self, event_type: str, data: dict) -> None:
-        """Send an event to all plugins subscribed to this event type."""
+        """Send an event to all plugins subscribed to this event type.
+
+        Only delivers if the publishing plugin declared the event in its
+        published_events list. Event type format is "plugin_id:event_name".
+        """
+        # Validate that the source plugin declared this event
+        if ":" in event_type:
+            source_plugin_id, event_name = event_type.split(":", 1)
+            source_conn = self._plugins.get(source_plugin_id)
+            if not source_conn or event_name not in source_conn.published_events:
+                logger.warning(
+                    "[PluginBus] Dropping event '%s' — not in published_events of '%s'",
+                    event_type, source_plugin_id,
+                )
+                return
+
         for conn in list(self._plugins.values()):
             if conn.status != ApprovalStatus.APPROVED:
                 continue

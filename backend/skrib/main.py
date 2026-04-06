@@ -1,4 +1,5 @@
 """Main FastAPI application."""
+import os
 import signal
 import sys
 
@@ -239,7 +240,7 @@ async def startup_event():
     from .plugin_bus.server import PluginBusServer
     from .plugin_bus.bridge import PluginBusBridge
     from .plugin_bus.protocol import ApprovalStatus
-    from .plugin_bus.approvals import check_plugin_approval
+    from .plugin_bus.approvals import check_plugin_approval, get_plugin_secret
     from websockets.asyncio.server import serve as ws_serve
 
     async def _approve_plugin(plugin_id: str, manifest: dict) -> ApprovalStatus:
@@ -247,15 +248,20 @@ async def startup_event():
         return ApprovalStatus({"approved": "approved", "pending": "pending_approval",
                                "rejected": "rejected", "disabled": "rejected"}[status])
 
-    plugin_bus = PluginBusServer(approve_plugin=_approve_plugin)
-    plugin_bus_server = await ws_serve(plugin_bus.handle_connection, PLUGIN_BUS_HOST, PLUGIN_BUS_PORT)
+    plugin_bus = PluginBusServer(approve_plugin=_approve_plugin, get_plugin_secret=get_plugin_secret)
+    bus_port = PLUGIN_BUS_PORT
+    if os.environ.get("SKRIB_DATA_DIR"):
+        # Tests: use port 0 to let the OS assign a free port, avoiding conflicts
+        bus_port = 0
+    plugin_bus_server = await ws_serve(plugin_bus.handle_connection, PLUGIN_BUS_HOST, bus_port)
     app.state.plugin_bus = plugin_bus
     app.state.plugin_bus_server = plugin_bus_server
 
     # Create the bridge that translates between bus frames and the WS manager
     bridge = PluginBusBridge(plugin_bus, ws.bus, core_api)
     app.state.plugin_bus_bridge = bridge
-    print(f"[PluginBus] Listening on ws://{PLUGIN_BUS_HOST}:{PLUGIN_BUS_PORT}")
+    actual_port = plugin_bus_server.sockets[0].getsockname()[1] if plugin_bus_server.sockets else bus_port
+    print(f"[PluginBus] Listening on ws://{PLUGIN_BUS_HOST}:{actual_port}")
 
     # Start backup scheduler
     from .backups.services import start_backup_scheduler

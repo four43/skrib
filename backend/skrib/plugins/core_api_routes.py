@@ -1,14 +1,13 @@
 """HTTP endpoints exposing CoreAPI for out-of-process plugins.
 
 These endpoints mirror the methods on CoreAPI (core_api.py) but are accessible
-over HTTP. Bus-connected plugins call these directly, while in-process plugins
-continue using the CoreAPI object.
+over HTTP. Bus-connected plugins call these via the middleware proxy, while
+in-process plugins continue using the CoreAPI object.
 
-All endpoints require plugin-level authentication via the X-Skrib-Plugin-Id
-and X-Skrib-Plugin-Secret headers, or a valid user Bearer token (middleware
-injects x-skrib-username).
+All endpoints require a valid plugin connection (X-Skrib-Plugin-Id header
+must match a connected, approved plugin on the bus).
 """
-from fastapi import APIRouter, HTTPException, Request
+from fastapi import APIRouter, Depends, HTTPException, Request
 from pydantic import BaseModel
 from typing import Optional
 
@@ -21,6 +20,34 @@ def _get_core_api():
     from ..plugins.core_api import CoreAPI
     from .. import ws
     return CoreAPI(bus=ws.bus)
+
+
+def _get_bus_server():
+    """Lazy import to get the bus server instance."""
+    from ..main import app
+    return getattr(app.state, "plugin_bus", None)
+
+
+def require_plugin_auth(request: Request) -> str:
+    """Dependency that validates the request comes from an approved plugin.
+
+    Checks X-Skrib-Plugin-Id header against connected bus plugins.
+    Returns the plugin_id.
+    """
+    plugin_id = request.headers.get("x-skrib-plugin-id")
+    if not plugin_id:
+        raise HTTPException(status_code=403, detail="Missing X-Skrib-Plugin-Id header")
+
+    bus = _get_bus_server()
+    if not bus:
+        raise HTTPException(status_code=503, detail="Plugin bus not available")
+
+    from ..plugin_bus.protocol import ApprovalStatus
+    conn = bus.get_plugin(plugin_id)
+    if not conn or conn.status != ApprovalStatus.APPROVED:
+        raise HTTPException(status_code=403, detail=f"Plugin '{plugin_id}' not connected or not approved")
+
+    return plugin_id
 
 
 # ------------------------------------------------------------------
@@ -36,7 +63,7 @@ class MarkReadRequest(BaseModel):
 # ------------------------------------------------------------------
 
 @router.get("/rooms/{room_id}/members")
-async def get_room_members(room_id: str):
+async def get_room_members(room_id: str, plugin_id: str = Depends(require_plugin_auth)):
     """List usernames that are members of a room."""
     core_api = _get_core_api()
     members = core_api.get_room_members(room_id)
@@ -44,7 +71,7 @@ async def get_room_members(room_id: str):
 
 
 @router.get("/rooms/{room_id}")
-async def get_room_info(room_id: str):
+async def get_room_info(room_id: str, plugin_id: str = Depends(require_plugin_auth)):
     """Get full room details including members with roles."""
     core_api = _get_core_api()
     info = core_api.get_room_info(room_id)
@@ -54,7 +81,7 @@ async def get_room_info(room_id: str):
 
 
 @router.get("/rooms/{room_id}/members/{username}")
-async def get_member_details(room_id: str, username: str):
+async def get_member_details(room_id: str, username: str, plugin_id: str = Depends(require_plugin_auth)):
     """Get member details including notification level."""
     core_api = _get_core_api()
     notify_level = core_api.get_notify_level(room_id, username)
@@ -62,7 +89,7 @@ async def get_member_details(room_id: str, username: str):
 
 
 @router.post("/rooms/{room_id}/read")
-async def mark_room_read(room_id: str, body: MarkReadRequest, request: Request):
+async def mark_room_read(room_id: str, body: MarkReadRequest, request: Request, plugin_id: str = Depends(require_plugin_auth)):
     """Mark a room as read up to a given message ID."""
     username = request.headers.get("x-skrib-username")
     if not username:
@@ -73,7 +100,7 @@ async def mark_room_read(room_id: str, body: MarkReadRequest, request: Request):
 
 
 @router.get("/users/{username}/presence")
-async def get_user_presence(username: str):
+async def get_user_presence(username: str, plugin_id: str = Depends(require_plugin_auth)):
     """Check if a user has any active WebSocket connections."""
     core_api = _get_core_api()
     connected = core_api.is_user_connected(username)

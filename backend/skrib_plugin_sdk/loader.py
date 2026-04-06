@@ -13,7 +13,7 @@ import sys
 from pathlib import Path
 
 
-def load_plugin_class(plugin_dir: str, module_name: str = "plugin_bus"):
+def load_plugin_class(plugin_dir: str, module_name: str = "plugin_bus", allowed_base: str | None = None):
     """Load a plugin class from a plugin directory.
 
     Sets up the plugin's backend/ as a proper Python package so that
@@ -22,11 +22,21 @@ def load_plugin_class(plugin_dir: str, module_name: str = "plugin_bus"):
     Args:
         plugin_dir: Path to the plugin directory (e.g., plugins/four43.emoji-picker/)
         module_name: Name of the module containing the plugin class (default: plugin_bus)
+        allowed_base: If set, ensures the resolved plugin_dir is within this directory.
+                      Prevents path traversal attacks.
 
     Returns:
         The loaded module (access the plugin class as module.ClassName)
     """
-    plugin_dir = os.path.abspath(plugin_dir)
+    plugin_dir = os.path.realpath(plugin_dir)
+
+    if allowed_base:
+        allowed_base = os.path.realpath(allowed_base)
+        if not plugin_dir.startswith(allowed_base + os.sep) and plugin_dir != allowed_base:
+            raise ValueError(
+                f"Plugin directory '{plugin_dir}' is outside allowed base '{allowed_base}'"
+            )
+
     backend_dir = os.path.join(plugin_dir, "backend")
 
     if not os.path.isdir(backend_dir):

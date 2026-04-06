@@ -14,7 +14,7 @@ import asyncio
 import logging
 from typing import TYPE_CHECKING
 
-from .protocol import FrameType, make_request_id
+from .protocol import FrameType, FrameValidationError, make_request_id, validate_identifier, error_frame
 
 if TYPE_CHECKING:
     from .server import PluginBusServer
@@ -67,30 +67,39 @@ class PluginBusBridge:
         """Handle a frame from a plugin that the bus server routes to core."""
         frame_type = data.get("type")
 
-        if frame_type == FrameType.BUS_BROADCAST_ROOM.value:
-            await self._handle_broadcast_room(plugin_id, data)
-        elif frame_type == FrameType.BUS_NOTIFY_USER.value:
-            await self._handle_notify_user(plugin_id, data)
-        elif frame_type == FrameType.BUS_NOTIFY_ALL.value:
-            await self._handle_notify_all(plugin_id, data)
-        elif frame_type == FrameType.BUS_REPLY.value:
-            await self._handle_reply(plugin_id, data)
-        elif frame_type == FrameType.BUS_EMIT_EVENT.value:
-            await self._handle_emit_event(plugin_id, data)
-        elif frame_type == FrameType.CORE_API_REQUEST.value:
-            await self._handle_core_api_request(plugin_id, data)
-        elif frame_type == FrameType.CALLBACK_RESPONSE.value:
-            await self._handle_callback_response(plugin_id, data)
-        else:
-            logger.warning("[Bridge] Unhandled frame type '%s' from plugin '%s'", frame_type, plugin_id)
+        try:
+            if frame_type == FrameType.BUS_BROADCAST_ROOM.value:
+                await self._handle_broadcast_room(plugin_id, data)
+            elif frame_type == FrameType.BUS_NOTIFY_USER.value:
+                await self._handle_notify_user(plugin_id, data)
+            elif frame_type == FrameType.BUS_NOTIFY_ALL.value:
+                await self._handle_notify_all(plugin_id, data)
+            elif frame_type == FrameType.BUS_REPLY.value:
+                await self._handle_reply(plugin_id, data)
+            elif frame_type == FrameType.BUS_EMIT_EVENT.value:
+                await self._handle_emit_event(plugin_id, data)
+            elif frame_type == FrameType.CORE_API_REQUEST.value:
+                await self._handle_core_api_request(plugin_id, data)
+            elif frame_type == FrameType.CALLBACK_RESPONSE.value:
+                await self._handle_callback_response(plugin_id, data)
+            else:
+                logger.warning("[Bridge] Unhandled frame type '%s' from plugin '%s'", frame_type, plugin_id)
+        except FrameValidationError as e:
+            await self._server.send_to_plugin(plugin_id, error_frame(e.code, e.message, data.get("request_id")))
 
     # ------------------------------------------------------------------
     # Bus operations: plugin → client WebSockets
     # ------------------------------------------------------------------
 
+    def _validate_action(self, data: dict) -> str:
+        """Validate and return the action field from a frame."""
+        action = data["action"]
+        validate_identifier(action, "action")
+        return action
+
     async def _handle_broadcast_room(self, plugin_id: str, data: dict) -> None:
         room_id = data["room_id"]
-        action = data["action"]
+        action = self._validate_action(data)
         exclude_user = data.get("exclude_user")
         # Build the client-facing message with plugin namespace
         message = {
@@ -103,7 +112,7 @@ class PluginBusBridge:
 
     async def _handle_notify_user(self, plugin_id: str, data: dict) -> None:
         username = data["username"]
-        action = data["action"]
+        action = self._validate_action(data)
         message = {
             "type": f"{plugin_id}:{action}",
             **{k: v for k, v in data.items()
@@ -112,7 +121,7 @@ class PluginBusBridge:
         await self._ws.notify_user(username, message)
 
     async def _handle_notify_all(self, plugin_id: str, data: dict) -> None:
-        action = data["action"]
+        action = self._validate_action(data)
         message = {
             "type": f"{plugin_id}:{action}",
             **{k: v for k, v in data.items()
@@ -122,7 +131,7 @@ class PluginBusBridge:
 
     async def _handle_reply(self, plugin_id: str, data: dict) -> None:
         reply_to = data["reply_to"]
-        action = data["action"]
+        action = self._validate_action(data)
         message = {
             "type": f"{plugin_id}:{action}",
             **{k: v for k, v in data.items()
@@ -132,6 +141,7 @@ class PluginBusBridge:
 
     async def _handle_emit_event(self, plugin_id: str, data: dict) -> None:
         event_type = data["event_type"]
+        validate_identifier(event_type, "event_type")
         event_data = {
             "type": f"{plugin_id}:{event_type}",
             **{k: v for k, v in data.items()

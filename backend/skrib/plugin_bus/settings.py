@@ -135,8 +135,7 @@ def update_server_settings(plugin_id: str, updates: dict[str, Any]) -> dict[str,
     valid_keys = {s["key"] for s in schema if s.get("scope", "server") == "server"}
 
     for key, value in updates.items():
-        if key in valid_keys or not schema:
-            # If no schema registered yet, allow any key
+        if key in valid_keys:
             set_setting(plugin_id, key, value, scope="server")
 
     return get_server_settings(plugin_id)
@@ -148,7 +147,7 @@ def update_user_settings(plugin_id: str, username: str, updates: dict[str, Any])
     valid_keys = {s["key"] for s in schema if s.get("scope") == "user"}
 
     for key, value in updates.items():
-        if key in valid_keys or not schema:
+        if key in valid_keys:
             set_setting(plugin_id, key, value, scope="user", username=username)
 
     return get_user_settings(plugin_id, username)

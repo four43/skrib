@@ -9,6 +9,7 @@ from __future__ import annotations
 import hashlib
 import json
 import logging
+import secrets
 from datetime import datetime, timezone
 from typing import Optional
 
@@ -130,21 +131,35 @@ def check_plugin_approval(plugin_id: str, manifest: dict) -> str:
 # Admin actions
 # ---------------------------------------------------------------------------
 
+def get_plugin_secret(plugin_id: str) -> Optional[str]:
+    """Get the stored secret for a plugin, or None if not yet approved."""
+    with get_db() as conn:
+        row = conn.execute(
+            "SELECT secret FROM plugin_approvals WHERE plugin_id = ?", (plugin_id,)
+        ).fetchone()
+        return row["secret"] if row and row["secret"] else None
+
+
 def approve_plugin(plugin_id: str, admin_username: str) -> bool:
-    """Approve a pending plugin. Returns True if the status changed."""
+    """Approve a pending plugin. Generates a secret if one doesn't exist.
+
+    Returns True if the status changed."""
     now = _now()
     with get_db() as conn:
         row = conn.execute(
-            "SELECT status FROM plugin_approvals WHERE plugin_id = ?", (plugin_id,)
+            "SELECT status, secret FROM plugin_approvals WHERE plugin_id = ?", (plugin_id,)
         ).fetchone()
         if not row:
             return False
 
+        # Generate a secret on first approval; preserve it on re-approval
+        plugin_secret = row["secret"] if row["secret"] else secrets.token_hex(32)
+
         conn.execute(
             """UPDATE plugin_approvals
-               SET status = 'approved', approved_by = ?, approved_at = ?, updated_at = ?
+               SET status = 'approved', secret = ?, approved_by = ?, approved_at = ?, updated_at = ?
                WHERE plugin_id = ?""",
-            (admin_username, now, now, plugin_id),
+            (plugin_secret, admin_username, now, now, plugin_id),
         )
         conn.commit()
         logger.info("[Approvals] Plugin '%s' approved by %s", plugin_id, admin_username)

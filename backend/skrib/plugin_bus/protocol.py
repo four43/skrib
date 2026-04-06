@@ -9,6 +9,7 @@ spoof another plugin's namespace.
 """
 from __future__ import annotations
 
+import re
 import uuid
 from dataclasses import dataclass, field, asdict
 from enum import Enum
@@ -189,6 +190,46 @@ def check_permission(frame_type: FrameType, permissions: set[str]) -> None:
             f"Permission '{required}' required for '{frame_type.value}'",
             code="permission_denied",
         )
+
+
+# ---------------------------------------------------------------------------
+# Identifier validation
+# ---------------------------------------------------------------------------
+
+SAFE_IDENTIFIER_RE = re.compile(r'^[a-zA-Z0-9][a-zA-Z0-9._-]{0,127}$')
+# Subscriptions use "plugin_id:event_name" format — allow colon as separator
+SAFE_SUBSCRIPTION_RE = re.compile(r'^[a-zA-Z0-9][a-zA-Z0-9._:-]{0,255}$')
+
+
+def validate_identifier(value: str, field_name: str) -> None:
+    """Validate a string is a safe identifier (alphanumeric, dots, hyphens, underscores).
+
+    Raises FrameValidationError if invalid.
+    """
+    if not isinstance(value, str) or not SAFE_IDENTIFIER_RE.match(value):
+        raise FrameValidationError(
+            f"Invalid {field_name}: must be 1-128 chars, alphanumeric/dot/hyphen/underscore, "
+            f"starting with alphanumeric. Got: {value!r}",
+            code="invalid_manifest",
+        )
+
+
+def validate_manifest(manifest: dict) -> None:
+    """Validate manifest string fields against safe identifier rules.
+
+    Raises FrameValidationError if any field is invalid.
+    """
+    for rt in manifest.get("room_types", []):
+        validate_identifier(rt, "room_type")
+    for ev in manifest.get("published_events", []):
+        validate_identifier(ev, "published_event")
+    for sub in manifest.get("subscriptions", []):
+        if not isinstance(sub, str) or not SAFE_SUBSCRIPTION_RE.match(sub):
+            raise FrameValidationError(
+                f"Invalid subscription: must be 1-256 chars, alphanumeric/dot/hyphen/underscore/colon, "
+                f"starting with alphanumeric. Got: {sub!r}",
+                code="invalid_manifest",
+            )
 
 
 def error_frame(code: str, message: str, request_id: str | None = None) -> dict:

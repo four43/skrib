@@ -149,6 +149,22 @@ class TestBulkSettings:
         result = update_user_settings("test.plugin", "alice", {"theme": "dark"})
         assert result["theme"] == "dark"
 
+    def test_update_server_settings_rejected_without_schema(self):
+        """Settings updates are rejected when no schema is registered."""
+        result = update_server_settings("test.plugin", {"arbitrary_key": "value"})
+        assert "arbitrary_key" not in result
+
+    def test_update_user_settings_rejected_without_schema(self):
+        """User settings updates are rejected when no schema is registered."""
+        result = update_user_settings("test.plugin", "alice", {"arbitrary_key": "value"})
+        assert "arbitrary_key" not in result
+
+    def test_update_server_settings_ignores_unknown_keys(self, mock_schema):
+        """Even with schema, unknown keys are silently ignored."""
+        result = update_server_settings("test.plugin", {"unknown_key": "value", "max_upload": 2048})
+        assert "unknown_key" not in result
+        assert result["max_upload"] == 2048
+
 
 # ---------------------------------------------------------------------------
 # Tests: config.updated notification

@@ -4,6 +4,8 @@ import pytest
 from skrib.plugin_bus.protocol import (
     FrameType,
     validate_frame,
+    validate_identifier,
+    validate_manifest,
     check_permission,
     error_frame,
     FrameValidationError,
@@ -148,3 +150,65 @@ class TestTokenBucket:
         for _ in range(3):
             assert bucket.consume() is True
         assert bucket.consume() is False
+
+
+# ---------------------------------------------------------------------------
+# Identifier and manifest validation tests
+# ---------------------------------------------------------------------------
+
+class TestValidateIdentifier:
+    def test_valid_simple(self):
+        validate_identifier("chat", "test")
+
+    def test_valid_dotted(self):
+        validate_identifier("four43.room-type-chat", "test")
+
+    def test_valid_with_underscore(self):
+        validate_identifier("my_plugin_v2", "test")
+
+    def test_rejects_empty(self):
+        with pytest.raises(FrameValidationError, match="Invalid test"):
+            validate_identifier("", "test")
+
+    def test_rejects_special_chars(self):
+        with pytest.raises(FrameValidationError):
+            validate_identifier("<script>alert(1)</script>", "test")
+
+    def test_rejects_spaces(self):
+        with pytest.raises(FrameValidationError):
+            validate_identifier("has space", "test")
+
+    def test_rejects_starting_with_dot(self):
+        with pytest.raises(FrameValidationError):
+            validate_identifier(".hidden", "test")
+
+    def test_rejects_too_long(self):
+        with pytest.raises(FrameValidationError):
+            validate_identifier("a" * 129, "test")
+
+    def test_max_length_ok(self):
+        validate_identifier("a" * 128, "test")
+
+
+class TestValidateManifest:
+    def test_valid_manifest(self):
+        validate_manifest({
+            "room_types": ["chat", "todo"],
+            "published_events": ["message.sent"],
+            "subscriptions": ["four43.web-push.notification"],
+        })
+
+    def test_empty_manifest(self):
+        validate_manifest({})
+
+    def test_invalid_room_type(self):
+        with pytest.raises(FrameValidationError, match="room_type"):
+            validate_manifest({"room_types": ["<bad>"]})
+
+    def test_invalid_published_event(self):
+        with pytest.raises(FrameValidationError, match="published_event"):
+            validate_manifest({"published_events": ["has space"]})
+
+    def test_invalid_subscription(self):
+        with pytest.raises(FrameValidationError, match="subscription"):
+            validate_manifest({"subscriptions": [""]})

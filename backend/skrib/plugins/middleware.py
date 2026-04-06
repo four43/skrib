@@ -8,12 +8,15 @@ core auth/permission functions directly.
 For bus-connected plugins with ``http_base_url``, this middleware also
 proxies HTTP requests to the plugin's external process.
 """
+import logging
 import re
 import time
 import threading
 from urllib.parse import unquote
 
 import httpx
+
+logger = logging.getLogger(__name__)
 
 # Match /rooms/{room_id} segment in plugin route paths
 _ROOM_ID_RE = re.compile(r'/rooms/([^/]+)')
@@ -106,9 +109,20 @@ class PluginAuthMiddleware:
             conn = plugin_bus.get_plugin(plugin_id)
             if not conn or not conn.http_base_url:
                 return None
+            if not self._is_localhost_url(conn.http_base_url):
+                logger.warning("[Middleware] Rejecting non-localhost http_base_url for plugin '%s': %s",
+                               plugin_id, conn.http_base_url)
+                return None
             return f"{conn.http_base_url.rstrip('/')}{sub_path}"
         except Exception:
             return None
+
+    @staticmethod
+    def _is_localhost_url(url: str) -> bool:
+        """Validate that a URL points to localhost only."""
+        from urllib.parse import urlparse
+        parsed = urlparse(url)
+        return parsed.hostname in ("localhost", "127.0.0.1", "::1")
 
     async def _proxy_request(self, scope: dict, receive, send, proxy_url: str) -> None:
         """Proxy an HTTP request to a bus-connected plugin's HTTP server."""

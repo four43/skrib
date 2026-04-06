@@ -80,7 +80,8 @@ async def approve_plugin(plugin_id: str, admin: str = Depends(require_admin)):
     if bus:
         activated = await bus.activate_plugin(plugin_id)
 
-    return {"plugin_id": plugin_id, "status": "approved", "activated": activated}
+    secret = approvals.get_plugin_secret(plugin_id)
+    return {"plugin_id": plugin_id, "status": "approved", "activated": activated, "secret": secret}
 
 
 @router.post("/{plugin_id}/reject")
