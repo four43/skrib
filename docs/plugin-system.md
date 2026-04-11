@@ -518,6 +518,31 @@ Plugins can declare a settings schema that admins (server-level) or users (per-u
 
 When settings change, core sends a `config.updated` frame to the plugin. Plugins can also query current settings via `core_api.request`.
 
+### HTTP Request Routing (Middleware Decision Path)
+
+When a request arrives at `/api/plugins/{plugin_id}/...`, the `PluginAuthMiddleware` decides how to route it:
+
+```text
+Request to /api/plugins/{plugin_id}/...
+  │
+  ├─ Inject x-skrib-* auth headers (always)
+  │
+  ├─ Is sub-path /file/* or /manifest?
+  │    YES → serve from filesystem (never proxied)
+  │
+  ├─ Is plugin bus-connected AND approved AND has http_base_url?
+  │    YES → proxy to http://{http_base_url}/{sub_path}
+  │          (strips /api/plugins/{plugin_id} prefix)
+  │          On connection failure → 502
+  │
+  └─ NO → fall through to FastAPI in-process routes
+```
+
+Key behaviors:
+- **Proxy takes priority** — if a plugin is bus-connected with an http_base_url, the middleware proxies instead of using in-process routes. There is no fallback to in-process on proxy failure.
+- **Only approved plugins are proxied** — pending/rejected plugins are skipped so requests fall through to in-process routes (prevents 502s when the SDK shuts down the HTTP server after receiving non-approved status).
+- **File/manifest requests are always local** — served from the filesystem regardless of bus state.
+
 ### Plugin HTTP Server
 
 Out-of-process plugins run their own HTTP server for:
@@ -538,6 +563,73 @@ The plugin declares its HTTP endpoint in the `hello` frame:
   "http_base_url": "http://localhost:8101"
 }
 ```
+
+### Dual Execution Model (In-Process vs Out-of-Process)
+
+Every bundled plugin has **two implementations** in its `backend/` directory:
+
+| File | Execution Mode | Base Class | Loaded By |
+| --- | --- | --- | --- |
+| `plugin.py` | In-process (legacy) | `skrib.plugins.base.Plugin` | `registry.discover_plugins()` at server startup |
+| `plugin_bus.py` | Out-of-process (SDK) | `skrib_plugin_sdk.SkribPlugin` | `skrib_plugin_sdk.loader.load_plugin_class()` |
+
+Both versions share `routes.py`, `database.py`, and `ws_handlers.py` via relative imports. The key difference is how they're wired up:
+
+- **In-process**: Routes are registered directly with FastAPI at startup (`api.include_router(router, prefix="/plugins/{id}")`). WebSocket handlers are registered on the `UnifiedConnectionManager`.
+- **Out-of-process**: The SDK starts its own uvicorn HTTP server (ephemeral port) and registers routes there. WebSocket actions arrive via bus frames. The `hello` frame includes `http_base_url` so the middleware can proxy HTTP requests.
+
+**Startup order** (in `main.py`):
+
+1. `registry.discover_plugins()` — loads all `plugin.py` files, registers in-process routes (module level)
+2. `startup_event()` — calls `on_startup()` for in-process plugins, registers WS namespaces, starts plugin bus server on port 9000
+3. Out-of-process plugins connect to the bus independently (via `start-plugins` or `run-plugins.py`)
+
+**When both are running**: The middleware proxy takes priority for HTTP requests if the plugin is bus-connected and approved. The WS handler dispatcher (`ws/handlers.py`) also tries bus plugins first, then falls back to in-process.
+
+### Plugin Connection Lifecycle (SDK)
+
+The SDK provides two run modes:
+
+- **`run(bus_url)`** — connect once; exit if not approved or on disconnect
+- **`run_forever(bus_url)`** — connect with automatic reconnection on disconnect
+
+Both follow this lifecycle:
+
+```text
+1. Start HTTP server (if http_port is set)     → uvicorn on ephemeral port
+2. Connect to bus WebSocket                     → send hello frame with http_base_url
+3. Receive hello_ack                            → check status
+   ├─ status == "approved"  → send registrations, call on_connect(), enter message loop
+   ├─ status == "pending"   → close WebSocket, return (run) or exit (run_forever)
+   └─ status == "rejected"  → ConnectionError raised
+4. Message loop (dispatches frames to handlers)
+5. On disconnect → on_disconnect(), stop HTTP server
+```
+
+When a plugin receives `pending_approval`, the SDK closes the WebSocket and returns. The HTTP server is shut down in the finally block. This prevents stale bus entries pointing to dead HTTP servers.
+
+### Secrets and Approval
+
+- On first approval, `approve_plugin()` generates a 64-char hex secret stored in `plugin_approvals`
+- Plugins must send this secret in their `hello` frame; mismatches are rejected
+- Currently, bundled plugins hardcode `secret = ""` in their `plugin_bus.py` classes — this works during development when the bus auto-approves, but must be configured for production
+- The seed script's `approve_default_plugins()` generates secrets via the approval system
+
+### Manifest Hash and Re-Approval
+
+Two different manifests exist for each plugin:
+
+- **`manifest.json`** — on disk, used by in-process registry and by `approve_default_plugins()` in the seed script
+- **`_build_manifest()`** — generated at runtime by the SDK from class attributes, sent in the `hello` frame
+
+These can differ (e.g., different permission lists). When an out-of-process plugin connects, the bus hashes the manifest from the `hello` frame. If this hash differs from what was approved, the plugin **re-enters pending state** — even if it was previously approved. This means approving via `manifest.json` (seed script) and then connecting with a different SDK manifest will cause re-approval.
+
+### Testing Implications
+
+- **E2E tests** (`frontend/tests/e2e/`) start only the uvicorn backend — no plugin bus clients, no out-of-process plugins. All plugin functionality runs through in-process routes and WebSocket handlers.
+- **Backend unit tests** (`backend/tests/unit/plugin_bus/`) test bus server, bridge, protocol, SDK, and middleware in isolation with mocks.
+- **The middleware proxy path is NOT exercised by e2e tests** — bugs in proxy routing (e.g., proxying to non-approved plugins) are only caught by unit tests or manual testing with out-of-process plugins running.
+- To test with out-of-process plugins: start the backend, then `cd backend && python util/run-plugins.py` (all plugins in one process) or `./util/start-plugins` (separate processes).
 
 ### Current Status
 

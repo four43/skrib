@@ -10,6 +10,7 @@
 
 import { test as base, expect } from '@playwright/test';
 import { spawn, execSync } from 'child_process';
+import { createServer } from 'net';
 import { mkdtempSync, rmSync, existsSync } from 'fs';
 import { tmpdir } from 'os';
 import { join, resolve } from 'path';
@@ -48,14 +49,28 @@ function generatePassphrase() {
 }
 
 /**
- * Spawn an isolated backend (uvicorn) on port 8800 + workerIndex.
- * Each worker gets its own temp data directory with a fresh SQLite DB.
+ * Find a free TCP port by briefly binding to port 0.
+ */
+function getFreePort() {
+    return new Promise((resolve, reject) => {
+        const srv = createServer();
+        srv.listen(0, '127.0.0.1', () => {
+            const { port } = srv.address();
+            srv.close(() => resolve(port));
+        });
+        srv.on('error', reject);
+    });
+}
+
+/**
+ * Spawn an isolated backend (uvicorn) with a fresh SQLite DB per test.
+ * Uses OS-assigned free ports to avoid conflicts between concurrent tests.
  */
 export const test = base.extend({
 
     // ---------- test-scoped: fresh backend + empty DB per test ----------
-    _backend: [async ({}, use, workerInfo) => {
-        const port = 8800 + workerInfo.workerIndex;
+    _backend: [async ({}, use) => {
+        const port = await getFreePort();
         const dataDir = mkdtempSync(join(tmpdir(), 'skrib-e2e-'));
 
         const proc = spawn(VENV_PYTHON, ['-m', 'uvicorn', 'skrib.main:app', '--host', '0.0.0.0', '--port', String(port)], {
@@ -69,6 +84,10 @@ export const test = base.extend({
             stdio: ['ignore', 'pipe', 'pipe'],
         });
 
+        // Drain stdout/stderr so pipe buffers don't fill up and block uvicorn
+        proc.stdout.resume();
+        proc.stderr.resume();
+
         // Wait for the server to be ready
         const baseURL = `http://localhost:${port}`;
         await waitForServer(baseURL, 15_000);
@@ -77,7 +96,11 @@ export const test = base.extend({
 
         // Teardown: kill server and remove temp data
         proc.kill('SIGTERM');
-        await new Promise(resolve => proc.on('exit', resolve));
+        const exited = await Promise.race([
+            new Promise(resolve => proc.on('exit', resolve)).then(() => true),
+            new Promise(resolve => setTimeout(resolve, 5_000)).then(() => false),
+        ]);
+        if (!exited) proc.kill('SIGKILL');
         try { rmSync(dataDir, { recursive: true, force: true }); } catch {}
     }, { scope: 'test', auto: true }],
 

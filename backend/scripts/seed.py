@@ -27,6 +27,7 @@ sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 
 from skrib.database import init_db, get_db, get_setting, set_setting
 from skrib.auth.services import create_pending_user, create_session_token
+from skrib.plugin_bus.approvals import check_plugin_approval, approve_plugin
 
 # ---------------------------------------------------------------------------
 # Load seed data from external files
@@ -71,6 +72,8 @@ SEED_REACTIONS = _load_reactions()
 
 PLUGIN_ID = "four43.room-type-chat"
 REACTIONS_PLUGIN_ID = "four43.message-reactions"
+
+PLUGINS_DIR = os.path.join(os.path.dirname(os.path.dirname(os.path.abspath(__file__))), "plugins")
 
 # ---------------------------------------------------------------------------
 # Helpers
@@ -226,6 +229,11 @@ def insert_admin_user():
             f"INSERT INTO users ({col_names}) VALUES ({placeholders})",
             [row[c] for c in columns],
         )
+        # Set nickname and status
+        conn.execute(
+            "UPDATE users SET nickname = ?, status_emoji = ?, status_text = ? WHERE username = ?",
+            ("Sethums", "🙃", "I guess it's working???", ADMIN_USER["username"]),
+        )
         conn.commit()
         print(f"  {ADMIN_USER['username']}: inserted (admin)")
 
@@ -292,6 +300,31 @@ def create_seed_users() -> dict[str, str]:
     # Restore original registration mode
     set_setting("registration_mode", original_mode)
     return tokens
+
+
+# ---------------------------------------------------------------------------
+# Phase 1.5: Approve all default plugins (direct DB)
+# ---------------------------------------------------------------------------
+
+def approve_default_plugins():
+    """Register and approve every plugin found in backend/plugins/."""
+    admin_username = ADMIN_USER["username"]
+    for entry in sorted(os.listdir(PLUGINS_DIR)):
+        manifest_path = os.path.join(PLUGINS_DIR, entry, "manifest.json")
+        if not os.path.isfile(manifest_path):
+            continue
+        with open(manifest_path) as f:
+            manifest = json.load(f)
+        plugin_id = entry
+        status = check_plugin_approval(plugin_id, manifest)
+        if status == "approved":
+            print(f"  {plugin_id}: already approved")
+            continue
+        approved = approve_plugin(plugin_id, admin_username)
+        if approved:
+            print(f"  {plugin_id}: approved")
+        else:
+            print(f"  {plugin_id}: ERROR - could not approve (status was {status})")
 
 
 # ---------------------------------------------------------------------------
@@ -494,6 +527,10 @@ def main():
     if not tokens:
         print("ERROR: No seed users created. Check errors above.")
         sys.exit(1)
+
+    # Phase 1.5: Direct DB — approve default plugins
+    print("\n=== Phase 1.5: Approving default plugins (direct DB) ===")
+    approve_default_plugins()
 
     # Check server is running for HTTP phases
     print(f"\n=== Checking server at {base_url} ===")

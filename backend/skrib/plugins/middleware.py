@@ -103,11 +103,16 @@ class PluginAuthMiddleware:
 
         try:
             from ..main import app as main_app
+            from ..plugin_bus.protocol import ApprovalStatus
             plugin_bus = getattr(main_app.state, 'plugin_bus', None)
             if not plugin_bus:
                 return None
             conn = plugin_bus.get_plugin(plugin_id)
             if not conn or not conn.http_base_url:
+                return None
+            # Only proxy to approved plugins — pending/rejected plugins may
+            # have shut down their HTTP servers after the SDK returned early.
+            if conn.status != ApprovalStatus.APPROVED:
                 return None
             if not self._is_localhost_url(conn.http_base_url):
                 logger.warning("[Middleware] Rejecting non-localhost http_base_url for plugin '%s': %s",

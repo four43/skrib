@@ -149,6 +149,7 @@ class BusClient:
                 if ack.get("status") != "approved":
                     logger.warning("[SDK] Plugin '%s' not approved (status=%s)",
                                    self._plugin_id, ack.get("status"))
+                    await self.close()
                     return
                 backoff = INITIAL_BACKOFF  # Reset on successful connect
                 if self._on_connect_callback:
