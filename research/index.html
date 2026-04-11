@@ -1,0 +1,240 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>WebRTC Video Chat</title>
+<style>
+  * { box-sizing: border-box; margin: 0; padding: 0; }
+  body { font-family: system-ui, sans-serif; background: #1a1a2e; color: #eee; height: 100vh; display: flex; flex-direction: column; }
+  header { padding: 12px 20px; background: #16213e; display: flex; align-items: center; gap: 16px; }
+  header h1 { font-size: 18px; font-weight: 600; }
+  #status { font-size: 13px; color: #888; }
+  .videos { flex: 1; display: flex; gap: 8px; padding: 8px; min-height: 0; }
+  video { flex: 1; background: #000; border-radius: 8px; object-fit: cover; max-height: 100%; }
+  video.mirror { transform: scaleX(-1); }
+  .controls { padding: 16px; display: flex; justify-content: center; gap: 12px; background: #16213e; }
+  button { padding: 10px 24px; border: none; border-radius: 6px; font-size: 14px; cursor: pointer; font-weight: 500; }
+  #joinBtn { background: #0f3460; color: #eee; }
+  #joinBtn:hover { background: #1a4a8a; }
+  #hangupBtn { background: #c0392b; color: #fff; display: none; }
+  #hangupBtn:hover { background: #e74c3c; }
+  #muteBtn, #camBtn { background: #333; color: #eee; }
+  #muteBtn.off, #camBtn.off { background: #c0392b; }
+  .room-input { display: flex; align-items: center; gap: 8px; }
+  .room-input input { padding: 6px 10px; border-radius: 4px; border: 1px solid #444; background: #1a1a2e; color: #eee; font-size: 14px; width: 140px; }
+  .room-input label { font-size: 13px; color: #888; }
+  #log { position: fixed; bottom: 80px; right: 12px; background: rgba(0,0,0,0.7); padding: 8px 12px; border-radius: 6px; font-size: 11px; color: #aaa; max-width: 300px; max-height: 150px; overflow-y: auto; pointer-events: none; }
+</style>
+</head>
+<body>
+
+<header>
+  <h1>WebRTC Video Chat</h1>
+  <div class="room-input">
+    <label for="roomInput">Room:</label>
+    <input id="roomInput" type="text" value="default" placeholder="room name">
+  </div>
+  <span id="status">Disconnected</span>
+</header>
+
+<div class="videos">
+  <video id="localVideo" autoplay playsinline muted class="mirror"></video>
+  <video id="remoteVideo" autoplay playsinline></video>
+</div>
+
+<div id="log"></div>
+
+<div class="controls">
+  <button id="muteBtn">Mute</button>
+  <button id="camBtn">Cam Off</button>
+  <button id="joinBtn">Join Call</button>
+  <button id="hangupBtn">Hang Up</button>
+</div>
+
+<script>
+const localVideo = document.getElementById('localVideo');
+const remoteVideo = document.getElementById('remoteVideo');
+const joinBtn = document.getElementById('joinBtn');
+const hangupBtn = document.getElementById('hangupBtn');
+const muteBtn = document.getElementById('muteBtn');
+const camBtn = document.getElementById('camBtn');
+const statusEl = document.getElementById('status');
+const roomInput = document.getElementById('roomInput');
+const logEl = document.getElementById('log');
+
+let ws, pc, localStream;
+
+const ICE_SERVERS = [
+  { urls: 'stun:stun.l.google.com:19302' },
+  { urls: 'stun:stun1.l.google.com:19302' },
+];
+
+function log(msg) {
+  console.log(`[RTC] ${msg}`);
+  const line = document.createElement('div');
+  line.textContent = msg;
+  logEl.appendChild(line);
+  logEl.scrollTop = logEl.scrollHeight;
+}
+
+function setStatus(text) {
+  statusEl.textContent = text;
+}
+
+function createPeerConnection() {
+  pc = new RTCPeerConnection({ iceServers: ICE_SERVERS });
+
+  pc.onicecandidate = (e) => {
+    if (e.candidate) {
+      ws.send(JSON.stringify({ type: 'ice-candidate', candidate: e.candidate }));
+      log('Sent ICE candidate');
+    }
+  };
+
+  pc.oniceconnectionstatechange = () => {
+    log(`ICE state: ${pc.iceConnectionState}`);
+    if (pc.iceConnectionState === 'connected' || pc.iceConnectionState === 'completed') {
+      setStatus('Connected');
+    } else if (pc.iceConnectionState === 'disconnected' || pc.iceConnectionState === 'failed') {
+      setStatus('Connection lost');
+    }
+  };
+
+  pc.ontrack = (e) => {
+    log('Received remote track');
+    remoteVideo.srcObject = e.streams[0];
+  };
+
+  // Add local tracks
+  if (localStream) {
+    localStream.getTracks().forEach(track => pc.addTrack(track, localStream));
+  }
+
+  return pc;
+}
+
+async function handleSignaling(data) {
+  if (data.type === 'role') {
+    log(`Role: ${data.role}`);
+    setStatus(`Waiting for peer...`);
+  }
+
+  if (data.type === 'peer-joined') {
+    log('Peer joined — creating offer');
+    setStatus('Connecting...');
+    createPeerConnection();
+    const offer = await pc.createOffer();
+    await pc.setLocalDescription(offer);
+    ws.send(JSON.stringify({ type: 'offer', sdp: offer.sdp }));
+  }
+
+  if (data.type === 'offer') {
+    log('Received offer — creating answer');
+    setStatus('Connecting...');
+    createPeerConnection();
+    await pc.setRemoteDescription(new RTCSessionDescription({ type: 'offer', sdp: data.sdp }));
+    const answer = await pc.createAnswer();
+    await pc.setLocalDescription(answer);
+    ws.send(JSON.stringify({ type: 'answer', sdp: answer.sdp }));
+  }
+
+  if (data.type === 'answer') {
+    log('Received answer');
+    await pc.setRemoteDescription(new RTCSessionDescription({ type: 'answer', sdp: data.sdp }));
+  }
+
+  if (data.type === 'ice-candidate') {
+    log('Received ICE candidate');
+    await pc.addIceCandidate(new RTCIceCandidate(data.candidate));
+  }
+
+  if (data.type === 'peer-left') {
+    log('Peer left');
+    setStatus('Peer disconnected');
+    remoteVideo.srcObject = null;
+    if (pc) { pc.close(); pc = null; }
+  }
+
+  if (data.type === 'error') {
+    log(`Error: ${data.message}`);
+    setStatus(data.message);
+  }
+}
+
+async function join() {
+  try {
+    localStream = await navigator.mediaDevices.getUserMedia({ video: true, audio: true });
+    localVideo.srcObject = localStream;
+    log('Got local media');
+  } catch (err) {
+    log(`Media error: ${err.message}`);
+    setStatus('Camera/mic access denied');
+    return;
+  }
+
+  const room = roomInput.value.trim() || 'default';
+  const proto = location.protocol === 'https:' ? 'wss' : 'ws';
+  ws = new WebSocket(`${proto}://${location.host}/ws?room=${encodeURIComponent(room)}`);
+
+  ws.onopen = () => {
+    log('Signaling connected');
+    setStatus('Joined — waiting for peer...');
+  };
+
+  ws.onmessage = (e) => {
+    handleSignaling(JSON.parse(e.data));
+  };
+
+  ws.onclose = () => {
+    log('Signaling disconnected');
+    setStatus('Disconnected');
+  };
+
+  joinBtn.style.display = 'none';
+  hangupBtn.style.display = '';
+  roomInput.disabled = true;
+}
+
+function hangup() {
+  if (pc) { pc.close(); pc = null; }
+  if (ws) { ws.close(); ws = null; }
+  if (localStream) {
+    localStream.getTracks().forEach(t => t.stop());
+    localStream = null;
+  }
+  localVideo.srcObject = null;
+  remoteVideo.srcObject = null;
+
+  joinBtn.style.display = '';
+  hangupBtn.style.display = 'none';
+  roomInput.disabled = false;
+  setStatus('Disconnected');
+  log('Hung up');
+}
+
+muteBtn.onclick = () => {
+  if (!localStream) return;
+  const audio = localStream.getAudioTracks()[0];
+  if (audio) {
+    audio.enabled = !audio.enabled;
+    muteBtn.textContent = audio.enabled ? 'Mute' : 'Unmute';
+    muteBtn.classList.toggle('off', !audio.enabled);
+  }
+};
+
+camBtn.onclick = () => {
+  if (!localStream) return;
+  const video = localStream.getVideoTracks()[0];
+  if (video) {
+    video.enabled = !video.enabled;
+    camBtn.textContent = video.enabled ? 'Cam Off' : 'Cam On';
+    camBtn.classList.toggle('off', !video.enabled);
+  }
+};
+
+joinBtn.onclick = join;
+hangupBtn.onclick = hangup;
+</script>
+</body>
+</html>

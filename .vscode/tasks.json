@@ -22,6 +22,13 @@
       "isBackground": true
     },
     {
+      "label": "Pinggy Tunnel (WebRTC Research)",
+      "type": "shell",
+      "command": "ssh -p 443 -R0:localhost:8080 qr@free.pinggy.io",
+      "problemMatcher": [],
+      "isBackground": true
+    },
+    {
       "label": "Seed Database",
       "type": "shell",
       "command": "python",

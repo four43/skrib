@@ -17,7 +17,7 @@ A manual todo list of features I think of:
 - [ ] Message editing and deletion
 - [ ] Message threading
 - [ ] Add option for user profiles with custom status messages, profile pictures, etc.
-- [ ] Message attachments (images, files, etc.)
+- [x] Message attachments (images, files, etc.)
 - [ ] Message quoting and replying
 - [ ] Message pinning and starring
 - [ ] Message search and filtering

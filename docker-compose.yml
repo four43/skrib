@@ -22,6 +22,7 @@ services:
     entrypoint: ""
     ports:
       - "8000:8000"  # Running via "localhost" is a secure context so we can test Service Workers
+      - "8080:8080"  # Research: WebRTC video chat
     command:
       - sh
       - -c

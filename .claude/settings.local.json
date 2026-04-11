@@ -36,7 +36,9 @@
       "Bash(SKRIB_TEST_DATA_DIR=1 npx playwright test tests/e2e/mention-autocomplete.spec.js --grep \"Typing @ shows\" --reporter=line)",
       "Bash(./util/test-e2e)",
       "Bash(python3 -m json.tool)",
-      "Bash(chmod +x /workspace/frontend/util/install-plugins)"
+      "Bash(chmod +x /workspace/frontend/util/install-plugins)",
+      "Bash(python3 -m pytest tests/integration/test_rooms.py -v --tb=short)",
+      "Bash(.venv/bin/pytest *)"
     ]
   }
 }

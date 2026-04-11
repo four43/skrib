@@ -36,6 +36,18 @@
       "justMyCode": false
     },
     {
+      "name": "Research: WebRTC Video Chat",
+      "type": "debugpy",
+      "request": "launch",
+      "program": "${workspaceFolder}/research/server.py",
+      "cwd": "${workspaceFolder}/research",
+      "env": {
+        "PYTHONUNBUFFERED": "1"
+      },
+      "console": "integratedTerminal",
+      "justMyCode": false
+    },
+    {
       "name": "FastAPI: Run API Server (No Reload)",
       "type": "debugpy",
       "request": "launch",
