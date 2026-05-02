@@ -10,6 +10,15 @@ from skrib.rooms.services import ROOMS, ROOMS_LOCK
 from .conftest import do_full_registration, set_mode
 
 
+def _mock_plugin_bus(room_types=None):
+    """Return a mock plugin bus with the given room types registered."""
+    if room_types is None:
+        room_types = {"chat": "four43.room-type-chat"}
+    mock_bus = MagicMock()
+    mock_bus.room_type_map = room_types
+    return mock_bus
+
+
 # ---------------------------------------------------------------------------
 # Helpers
 # ---------------------------------------------------------------------------
@@ -57,13 +66,9 @@ def _add_member(room_id: str, username: str, room_role: str = "member"):
         conn.commit()
 
 
-# We need to mock the plugin registry for room creation
-def _mock_registry():
-    """Return a mock registry that accepts 'chat' as a valid room type."""
-    mock_plugin = MagicMock()
-    mock_plugin.id = "four43.room-type-chat"
-    mock_plugin.room_types = ["chat"]
-    return {"chat": mock_plugin}
+def _set_mock_plugin_bus(app, room_types=None):
+    """Set a mock plugin bus on app.state for room creation tests."""
+    app.state.plugin_bus = _mock_plugin_bus(room_types)
 
 
 # ---------------------------------------------------------------------------
@@ -109,9 +114,9 @@ class TestListRooms:
 # ---------------------------------------------------------------------------
 
 class TestCreateRoom:
-    @patch("skrib.rooms.routes.registry")
-    def test_create_room_success(self, mock_reg, client):
-        mock_reg.room_type_map = _mock_registry()
+    def test_create_room_success(self, client):
+        from skrib.main import app
+        _set_mock_plugin_bus(app)
         token = _create_user("alice")
 
         resp = client.post("/api/rooms", json={"room_id": "my-room", "room_type": "chat"},
@@ -119,18 +124,18 @@ class TestCreateRoom:
         assert resp.status_code == 200
         assert resp.json()["room_id"] == "my-room"
 
-    @patch("skrib.rooms.routes.registry")
-    def test_create_room_invalid_name(self, mock_reg, client):
-        mock_reg.room_type_map = _mock_registry()
+    def test_create_room_invalid_name(self, client):
+        from skrib.main import app
+        _set_mock_plugin_bus(app)
         token = _create_user("alice")
 
         resp = client.post("/api/rooms", json={"room_id": "My Room!", "room_type": "chat"},
                            headers=_auth(token))
         assert resp.status_code == 400
 
-    @patch("skrib.rooms.routes.registry")
-    def test_create_room_duplicate(self, mock_reg, client):
-        mock_reg.room_type_map = _mock_registry()
+    def test_create_room_duplicate(self, client):
+        from skrib.main import app
+        _set_mock_plugin_bus(app)
         token = _create_user("alice")
         _create_room_direct("existing")
 
@@ -138,9 +143,9 @@ class TestCreateRoom:
                            headers=_auth(token))
         assert resp.status_code == 400
 
-    @patch("skrib.rooms.routes.registry")
-    def test_create_room_invalid_type(self, mock_reg, client):
-        mock_reg.room_type_map = {}
+    def test_create_room_invalid_type(self, client):
+        from skrib.main import app
+        _set_mock_plugin_bus(app, room_types={})
         token = _create_user("alice")
 
         resp = client.post("/api/rooms", json={"room_id": "my-room", "room_type": "unknown"},

@@ -11,10 +11,10 @@ from .routes import router
 class RoomTypeTodoPlugin(SkribPlugin):
     id = "four43.room-type-todo"
     version = "1.0.0"
-    secret = ""
     permissions = ["bus.send", "bus.receive", "room_type.register", "http.routes",
                    "storage.read", "storage.write", "frontend.register"]
     room_types = ["todo"]
+    http_port = 0  # auto-assign — serves todo CRUD routes
 
     table_schema = '''
         CREATE TABLE IF NOT EXISTS todo_items (

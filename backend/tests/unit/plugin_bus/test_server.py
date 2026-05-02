@@ -39,8 +39,12 @@ def make_hello(plugin_id="test.plugin", version="1.0.0", secret="s3cret", **mani
     }
 
 
-async def start_bus_server(bus_server, host="127.0.0.1", port=0):
-    server = await ws_serve(bus_server.handle_connection, host, port)
+async def start_bus_server(bus_server, host="127.0.0.1", port=0, max_size=None):
+    from skrib.plugin_bus.server import MAX_MESSAGE_SIZE
+    server = await ws_serve(
+        bus_server.handle_connection, host, port,
+        max_size=MAX_MESSAGE_SIZE if max_size is None else max_size,
+    )
     actual_port = server.sockets[0].getsockname()[1]
     return server, actual_port
 
@@ -309,9 +313,17 @@ class TestRoomTypeRegistration:
                 "type": "register.room_type",
                 "room_type": "chat",
                 "display_name": "Chat Room",
+                "icon": "message-circle",
+                "description": "Real-time messaging",
             }))
             await asyncio.sleep(0.05)
             assert server.room_type_map.get("chat") == "test.plugin"
+            conn = server.get_plugin("test.plugin")
+            assert conn.room_type_meta["chat"] == {
+                "display_name": "Chat Room",
+                "icon": "message-circle",
+                "description": "Real-time messaging",
+            }
         finally:
             await ws.close()
 
@@ -656,6 +668,8 @@ class TestConnectionRateLimiting:
         server = PluginBusServer()
         server.CONNECTION_RATE_LIMIT = 3
         server.CONNECTION_RATE_WINDOW = 60.0
+        # Remove localhost exemption so the test can trigger rate limiting
+        server.RATE_LIMIT_EXEMPT_IPS = set()
         ws_server, port = await start_bus_server(server)
         url = f"ws://127.0.0.1:{port}"
 
@@ -674,6 +688,30 @@ class TestConnectionRateLimiting:
             assert resp["type"] == "error"
             assert resp["code"] == "rate_limited"
             await ws4.close()
+        finally:
+            for ws in connections:
+                await ws.close()
+            ws_server.close()
+            await ws_server.wait_closed()
+
+    @pytest.mark.asyncio
+    async def test_localhost_exempt_from_rate_limit(self):
+        """Local plugins (127.0.0.1) are exempt from connection rate limiting."""
+        server = PluginBusServer()
+        server.CONNECTION_RATE_LIMIT = 2  # Very low limit
+        server.CONNECTION_RATE_WINDOW = 60.0
+        # Keep default RATE_LIMIT_EXEMPT_IPS which includes 127.0.0.1
+        ws_server, port = await start_bus_server(server)
+        url = f"ws://127.0.0.1:{port}"
+
+        connections = []
+        try:
+            # All 5 connections should succeed despite limit of 2
+            for i in range(5):
+                hello = make_hello(plugin_id=f"plugin.{i}")
+                ws, ack = await connect_and_hello(url, hello)
+                assert ack["status"] == "approved"
+                connections.append(ws)
         finally:
             for ws in connections:
                 await ws.close()
@@ -700,3 +738,303 @@ class TestCleanup:
 
         assert "test.plugin" not in server.plugins
         assert "whiteboard" not in server.room_type_map
+
+
+# ---------------------------------------------------------------------------
+# Pending plugin enforcement — unapproved plugins cannot register or receive
+# ---------------------------------------------------------------------------
+
+class TestPendingPluginCannotRegister:
+    """Verify that pending (unapproved) plugins cannot register any resources."""
+
+    async def _make_pending_server(self):
+        async def pend_all(pid, m):
+            return ApprovalStatus.PENDING
+
+        server = PluginBusServer(approve_plugin=pend_all)
+        ws_server, port = await start_bus_server(server)
+        return server, ws_server, port
+
+    @pytest.mark.asyncio
+    async def test_pending_plugin_cannot_register_room_type(self):
+        """Pending plugin gets pending_approval error when trying to register a room type."""
+        server, ws_server, port = await self._make_pending_server()
+        url = f"ws://127.0.0.1:{port}"
+        try:
+            hello = make_hello(
+                permissions=["bus.send", "room_type.register"],
+                room_types=["chat"],
+            )
+            ws, ack = await connect_and_hello(url, hello)
+            assert ack["status"] == "pending_approval"
+            try:
+                await ws.send(json.dumps({
+                    "type": "register.room_type",
+                    "room_type": "chat",
+                    "display_name": "Chat",
+                }))
+                resp = json.loads(await ws.recv())
+                assert resp["type"] == "error"
+                assert resp["code"] == "pending_approval"
+                # Room type must NOT be registered
+                assert "chat" not in server.room_type_map
+            finally:
+                await ws.close()
+        finally:
+            ws_server.close()
+            await ws_server.wait_closed()
+
+    @pytest.mark.asyncio
+    async def test_pending_plugin_cannot_register_frontend(self):
+        """Pending plugin gets pending_approval error when trying to register frontend assets."""
+        server, ws_server, port = await self._make_pending_server()
+        url = f"ws://127.0.0.1:{port}"
+        try:
+            hello = make_hello(permissions=["bus.send"])
+            ws, ack = await connect_and_hello(url, hello)
+            assert ack["status"] == "pending_approval"
+            try:
+                await ws.send(json.dumps({
+                    "type": "register.frontend",
+                    "scripts": ["/plugins/evil/dist/plugin.js"],
+                    "styles": ["/plugins/evil/dist/plugin.css"],
+                }))
+                resp = json.loads(await ws.recv())
+                assert resp["type"] == "error"
+                assert resp["code"] == "pending_approval"
+                # Frontend assets must NOT be registered
+                conn = server.get_plugin("test.plugin")
+                assert conn.frontend_scripts == []
+                assert conn.frontend_styles == []
+            finally:
+                await ws.close()
+        finally:
+            ws_server.close()
+            await ws_server.wait_closed()
+
+    @pytest.mark.asyncio
+    async def test_pending_plugin_cannot_register_settings(self):
+        """Pending plugin gets pending_approval error when trying to register settings."""
+        server, ws_server, port = await self._make_pending_server()
+        url = f"ws://127.0.0.1:{port}"
+        try:
+            hello = make_hello(permissions=["bus.send"])
+            ws, ack = await connect_and_hello(url, hello)
+            assert ack["status"] == "pending_approval"
+            try:
+                await ws.send(json.dumps({
+                    "type": "register.settings",
+                    "settings": [{"key": "color", "type": "string", "default": "blue"}],
+                }))
+                resp = json.loads(await ws.recv())
+                assert resp["type"] == "error"
+                assert resp["code"] == "pending_approval"
+                conn = server.get_plugin("test.plugin")
+                assert conn.settings_schema == []
+            finally:
+                await ws.close()
+        finally:
+            ws_server.close()
+            await ws_server.wait_closed()
+
+    @pytest.mark.asyncio
+    async def test_pending_plugin_cannot_register_callback(self):
+        """Pending plugin gets pending_approval error when trying to register a callback."""
+        server, ws_server, port = await self._make_pending_server()
+        url = f"ws://127.0.0.1:{port}"
+        try:
+            hello = make_hello(permissions=["bus.send"])
+            ws, ack = await connect_and_hello(url, hello)
+            assert ack["status"] == "pending_approval"
+            try:
+                await ws.send(json.dumps({
+                    "type": "register.callback",
+                    "endpoint": "/webhook",
+                }))
+                resp = json.loads(await ws.recv())
+                assert resp["type"] == "error"
+                assert resp["code"] == "pending_approval"
+                conn = server.get_plugin("test.plugin")
+                assert conn.callbacks == []
+            finally:
+                await ws.close()
+        finally:
+            ws_server.close()
+            await ws_server.wait_closed()
+
+
+class TestPendingPluginCannotReceive:
+    """Verify that pending plugins do not receive frames from core or broadcasts."""
+
+    @pytest.mark.asyncio
+    async def test_send_to_plugin_skips_pending(self):
+        """send_to_plugin returns False for a pending plugin."""
+        async def pend_all(pid, m):
+            return ApprovalStatus.PENDING
+
+        server = PluginBusServer(approve_plugin=pend_all)
+        ws_server, port = await start_bus_server(server)
+        url = f"ws://127.0.0.1:{port}"
+        try:
+            ws, ack = await connect_and_hello(url)
+            assert ack["status"] == "pending_approval"
+            try:
+                sent = await server.send_to_plugin("test.plugin", {
+                    "type": "room.action",
+                    "room_id": "r1",
+                    "action": "send_message",
+                    "username": "alice",
+                })
+                assert sent is False
+
+                # Plugin should NOT have received any frame
+                with pytest.raises(asyncio.TimeoutError):
+                    await asyncio.wait_for(ws.recv(), timeout=0.2)
+            finally:
+                await ws.close()
+        finally:
+            ws_server.close()
+            await ws_server.wait_closed()
+
+    @pytest.mark.asyncio
+    async def test_broadcast_skips_pending_subscriber(self):
+        """broadcast_to_subscribers skips pending plugins even if they declared subscriptions."""
+        async def approve_selectively(pid, m):
+            if pid == "publisher.plugin":
+                return ApprovalStatus.APPROVED
+            return ApprovalStatus.PENDING
+
+        server = PluginBusServer(approve_plugin=approve_selectively)
+        ws_server, port = await start_bus_server(server)
+        url = f"ws://127.0.0.1:{port}"
+        try:
+            # Publisher plugin (approved)
+            hello_pub = make_hello(
+                plugin_id="publisher.plugin",
+                permissions=["bus.send"],
+                published_events=["notify"],
+            )
+            ws_pub, ack_pub = await connect_and_hello(url, hello_pub)
+            assert ack_pub["status"] == "approved"
+
+            # Subscriber plugin (pending)
+            hello_sub = make_hello(
+                plugin_id="subscriber.plugin",
+                permissions=["bus.receive"],
+                subscriptions=["publisher.plugin:notify"],
+            )
+            ws_sub, ack_sub = await connect_and_hello(url, hello_sub)
+            assert ack_sub["status"] == "pending_approval"
+
+            try:
+                await server.broadcast_to_subscribers(
+                    "publisher.plugin:notify",
+                    {"type": "event", "event_type": "publisher.plugin:notify", "data": "secret"},
+                )
+                # Pending subscriber should NOT receive the event
+                with pytest.raises(asyncio.TimeoutError):
+                    await asyncio.wait_for(ws_sub.recv(), timeout=0.2)
+            finally:
+                await ws_pub.close()
+                await ws_sub.close()
+        finally:
+            ws_server.close()
+            await ws_server.wait_closed()
+
+
+class TestSubscriberRequiresBusReceive:
+    """A plugin must declare bus.receive to actually receive subscribed events."""
+
+    @pytest.mark.asyncio
+    async def test_broadcast_skips_subscriber_without_bus_receive(self):
+        server = PluginBusServer()
+        ws_server, port = await start_bus_server(server)
+        url = f"ws://127.0.0.1:{port}"
+        try:
+            hello_pub = make_hello(
+                plugin_id="publisher.plugin",
+                permissions=["bus.send"],
+                published_events=["notify"],
+            )
+            ws_pub, ack_pub = await connect_and_hello(url, hello_pub)
+            assert ack_pub["status"] == "approved"
+
+            # Subscriber declares the subscription but lacks bus.receive
+            hello_sub = make_hello(
+                plugin_id="subscriber.plugin",
+                permissions=["bus.send"],
+                subscriptions=["publisher.plugin:notify"],
+            )
+            ws_sub, ack_sub = await connect_and_hello(url, hello_sub)
+            assert ack_sub["status"] == "approved"
+
+            try:
+                await server.broadcast_to_subscribers(
+                    "publisher.plugin:notify",
+                    {"type": "event", "event_type": "publisher.plugin:notify"},
+                )
+                with pytest.raises(asyncio.TimeoutError):
+                    await asyncio.wait_for(ws_sub.recv(), timeout=0.2)
+            finally:
+                await ws_pub.close()
+                await ws_sub.close()
+        finally:
+            ws_server.close()
+            await ws_server.wait_closed()
+
+
+class TestPendingPluginGoodbye:
+    """Verify that GOODBYE is the one frame a pending plugin CAN send."""
+
+    @pytest.mark.asyncio
+    async def test_pending_plugin_can_send_goodbye(self):
+        """A pending plugin can gracefully disconnect via GOODBYE."""
+        async def pend_all(pid, m):
+            return ApprovalStatus.PENDING
+
+        server = PluginBusServer(approve_plugin=pend_all)
+        ws_server, port = await start_bus_server(server)
+        url = f"ws://127.0.0.1:{port}"
+        try:
+            ws, ack = await connect_and_hello(url)
+            assert ack["status"] == "pending_approval"
+            assert "test.plugin" in server.plugins
+
+            # GOODBYE should be accepted (no error), and the connection closed
+            await ws.send(json.dumps({"type": "goodbye"}))
+            # Server closes the connection after goodbye
+            await asyncio.wait_for(ws.wait_closed(), timeout=2.0)
+            await asyncio.sleep(0.05)
+            assert "test.plugin" not in server.plugins
+        finally:
+            ws_server.close()
+            await ws_server.wait_closed()
+
+
+class TestMessageSizeLimit:
+    """Frames over MAX_MESSAGE_SIZE must be rejected by the websockets layer."""
+
+    @pytest.mark.asyncio
+    async def test_oversized_frame_closes_connection(self):
+        from skrib.plugin_bus.server import MAX_MESSAGE_SIZE
+
+        server = PluginBusServer()
+        ws_server, port = await start_bus_server(server)
+        url = f"ws://127.0.0.1:{port}"
+        try:
+            ws, ack = await connect_and_hello(url)
+            assert ack["status"] == "approved"
+
+            oversized = {
+                "type": "bus.broadcast_room",
+                "room_id": "r1",
+                "action": "spam",
+                "blob": "x" * (MAX_MESSAGE_SIZE + 1),
+            }
+            with pytest.raises(websockets.ConnectionClosed):
+                await ws.send(json.dumps(oversized))
+                # Server closes with 1009 (message too big) — surface it on next recv
+                await ws.recv()
+        finally:
+            ws_server.close()
+            await ws_server.wait_closed()

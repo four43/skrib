@@ -27,7 +27,7 @@ sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 
 from skrib.database import init_db, get_db, get_setting, set_setting
 from skrib.auth.services import create_pending_user, create_session_token
-from skrib.plugin_bus.approvals import check_plugin_approval, approve_plugin
+from skrib.plugin_bus.approvals import check_plugin_approval
 
 # ---------------------------------------------------------------------------
 # Load seed data from external files
@@ -303,31 +303,6 @@ def create_seed_users() -> dict[str, str]:
 
 
 # ---------------------------------------------------------------------------
-# Phase 1.5: Approve all default plugins (direct DB)
-# ---------------------------------------------------------------------------
-
-def approve_default_plugins():
-    """Register and approve every plugin found in backend/plugins/."""
-    admin_username = ADMIN_USER["username"]
-    for entry in sorted(os.listdir(PLUGINS_DIR)):
-        manifest_path = os.path.join(PLUGINS_DIR, entry, "manifest.json")
-        if not os.path.isfile(manifest_path):
-            continue
-        with open(manifest_path) as f:
-            manifest = json.load(f)
-        plugin_id = entry
-        status = check_plugin_approval(plugin_id, manifest)
-        if status == "approved":
-            print(f"  {plugin_id}: already approved")
-            continue
-        approved = approve_plugin(plugin_id, admin_username)
-        if approved:
-            print(f"  {plugin_id}: approved")
-        else:
-            print(f"  {plugin_id}: ERROR - could not approve (status was {status})")
-
-
-# ---------------------------------------------------------------------------
 # Phase 2: Create rooms via HTTP API
 # ---------------------------------------------------------------------------
 
@@ -350,7 +325,7 @@ def create_seed_rooms(tokens: dict[str, str], base_url: str):
         )
         if resp.status_code == 200:
             print(f"  #{room_id}: created")
-        elif resp.status_code == 400:
+        elif resp.status_code == 400 and "already exists" in resp.text.lower():
             print(f"  #{room_id}: already exists, skipping creation")
         else:
             print(f"  #{room_id}: ERROR {resp.status_code} - {resp.text}")
@@ -528,10 +503,6 @@ def main():
         print("ERROR: No seed users created. Check errors above.")
         sys.exit(1)
 
-    # Phase 1.5: Direct DB — approve default plugins
-    print("\n=== Phase 1.5: Approving default plugins (direct DB) ===")
-    approve_default_plugins()
-
     # Check server is running for HTTP phases
     print(f"\n=== Checking server at {base_url} ===")
     if not check_server(base_url):
@@ -539,6 +510,58 @@ def main():
         print("  cd backend && uvicorn skrib.main:app --reload --host 0.0.0.0 --port 8000")
         sys.exit(1)
     print("Server is up!")
+
+    # Phase 1.5: Register plugins as pending (direct DB), then approve + activate via HTTP API.
+    # The direct DB call creates the pending record; the HTTP API call approves it and
+    # notifies the bus server to activate the connected plugin in one step.
+    import time
+    print("\n=== Phase 1.5: Approving default plugins ===")
+    admin_token = create_session_token(ADMIN_USER["username"])
+    for entry in sorted(os.listdir(PLUGINS_DIR)):
+        manifest_path = os.path.join(PLUGINS_DIR, entry, "manifest.json")
+        if not os.path.isfile(manifest_path):
+            continue
+        with open(manifest_path) as f:
+            manifest = json.load(f)
+        # Ensure a pending record exists (idempotent — returns "pending" or "approved")
+        status = check_plugin_approval(entry, manifest)
+        if status == "approved":
+            print(f"  {entry}: already approved")
+            continue
+        # Approve via HTTP API (handles DB + bus activation + secret file)
+        resp = requests.post(
+            f"{base_url}/api/admin/plugins/{entry}/approve",
+            headers=auth_headers(admin_token),
+        )
+        if resp.status_code == 200:
+            data = resp.json()
+            activated = "activated on bus" if data.get("activated") else "approved (not yet connected)"
+            print(f"  {entry}: {activated}")
+        else:
+            print(f"  {entry}: ERROR {resp.status_code} - {resp.text}")
+
+    # Wait for the chat plugin to register the "chat" room type on the bus
+    print("\n=== Waiting for plugins to register room types ===")
+    for attempt in range(30):
+        resp = requests.get(f"{base_url}/api/plugins")
+        if resp.status_code == 200:
+            plugins = resp.json()
+            chat_plugin = [
+                p for p in plugins
+                if p.get("id") == PLUGIN_ID and "chat" in p.get("room_types", [])
+            ]
+            if chat_plugin:
+                print(f"  {PLUGIN_ID} registered room type 'chat'!")
+                break
+        if attempt == 0:
+            print(f"  Waiting for {PLUGIN_ID} to register 'chat' room type...", end="", flush=True)
+        else:
+            print(".", end="", flush=True)
+        time.sleep(1)
+    else:
+        print(f"\n  WARNING: {PLUGIN_ID} room type not registered after 30s. Room creation may fail.")
+        print("  Make sure plugins are running: cd backend && ./util/start-plugins")
+    print()
 
     # Phase 2: HTTP API — create rooms and add all users
     print("\n=== Phase 2: Creating rooms (HTTP API) ===")

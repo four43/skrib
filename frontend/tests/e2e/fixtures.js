@@ -11,12 +11,37 @@
 import { test as base, expect } from '@playwright/test';
 import { spawn, execSync } from 'child_process';
 import { createServer } from 'net';
-import { mkdtempSync, rmSync, existsSync } from 'fs';
+import { mkdtempSync, rmSync, existsSync, readdirSync } from 'fs';
 import { tmpdir } from 'os';
 import { join, resolve } from 'path';
 
 // Backend source lives in the worktree, but the venv may be in the main repo.
 const BACKEND_DIR = resolve(process.cwd(), '..', 'backend');
+
+// Timing instrumentation — set SKRIB_TIMING=1 to enable.
+// Prints a table at the end of each test and forwards backend stdout/stderr.
+const TIMING = !!process.env.SKRIB_TIMING;
+const TIMING_START = Date.now();
+function tmark(label, bag) {
+    const now = Date.now();
+    const total = now - TIMING_START;
+    const delta = bag && bag._last ? (now - bag._last) : 0;
+    if (bag) {
+        bag._last = now;
+        bag.marks.push({ label, total, delta });
+    }
+    if (TIMING) {
+        process.stderr.write(`[TIMING:fixture] +${String(total).padStart(6)}ms  (Δ${String(delta).padStart(6)}ms)  ${label}\n`);
+    }
+}
+function printTimingReport(bag) {
+    if (!TIMING) return;
+    process.stderr.write('\n=== Startup timing report ===\n');
+    for (const m of bag.marks) {
+        process.stderr.write(`  +${String(m.total).padStart(6)}ms  (Δ${String(m.delta).padStart(6)}ms)  ${m.label}\n`);
+    }
+    process.stderr.write('=============================\n\n');
+}
 
 function findVenvPython() {
     // Check worktree backend first
@@ -63,15 +88,56 @@ function getFreePort() {
 }
 
 /**
+ * Spawn all out-of-process plugin processes, connecting them to the given bus.
+ * Returns an array of child processes.
+ */
+function startPlugins(backendDir, busPort, dataDir) {
+    const pluginsDir = join(backendDir, 'plugins');
+    const procs = [];
+    for (const dir of readdirSync(pluginsDir).filter(d => d.startsWith('four43.'))) {
+        const mainPy = join(pluginsDir, dir, '__main__.py');
+        if (!existsSync(mainPy)) continue;
+        const p = spawn(VENV_PYTHON, [mainPy], {
+            env: {
+                ...process.env,
+                SKRIB_BUS_URL: `ws://127.0.0.1:${busPort}`,
+                SKRIB_DATA_DIR: dataDir,
+                PYTHONPATH: backendDir,
+            },
+            stdio: ['ignore', 'pipe', 'pipe'],
+        });
+        if (TIMING) {
+            const tag = `plugin:${dir}`;
+            p.stdout.on('data', d => process.stderr.write(`[${tag} stdout] ${d}`));
+            p.stderr.on('data', d => process.stderr.write(`[${tag} stderr] ${d}`));
+        } else {
+            p.stdout.resume();
+            p.stderr.resume();
+        }
+        procs.push(p);
+    }
+    return procs;
+}
+
+/**
  * Spawn an isolated backend (uvicorn) with a fresh SQLite DB per test.
  * Uses OS-assigned free ports to avoid conflicts between concurrent tests.
+ *
+ * Plugin processes are NOT started automatically — they're expensive (7
+ * Python processes each) and most tests don't need them.  Fixtures that
+ * need plugins call `_backend.startPlugins()` which lazily spawns them.
  */
 export const test = base.extend({
 
     // ---------- test-scoped: fresh backend + empty DB per test ----------
     _backend: [async ({}, use) => {
+        const timings = { _last: Date.now(), marks: [] };
+        tmark('test start', timings);
+
         const port = await getFreePort();
+        const busPort = await getFreePort();
         const dataDir = mkdtempSync(join(tmpdir(), 'skrib-e2e-'));
+        tmark('ports & tempdir ready', timings);
 
         const proc = spawn(VENV_PYTHON, ['-m', 'uvicorn', 'skrib.main:app', '--host', '0.0.0.0', '--port', String(port)], {
             cwd: BACKEND_DIR,
@@ -79,28 +145,56 @@ export const test = base.extend({
                 ...process.env,
                 SKRIB_DATA_DIR: dataDir,
                 SKRIB_RP_ID: 'localhost',
+                SKRIB_PLUGIN_BUS_PORT: String(busPort),
                 PYTHONPATH: BACKEND_DIR,
             },
             stdio: ['ignore', 'pipe', 'pipe'],
         });
+        tmark('uvicorn spawned', timings);
 
-        // Drain stdout/stderr so pipe buffers don't fill up and block uvicorn
-        proc.stdout.resume();
-        proc.stderr.resume();
+        if (TIMING) {
+            proc.stdout.on('data', d => process.stderr.write(`[backend stdout] ${d}`));
+            proc.stderr.on('data', d => process.stderr.write(`[backend stderr] ${d}`));
+        } else {
+            // Drain stdout/stderr so pipe buffers don't fill up and block uvicorn
+            proc.stdout.resume();
+            proc.stderr.resume();
+        }
 
-        // Wait for the server to be ready
+        // Wait for the server to be ready (bus starts during the startup event)
         const baseURL = `http://localhost:${port}`;
         await waitForServer(baseURL, 15_000);
+        tmark('backend HTTP ready', timings);
 
-        await use({ port, baseURL, dataDir, proc });
+        // Lazy plugin process management — only started when a fixture needs them
+        let pluginProcs = null;
+        const ensurePlugins = () => {
+            if (!pluginProcs) {
+                tmark('startPlugins() called', timings);
+                pluginProcs = startPlugins(BACKEND_DIR, busPort, dataDir);
+                tmark('plugin procs spawned', timings);
+            }
+        };
 
-        // Teardown: kill server and remove temp data
+        await use({ port, busPort, baseURL, dataDir, proc, ensurePlugins, timings });
+        tmark('test finished — tearing down', timings);
+        printTimingReport(timings);
+
+        // Teardown: kill plugins (if started), then server, then remove temp data
+        if (pluginProcs) {
+            for (const p of pluginProcs) p.kill('SIGTERM');
+        }
         proc.kill('SIGTERM');
         const exited = await Promise.race([
             new Promise(resolve => proc.on('exit', resolve)).then(() => true),
             new Promise(resolve => setTimeout(resolve, 5_000)).then(() => false),
         ]);
         if (!exited) proc.kill('SIGKILL');
+        if (pluginProcs) {
+            for (const p of pluginProcs) {
+                try { p.kill('SIGKILL'); } catch {}
+            }
+        }
         try { rmSync(dataDir, { recursive: true, force: true }); } catch {}
     }, { scope: 'test', auto: true }],
 
@@ -143,12 +237,26 @@ export const test = base.extend({
     },
 
     // ---------- Two registered users: first is admin, second is approved ----------
-    twoUsers: async ({ browser, baseURL }, use) => {
+    twoUsers: async ({ _backend, browser, baseURL }, use) => {
+        const t = _backend.timings;
+        // Start plugins early so they connect to the bus while admin registers
+        _backend.ensurePlugins();
+
         // Register first user (auto-approved as admin)
         const admin = await registerNewUser(browser, baseURL);
+        tmark('admin registered', t);
+
+        // Approve plugins (should be fast — they've been connecting in parallel),
+        // then reload so the frontend picks up the now-enabled plugin scripts
+        await approveAllPlugins(baseURL, admin.sessionToken);
+        tmark('plugins approved + chat room type ready', t);
+        await admin.page.reload();
+        await admin.page.waitForLoadState('networkidle');
+        tmark('admin page reloaded', t);
 
         // Register second user (will be pending)
         const user = await registerNewUser(browser, baseURL);
+        tmark('second user registered', t);
 
         // Admin approves the second user via API
         const approvalCode = user.approvalCode;
@@ -163,6 +271,7 @@ export const test = base.extend({
             }
         );
         expect(resp.ok()).toBeTruthy();
+        tmark('second user approved — fixture ready', t);
 
         await use({ admin, user });
 
@@ -171,9 +280,18 @@ export const test = base.extend({
     },
 
     // ---------- Three registered, approved, and logged-in users ----------
-    threeUsers: async ({ browser, baseURL }, use) => {
+    threeUsers: async ({ _backend, browser, baseURL }, use) => {
+        // Start plugins early so they connect to the bus while admin registers
+        _backend.ensurePlugins();
+
         // Register User A (auto-approved admin) — lands on app.html
         const admin = await registerNewUser(browser, baseURL);
+
+        // Approve plugins (should be fast — they've been connecting in parallel),
+        // then reload so the frontend picks up the now-enabled plugin scripts
+        await approveAllPlugins(baseURL, admin.sessionToken);
+        await admin.page.reload();
+        await admin.page.waitForLoadState('networkidle');
 
         // Register User B and User C (pending)
         const userB = await registerNewUser(browser, baseURL);
@@ -229,6 +347,54 @@ export async function clearAllStorage(page) {
             }
         }
     });
+}
+
+/**
+ * Approve all pending plugins via the admin API, then wait for room types
+ * (specifically the "chat" room type) to be registered on the bus.
+ *
+ * This exercises the real approval flow: plugins connect → pending → admin
+ * approves → secret generated → plugins activate → register room types.
+ *
+ * @param {string} baseURL  - Backend base URL
+ * @param {string} sessionToken - Session token for an admin user
+ * @param {number} [timeoutMs=15000] - Max time to wait
+ */
+export async function approveAllPlugins(baseURL, sessionToken, timeoutMs = 15_000) {
+    const headers = {
+        'Authorization': `Bearer ${sessionToken}`,
+    };
+    const start = Date.now();
+
+    // Poll: approve any pending plugins, then check if chat room type is ready
+    while (Date.now() - start < timeoutMs) {
+        // Approve any pending plugins
+        try {
+            const pendingResp = await fetch(`${baseURL}/api/admin/plugins/pending`, { headers });
+            if (pendingResp.ok) {
+                const pending = await pendingResp.json();
+                for (const plugin of pending) {
+                    await fetch(
+                        `${baseURL}/api/admin/plugins/${encodeURIComponent(plugin.plugin_id)}/approve`,
+                        { method: 'POST', headers },
+                    );
+                }
+            }
+        } catch {}
+
+        // Check if the chat room type is registered (plugins are active)
+        try {
+            const pluginsResp = await fetch(`${baseURL}/api/plugins`);
+            if (pluginsResp.ok) {
+                const plugins = await pluginsResp.json();
+                const hasChatRoom = plugins.some(p => p.room_types?.includes('chat'));
+                if (hasChatRoom) return;
+            }
+        } catch {}
+
+        await new Promise(r => setTimeout(r, 50));
+    }
+    throw new Error(`Plugins did not register room types within ${timeoutMs}ms`);
 }
 
 /**
@@ -311,7 +477,7 @@ async function waitForServer(baseURL, timeoutMs) {
             const resp = await fetch(`${baseURL}/api/server`);
             if (resp.ok) return;
         } catch {}
-        await new Promise(r => setTimeout(r, 200));
+        await new Promise(r => setTimeout(r, 25));
     }
     throw new Error(`Server at ${baseURL} did not start within ${timeoutMs}ms`);
 }

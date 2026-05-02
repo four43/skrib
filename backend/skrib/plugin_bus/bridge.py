@@ -14,7 +14,14 @@ import asyncio
 import logging
 from typing import TYPE_CHECKING
 
-from .protocol import FrameType, FrameValidationError, make_request_id, validate_identifier, error_frame
+from .protocol import (
+    FrameType,
+    FrameValidationError,
+    make_request_id,
+    validate_identifier,
+    SAFE_SUBSCRIPTION_RE,
+    error_frame,
+)
 
 if TYPE_CHECKING:
     from .server import PluginBusServer
@@ -42,6 +49,7 @@ class PluginBusBridge:
         self._server = bus_server
         self._ws = ws_manager
         self._core_api = core_api
+        self._pending_callbacks: dict[str, asyncio.Future] = {}
 
         # Register ourselves as the core handler on the bus server
         self._server.set_core_handler(self._handle_plugin_frame)
@@ -140,18 +148,33 @@ class PluginBusBridge:
         await self._ws.send_reply(reply_to, message)
 
     async def _handle_emit_event(self, plugin_id: str, data: dict) -> None:
-        event_type = data["event_type"]
-        validate_identifier(event_type, "event_type")
-        event_data = {
-            "type": f"{plugin_id}:{event_type}",
-            **{k: v for k, v in data.items()
-               if k not in ("type", "event_type", "_plugin_id", "request_id")},
-        }
-        await self._ws.emit_event(event_data)
-        # Also broadcast to other plugins subscribed to this event
+        raw_event_type = data["event_type"]
+        if not isinstance(raw_event_type, str) or not SAFE_SUBSCRIPTION_RE.match(raw_event_type):
+            raise FrameValidationError(
+                f"Invalid event_type: {raw_event_type!r}",
+                code="invalid_event_type",
+            )
+
+        # Bare event names are auto-namespaced. Pre-namespaced names pass through
+        # only if the prefix is the plugin's own id or the privileged "core" namespace —
+        # plugins cannot emit into other plugins' namespaces.
+        if ":" in raw_event_type:
+            prefix = raw_event_type.split(":", 1)[0]
+            if prefix not in (plugin_id, "core"):
+                raise FrameValidationError(
+                    f"Plugin '{plugin_id}' cannot emit into namespace '{prefix}'",
+                    code="namespace_forbidden",
+                )
+            full_event_type = raw_event_type
+        else:
+            full_event_type = f"{plugin_id}:{raw_event_type}"
+
+        payload_fields = {k: v for k, v in data.items()
+                          if k not in ("type", "event_type", "_plugin_id", "request_id")}
+        await self._ws.emit_event({"type": full_event_type, **payload_fields})
         await self._server.broadcast_to_subscribers(
-            f"{plugin_id}:{event_type}",
-            {"type": FrameType.EVENT.value, "event_type": f"{plugin_id}:{event_type}", **data.get("payload", {})},
+            full_event_type,
+            {"type": FrameType.EVENT.value, "event_type": full_event_type, **payload_fields},
         )
 
     # ------------------------------------------------------------------
@@ -164,7 +187,7 @@ class PluginBusBridge:
         params = data.get("params", {})
 
         try:
-            result = self._call_core_api(method, params)
+            result = await self._call_core_api(method, params)
             response = {
                 "type": FrameType.CORE_API_RESPONSE.value,
                 "request_id": request_id,
@@ -179,7 +202,7 @@ class PluginBusBridge:
 
         await self._server.send_to_plugin(plugin_id, response)
 
-    def _call_core_api(self, method: str, params: dict):
+    async def _call_core_api(self, method: str, params: dict):
         """Dispatch a core_api method call."""
         if method == "get_room_members":
             return self._core_api.get_room_members(params["room_id"])
@@ -188,7 +211,7 @@ class PluginBusBridge:
         elif method == "get_notify_level":
             return self._core_api.get_notify_level(params["room_id"], params["username"])
         elif method == "get_unread_count":
-            return self._core_api.get_unread_count(params["room_id"], params["username"])
+            return await self._core_api.get_unread_count(params["room_id"], params["username"])
         elif method == "mark_room_read":
             self._core_api.mark_room_read(params["room_id"], params["username"], params["message_id"])
             return {"ok": True}
@@ -201,8 +224,6 @@ class PluginBusBridge:
     # Callback responses from plugins
     # ------------------------------------------------------------------
 
-    _pending_callbacks: dict[str, asyncio.Future] = {}
-
     async def _handle_callback_response(self, plugin_id: str, data: dict) -> None:
         request_id = data["request_id"]
         future = self._pending_callbacks.pop(request_id, None)
@@ -212,7 +233,7 @@ class PluginBusBridge:
     async def send_callback(self, plugin_id: str, endpoint: str, payload: dict, timeout: float = 5.0):
         """Send a callback request to a plugin and await its response."""
         request_id = make_request_id()
-        future = asyncio.get_event_loop().create_future()
+        future = asyncio.get_running_loop().create_future()
         self._pending_callbacks[request_id] = future
 
         frame = {

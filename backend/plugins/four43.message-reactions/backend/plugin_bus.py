@@ -9,7 +9,6 @@ from .routes import router
 class MessageReactionsPlugin(SkribPlugin):
     id = "four43.message-reactions"
     version = "1.0.0"
-    secret = ""
     permissions = ["bus.send", "bus.receive", "http.routes", "storage.read", "storage.write",
                    "frontend.register"]
     http_port = 0

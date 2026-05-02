@@ -4,7 +4,7 @@ import os
 
 from skrib_plugin_sdk.loader import load_plugin_class
 
-PLUGINS_DIR = os.path.join(os.path.dirname(__file__), "..", "plugins")
+PLUGINS_DIR = os.path.join(os.path.dirname(__file__), "..", "..", "..", "plugins")
 
 EXPECTED_PLUGINS = {
     "four43.chat-typing": "ChatTypingPlugin",

@@ -18,7 +18,7 @@ class CoreAPI:
     def __init__(self, client: BusClient):
         self._client = client
 
-    async def _call(self, method: str, **params) -> dict:
+    async def _call(self, method: str, **params):
         """Send a core_api.request and await the response."""
         request_id = uuid.uuid4().hex[:12]
         frame = {

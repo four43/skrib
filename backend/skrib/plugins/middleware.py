@@ -30,6 +30,10 @@ _AUTH_CACHE_TTL = 30
 _auth_cache = {}  # token -> (username, role, expires_at)
 _auth_cache_lock = threading.Lock()
 
+# Maximum proxy request body (16 MiB). Plugins handling large uploads
+# should chunk on the client side or implement streaming themselves.
+MAX_PROXY_BODY = 16 * 1024 * 1024
+
 # Shared async HTTP client for proxying (created lazily)
 _http_client: httpx.AsyncClient | None = None
 
@@ -39,6 +43,14 @@ def _get_http_client() -> httpx.AsyncClient:
     if _http_client is None:
         _http_client = httpx.AsyncClient(timeout=30.0)
     return _http_client
+
+
+async def close_http_client() -> None:
+    """Close the shared proxy HTTP client. Called on app shutdown."""
+    global _http_client
+    if _http_client is not None:
+        await _http_client.aclose()
+        _http_client = None
 
 
 def _get_cached_auth(token: str):
@@ -131,13 +143,23 @@ class PluginAuthMiddleware:
 
     async def _proxy_request(self, scope: dict, receive, send, proxy_url: str) -> None:
         """Proxy an HTTP request to a bus-connected plugin's HTTP server."""
-        # Collect the request body
-        body = b""
+        # Collect the request body, refusing payloads larger than MAX_PROXY_BODY
+        body = bytearray()
         while True:
             message = await receive()
-            body += message.get("body", b"")
+            body.extend(message.get("body", b""))
+            if len(body) > MAX_PROXY_BODY:
+                await send({"type": "http.response.start", "status": 413, "headers": [
+                    [b"content-type", b"application/json"],
+                ]})
+                import json
+                await send({"type": "http.response.body", "body": json.dumps(
+                    {"detail": f"Request body exceeds {MAX_PROXY_BODY} bytes"}
+                ).encode()})
+                return
             if not message.get("more_body", False):
                 break
+        body = bytes(body)
 
         # Build headers from scope, including injected x-skrib-* headers
         headers = {}

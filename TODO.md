@@ -1,5 +1,7 @@
 # TODO
 
+I need to improve my New Direct Message Box to be a multi-select box, but allow for search. Selected entries should be added to a list below the search box. A user should be able to click a small x to the right of someone's name to remove them from the list. The list should search for anyone not already selected.
+
 A manual todo list of features I think of:
 
 - [x] Notifications in the UI for new messages, pending approvals, etc.

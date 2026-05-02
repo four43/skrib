@@ -49,7 +49,6 @@ from ..ws import bus
 from ..dependencies import require_auth
 from ..permissions import check_room_access as _check_room_access, get_global_role as _get_global_role, require_room_op_or_global_mod as _require_room_op_or_global_mod
 from ..database import get_setting
-from ..plugins import registry
 from ..room_folders import services as folder_services
 from ..room_folders.schemas import (
     CreateFolderRequest,
@@ -80,7 +79,7 @@ async def _broadcast_folder_update():
 @router.get("", response_model=list[RoomInfo])
 async def list_rooms(username: str = Depends(require_auth)):
     """Get list of rooms visible to the current user."""
-    rooms = get_user_rooms(username)
+    rooms = await get_user_rooms(username)
     return [RoomInfo(**r) for r in rooms]
 
 
@@ -97,8 +96,10 @@ async def create_new_room(
             detail="Room name must be lowercase letters, numbers, and hyphens only (e.g. 'my-room')"
         )
 
-    # Validate the room type is provided by an enabled plugin
-    if request.room_type not in registry.room_type_map:
+    # Validate the room type is provided by a connected plugin
+    from ..main import app as _app
+    _plugin_bus = getattr(_app.state, 'plugin_bus', None)
+    if not _plugin_bus or request.room_type not in _plugin_bus.room_type_map:
         raise HTTPException(
             status_code=400,
             detail=f"Unsupported room type: '{request.room_type}'"
@@ -143,14 +144,16 @@ async def create_dm(
         raise HTTPException(status_code=400, detail="At least one other user is required")
 
     # Resolve DM room type from server setting (plugin ID -> room type)
+    from ..main import app as _app
+    _plugin_bus = getattr(_app.state, 'plugin_bus', None)
     dm_plugin_id = get_setting('dm_room_type', 'four43.room-type-chat')
-    dm_plugin = registry.get_plugin(dm_plugin_id)
-    if not dm_plugin or not dm_plugin.room_types:
+    dm_conn = _plugin_bus.get_plugin(dm_plugin_id) if _plugin_bus else None
+    if not dm_conn or not dm_conn.room_types:
         raise HTTPException(
             status_code=500,
             detail=f"DM room type plugin '{dm_plugin_id}' is not available"
         )
-    room_type = dm_plugin.room_types[0]
+    room_type = dm_conn.room_types[0]
 
     # Verify all target users exist
     from ..database import get_db

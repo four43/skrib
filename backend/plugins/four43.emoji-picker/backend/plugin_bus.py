@@ -9,7 +9,6 @@ from .routes import router
 class EmojiPickerPlugin(SkribPlugin):
     id = "four43.emoji-picker"
     version = "1.0.0"
-    secret = ""
     permissions = ["bus.send", "bus.receive", "http.routes", "storage.read", "storage.write",
                    "frontend.register"]
     http_port = 0  # auto-assign

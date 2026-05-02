@@ -19,8 +19,21 @@ logger = logging.getLogger(__name__)
 
 
 def _manifest_hash(manifest: dict) -> str:
-    """Compute a stable SHA-256 hash of a manifest dict."""
-    canonical = json.dumps(manifest, sort_keys=True, separators=(",", ":"))
+    """Compute a stable SHA-256 hash of the security-relevant manifest fields.
+
+    Only fields that affect what a plugin can do are included. Cosmetic fields
+    (name, description, author, entry, styles, hooks) are excluded so that
+    updating them doesn't force re-approval.
+    """
+    security_fields = {
+        "id": manifest.get("id"),
+        "version": manifest.get("version"),
+        "permissions": manifest.get("permissions", []),
+        "published_events": manifest.get("published_events", []),
+        "subscriptions": manifest.get("subscriptions", []),
+        "room_types": manifest.get("room_types", []),
+    }
+    canonical = json.dumps(security_fields, sort_keys=True, separators=(",", ":"))
     return hashlib.sha256(canonical.encode()).hexdigest()
 
 
@@ -127,6 +140,18 @@ def check_plugin_approval(plugin_id: str, manifest: dict) -> str:
         return "pending"
 
 
+def sync_secret_files() -> None:
+    """Write secret files for all approved plugins that have secrets.
+
+    Called on startup to ensure the secret files exist for plugins
+    that were approved before the file-based secret mechanism was added.
+    """
+    for record in list_by_status("approved"):
+        secret = record.get("secret")
+        if secret:
+            _write_plugin_secret(record["plugin_id"], secret)
+
+
 # ---------------------------------------------------------------------------
 # Admin actions
 # ---------------------------------------------------------------------------
@@ -163,7 +188,23 @@ def approve_plugin(plugin_id: str, admin_username: str) -> bool:
         )
         conn.commit()
         logger.info("[Approvals] Plugin '%s' approved by %s", plugin_id, admin_username)
+
+        # Write secret to file so the plugin process can read it on startup
+        _write_plugin_secret(plugin_id, plugin_secret)
+
         return True
+
+
+def _write_plugin_secret(plugin_id: str, secret: str) -> None:
+    """Write a plugin's secret to data/plugin-secrets/{plugin_id}.secret."""
+    from ..config import DB_DIR
+    secrets_dir = DB_DIR / "plugin-secrets"
+    secrets_dir.mkdir(parents=True, exist_ok=True)
+    secret_file = secrets_dir / f"{plugin_id}.secret"
+    secret_file.write_text(secret)
+    # Restrict permissions (owner-only read/write)
+    secret_file.chmod(0o600)
+    logger.info("[Approvals] Wrote secret for '%s' to %s", plugin_id, secret_file)
 
 
 def reject_plugin(plugin_id: str) -> bool:
@@ -202,6 +243,22 @@ def disable_plugin(plugin_id: str) -> bool:
         conn.commit()
         logger.info("[Approvals] Plugin '%s' disabled", plugin_id)
         return True
+
+
+def delete_approval(plugin_id: str) -> bool:
+    """Delete a plugin's approval record entirely.
+
+    Used to clear stale ``pending`` entries left behind by plugins that
+    connected once and never returned. Returns True if a row was deleted.
+    """
+    with get_db() as conn:
+        cursor = conn.execute(
+            "DELETE FROM plugin_approvals WHERE plugin_id = ?", (plugin_id,)
+        )
+        conn.commit()
+        if cursor.rowcount:
+            logger.info("[Approvals] Plugin '%s' approval record deleted", plugin_id)
+        return cursor.rowcount > 0
 
 
 def get_manifest_diff(plugin_id: str) -> Optional[dict]:

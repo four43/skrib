@@ -1,9 +1,5 @@
-"""Plugin system for Mini Chat.
+"""Plugin system for Skrib.
 
-This module provides the plugin infrastructure for extending Mini Chat
-with new features, room types, and integrations.
+Out-of-process plugins connect via the WebSocket plugin bus (skrib.plugin_bus).
+This package provides HTTP middleware, routes, and utilities for plugin management.
 """
-from .base import Plugin
-from .registry import PluginRegistry, registry
-
-__all__ = ['Plugin', 'PluginRegistry', 'registry']

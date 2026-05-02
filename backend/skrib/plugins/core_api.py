@@ -32,10 +32,10 @@ class CoreAPI:
         from ..rooms.services import get_notify_level
         return get_notify_level(room_id, username)
 
-    def get_unread_count(self, room_id: str, username: str) -> int:
+    async def get_unread_count(self, room_id: str, username: str) -> int:
         """Get unread message count for a user in a room."""
         from ..rooms.services import get_unread_count_for_room
-        return get_unread_count_for_room(room_id, username)
+        return await get_unread_count_for_room(room_id, username)
 
     def mark_room_read(self, room_id: str, username: str, message_id: int):
         """Update the user's last-read position in a room."""

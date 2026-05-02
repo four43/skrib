@@ -126,6 +126,28 @@ async def disable_plugin(plugin_id: str, admin: str = Depends(require_admin)):
     return {"plugin_id": plugin_id, "status": "disabled"}
 
 
+@router.delete("/{plugin_id}")
+async def delete_approval(plugin_id: str, admin: str = Depends(require_admin)):
+    """Drop a plugin's approval record. Disconnects it if currently connected.
+
+    Use this to clear stale ``pending`` entries from plugins that connected
+    once, were never approved, and won't return.
+    """
+    record = approvals.get_approval(plugin_id)
+    if not record:
+        raise HTTPException(status_code=404, detail=f"Plugin '{plugin_id}' not found")
+
+    bus = _get_bus_server()
+    if bus and bus.get_plugin(plugin_id):
+        await bus.deactivate_plugin(plugin_id, reason="approval_deleted")
+
+    if not approvals.delete_approval(plugin_id):
+        raise HTTPException(status_code=500, detail="Failed to delete approval record")
+
+    add_system_log("plugins", f"Plugin '{plugin_id}' approval record deleted", username=admin)
+    return {"plugin_id": plugin_id, "deleted": True}
+
+
 @router.get("/{plugin_id}/manifest-diff")
 async def get_manifest_diff(plugin_id: str, admin: str = Depends(require_admin)):
     """Get the stored manifest for a plugin (for review/diff)."""

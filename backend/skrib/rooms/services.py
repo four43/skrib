@@ -34,9 +34,9 @@ def load_rooms_from_db():
         conn.commit()
 
 
-def get_user_rooms(username: str) -> List[Dict]:
+async def get_user_rooms(username: str) -> List[Dict]:
     """Get rooms visible to a user: all rooms they're a member of."""
-    unread_counts = get_unread_counts(username)
+    unread_counts = await get_unread_counts(username)
 
     with get_db() as conn:
         cursor = conn.execute('''
@@ -410,11 +410,11 @@ def set_room_role(room_id: str, target_username: str, role: str) -> Dict:
     return {'status': 'ok'}
 
 
-def get_unread_counts(username: str) -> Dict[str, int]:
+async def get_unread_counts(username: str) -> Dict[str, int]:
     """Get unread message counts for all rooms the user is a member of.
 
     Queries room read positions from core DB, then delegates to the
-    room-type plugin to count unread messages in its own DB.
+    room-type plugin via the plugin bus bridge callbacks.
     """
     # Get read positions from core DB
     with get_db() as conn:
@@ -432,8 +432,11 @@ def get_unread_counts(username: str) -> Dict[str, int]:
     if not rooms:
         return {}
 
-    # Group by room type and delegate to plugins
-    from ..plugins import registry
+    # Group by room type and delegate to bus-connected plugins
+    from ..main import app as _app
+    _plugin_bus = getattr(_app.state, 'plugin_bus', None)
+    _bridge = getattr(_app.state, 'plugin_bus_bridge', None)
+
     by_type: Dict[str, Dict[str, int]] = {}
     for room in rooms:
         rt = room['room_type']
@@ -441,14 +444,18 @@ def get_unread_counts(username: str) -> Dict[str, int]:
             by_type[rt] = {}
         by_type[rt][room['room_id']] = room['last_read'] or 0
 
-    from ..plugins.callbacks import get_unread_counts_batch as _plugin_batch
-
     result = {}
     for room_type, positions in by_type.items():
-        plugin = registry.get_plugin_for_room_type(room_type)
-        if plugin:
-            counts = _plugin_batch(plugin, positions)
-            result.update(counts)
+        plugin_id = _plugin_bus.room_type_map.get(room_type) if _plugin_bus else None
+        if plugin_id and _bridge:
+            counts = await _bridge.send_callback(
+                plugin_id, "/unread-counts-batch", {"room_positions": positions}
+            )
+            if counts and isinstance(counts, dict):
+                result.update(counts)
+            else:
+                for room_id in positions:
+                    result[room_id] = 0
         else:
             for room_id in positions:
                 result[room_id] = 0
@@ -647,11 +654,11 @@ def get_room_ops(room_id: str) -> List[str]:
         return [row['username'] for row in cursor]
 
 
-def get_unread_count_for_room(room_id: str, username: str) -> int:
+async def get_unread_count_for_room(room_id: str, username: str) -> int:
     """Get unread message count for a specific room and user.
 
     Queries read position from core DB, then delegates to the
-    room-type plugin to count unread messages in its own DB.
+    room-type plugin via the plugin bus bridge callback.
     """
     with get_db() as conn:
         cursor = conn.execute(
@@ -663,16 +670,23 @@ def get_unread_count_for_room(room_id: str, username: str) -> int:
             return 0
         last_read = row['last_read_message_id'] or 0
 
-    # Get room type and delegate to plugin
+    # Get room type and delegate to bus-connected plugin
     room_type = get_room_type(room_id)
     if not room_type:
         return 0
 
-    from ..plugins import registry
-    from ..plugins.callbacks import get_unread_count as _plugin_unread
+    from ..main import app as _app
+    _plugin_bus = getattr(_app.state, 'plugin_bus', None)
+    _bridge = getattr(_app.state, 'plugin_bus_bridge', None)
 
-    plugin = registry.get_plugin_for_room_type(room_type)
-    if plugin:
-        return _plugin_unread(plugin, room_id, last_read)
+    plugin_id = _plugin_bus.room_type_map.get(room_type) if _plugin_bus else None
+    if plugin_id and _bridge:
+        count = await _bridge.send_callback(
+            plugin_id, "/unread-count", {"room_id": room_id, "since_message_id": last_read}
+        )
+        if isinstance(count, (int, float)):
+            return int(count)
+        if isinstance(count, dict) and "count" in count:
+            return int(count["count"])
 
     return 0

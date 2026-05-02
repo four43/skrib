@@ -7,7 +7,6 @@ from skrib_plugin_sdk import SkribPlugin, on_room_action
 class ChatTypingPlugin(SkribPlugin):
     id = "four43.chat-typing"
     version = "1.0.0"
-    secret = ""
     permissions = ["bus.send", "bus.receive"]
     published_events = ["user_typing"]
 

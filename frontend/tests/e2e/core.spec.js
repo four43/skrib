@@ -20,9 +20,10 @@ async function ensureMembersPanelOpen(page) {
 }
 
 /** Create a room via the UI. Caller must be on app.html. */
-async function createRoom(page, roomName) {
+async function createRoom(page, roomName, roomType = 'chat') {
     await page.locator('#add-channel-btn').click();
     await page.locator('#new-room-input').fill(roomName);
+    await page.locator('#room-type-select').selectOption(roomType);
     await page.locator('#create-room-submit-btn').click();
     await expect(page.locator('#room-content-name')).toHaveText(`#${roomName}`);
     await page.locator('#message-input').waitFor();

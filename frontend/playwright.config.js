@@ -24,9 +24,9 @@ export default defineConfig({
       testDir: './tests/e2e',
       // Each worker spawns its own backend + Vite via the _workerServers fixture,
       // so no shared webServer or baseURL needed here.
-      workers: '75%',
+      workers: 1,
       retries: 1,
-      timeout: 30000,
+      timeout: 60000,
       use: {
         ...devices['Desktop Chrome'],
       },

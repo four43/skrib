@@ -48,7 +48,14 @@ async function login() {
     try {
         showStatus('auth-status', 'Starting login...', 'info');
 
-        const beginResp = await fetch(`${API_URL}/auth/login/begin`);
+        // Read optional username for assisted login (non-discoverable credentials)
+        const usernameInput = document.getElementById('login-username');
+        const username = usernameInput?.value?.trim() || '';
+        const beginUrl = username
+            ? `${API_URL}/auth/login/begin?username=${encodeURIComponent(username)}`
+            : `${API_URL}/auth/login/begin`;
+
+        const beginResp = await fetch(beginUrl);
         const beginData = await beginResp.json();
 
         if (beginData.detail) {
@@ -60,8 +67,8 @@ async function login() {
 
         const challenge = base64ToArrayBuffer(beginData.challenge);
 
-        // Use usernameless flow - let the authenticator pick the credential
-        const assertion = await navigator.credentials.get({
+        // Build credential request options
+        const getOptions = {
             publicKey: {
                 challenge: challenge,
                 rpId: beginData.rpId,
@@ -69,7 +76,18 @@ async function login() {
                 userVerification: "preferred",
                 extensions: { prf: { eval: { first: PRF_SALT } } },
             }
-        });
+        };
+
+        // If server returned allowCredentials (username-assisted flow), pass them
+        // so the authenticator can use non-discoverable credentials
+        if (beginData.allowCredentials?.length > 0) {
+            getOptions.publicKey.allowCredentials = beginData.allowCredentials.map(c => ({
+                type: c.type,
+                id: base64ToArrayBuffer(c.id),
+            }));
+        }
+
+        const assertion = await navigator.credentials.get(getOptions);
 
         // Extract PRF output if available (not all authenticators support it)
         const prfResult = assertion.getClientExtensionResults()?.prf?.results?.first;

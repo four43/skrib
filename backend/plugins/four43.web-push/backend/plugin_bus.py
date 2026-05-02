@@ -13,7 +13,6 @@ logger = logging.getLogger(__name__)
 class WebPushPlugin(SkribPlugin):
     id = "four43.web-push"
     version = "1.0.0"
-    secret = ""
     permissions = ["bus.send", "bus.receive", "http.routes", "storage.read", "storage.write",
                    "core_api", "frontend.register"]
     subscriptions = ["four43.room-type-chat:message"]

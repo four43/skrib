@@ -5,8 +5,11 @@ from fastapi import APIRouter, HTTPException, Depends
 from fastapi.responses import FileResponse
 from pydantic import BaseModel
 from typing import Optional, List, Dict
-from .registry import registry, PLUGINS_DIR
+
 from ..dependencies import require_admin
+
+# All plugins live in backend/plugins/
+PLUGINS_DIR = Path(__file__).parent.parent.parent / "plugins"
 
 router = APIRouter(prefix="/plugins", tags=["plugins"])
 
@@ -23,6 +26,7 @@ class PluginInfo(BaseModel):
     hooks: Dict[str, bool]
     enabled: bool = True
     room_types: List[str] = []
+    room_type_meta: Dict[str, Dict[str, str]] = {}
     styles: List[str] = []
 
 
@@ -75,18 +79,24 @@ def _get_bus_plugins() -> list[dict]:
         result = []
         for pid, conn in plugin_bus.plugins.items():
             manifest = conn.manifest
+            # Prefer dynamically registered frontend assets (register.frontend frame);
+            # fall back to the on-disk manifest for plugins that don't use it.
+            entry = (conn.frontend_scripts[0] if conn.frontend_scripts
+                     else manifest.get("entry", ""))
+            styles = conn.frontend_styles or manifest.get("styles", [])
             result.append({
                 "id": pid,
                 "name": manifest.get("name", pid),
                 "version": conn.version,
                 "description": manifest.get("description", ""),
                 "author": manifest.get("author", ""),
-                "entry": "",  # served via bus
+                "entry": entry,
                 "permissions": list(conn.permissions),
                 "hooks": manifest.get("hooks", {}),
                 "enabled": True,
                 "room_types": conn.room_types,
-                "styles": conn.frontend_styles,
+                "room_type_meta": conn.room_type_meta,
+                "styles": styles,
                 "bus_connected": True,
             })
         return result
@@ -96,58 +106,33 @@ def _get_bus_plugins() -> list[dict]:
 
 @router.get("", response_model=List[PluginInfo])
 async def list_plugins():
-    """List all plugins with their manifests and enabled state."""
+    """List all plugins — combines bus-connected and filesystem-discovered plugins."""
     plugins = []
 
-    # In-process plugins (from filesystem)
+    # Bus-connected plugins (out-of-process, approved and running)
+    bus_ids = set()
+    for bus_info in _get_bus_plugins():
+        bus_ids.add(bus_info["id"])
+        try:
+            plugins.append(PluginInfo(**{k: v for k, v in bus_info.items() if k != "bus_connected"}))
+        except Exception as e:
+            print(f"[Plugins] Failed to add bus plugin {bus_info['id']}: {e}")
+
+    # Filesystem plugins not currently bus-connected (available but not running)
     if PLUGINS_DIR.exists():
         for plugin_dir in PLUGINS_DIR.iterdir():
             if plugin_dir.is_dir() and (plugin_dir / "manifest.json").exists():
                 plugin_id = plugin_dir.name
+                if plugin_id in bus_ids:
+                    continue  # Already listed from bus
                 try:
                     plugin_info = load_plugin_manifest(plugin_id)
-                    plugin_info.enabled = registry.is_plugin_enabled(plugin_id)
-                    # Enrich with runtime data from the loaded plugin instance
-                    plugin_instance = registry.get_plugin(plugin_id)
-                    if plugin_instance:
-                        plugin_info.room_types = plugin_instance.room_types
+                    plugin_info.enabled = False  # Not connected to bus
                     plugins.append(plugin_info)
                 except Exception as e:
                     print(f"[Plugins] Failed to load plugin {plugin_id}: {e}")
-                    continue
-
-    # Bus-connected plugins (out-of-process) — only add if not already listed
-    in_process_ids = {p.id for p in plugins}
-    for bus_info in _get_bus_plugins():
-        if bus_info["id"] not in in_process_ids:
-            try:
-                plugins.append(PluginInfo(**{k: v for k, v in bus_info.items() if k != "bus_connected"}))
-            except Exception as e:
-                print(f"[Plugins] Failed to add bus plugin {bus_info['id']}: {e}")
 
     return plugins
-
-
-@router.patch("/{plugin_id}")
-async def update_plugin(
-    plugin_id: str,
-    update: PluginUpdate,
-    _: str = Depends(require_admin),
-):
-    """Update a plugin's settings (admin only).
-
-    Changes take effect after server restart.
-    """
-    plugin_dir = PLUGINS_DIR / plugin_id
-    if not plugin_dir.exists() or not plugin_dir.is_dir():
-        raise HTTPException(status_code=404, detail=f"Plugin {plugin_id} not found")
-
-    if update.enabled is not None:
-        registry.set_plugin_enabled(plugin_id, update.enabled)
-
-    plugin_info = load_plugin_manifest(plugin_id)
-    plugin_info.enabled = registry.is_plugin_enabled(plugin_id)
-    return plugin_info
 
 
 # ============================================================================
@@ -169,8 +154,8 @@ async def get_plugin_manifest(plugin_id: str):
 async def get_plugin_file(plugin_id: str, file_path: str):
     """Serve a plugin file (JS, CSS, etc.).
 
-    For in-process plugins: serves from the filesystem.
     For bus-connected plugins: proxies to the plugin's HTTP server.
+    Fallback: serves from the filesystem.
 
     Security:
         Only files within the plugin directory are allowed.
@@ -180,10 +165,11 @@ async def get_plugin_file(plugin_id: str, file_path: str):
     # Check if this is a bus-connected plugin first
     try:
         from ..main import app
+        from .middleware import PluginAuthMiddleware
         plugin_bus = getattr(app.state, 'plugin_bus', None)
         if plugin_bus:
             conn = plugin_bus.get_plugin(plugin_id)
-            if conn and conn.http_base_url:
+            if conn and conn.http_base_url and PluginAuthMiddleware._is_localhost_url(conn.http_base_url):
                 import httpx
                 url = f"{conn.http_base_url.rstrip('/')}/file/{file_path}"
                 async with httpx.AsyncClient(timeout=10.0) as client:

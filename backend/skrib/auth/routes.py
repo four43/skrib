@@ -5,6 +5,7 @@ from typing import Optional
 from urllib.parse import urlencode
 
 from .schemas import (
+    AllowCredential,
     RegistrationBeginResponse,
     RegistrationCompleteRequest,
     RegistrationCompleteResponse,
@@ -23,6 +24,7 @@ from .services import (
     get_registration_mode,
     create_pending_user,
     get_user_by_credential,
+    get_user_credentials,
     create_session_token,
     validate_username,
     is_username_taken,
@@ -147,16 +149,27 @@ async def complete_registration(request: RegistrationCompleteRequest):
 
 
 @router.get("/login/begin", response_model=LoginBeginResponse)
-async def begin_login():
-    """Begin WebAuthn login process - usernameless flow."""
+async def begin_login(username: Optional[str] = Query(None)):
+    """Begin WebAuthn login process.
+
+    Without a username: usernameless flow (discoverable credentials only).
+    With a username: returns allowCredentials so non-discoverable credentials work too.
+    """
     challenge = generate_challenge()
     store_challenge(challenge, 'login', None)
 
-    # Empty allowCredentials means any credential can be used (discoverable credentials)
+    allow_credentials = []
+    if username:
+        creds = get_user_credentials(username)
+        if creds:
+            allow_credentials = [
+                AllowCredential(type="public-key", id=creds["credential_id"])
+            ]
+
     return LoginBeginResponse(
         challenge=challenge,
         rpId=WEBAUTHN_RP_ID,
-        allowCredentials=[]
+        allowCredentials=allow_credentials,
     )
 
 

@@ -1,0 +1,28 @@
+#!/bin/bash
+# Debug runner for the startup timing spec.
+#
+# Unlike ./util/test-e2e (which pipes to `tail -20`), this keeps ALL output
+# so you can see the [TIMING:*] lines from the fixture, backend, and plugins.
+#
+# Usage:
+#   ./util/test-startup-timing                         # both timing tests
+#   ./util/test-startup-timing --grep "twoUsers"       # filter
+set -euo pipefail
+DIR="$(dirname "$(readlink -f "$0")")"
+cd "$DIR/.."
+
+# Build plugins + frontend (silent — tail nothing from this step)
+npm run build > /dev/null
+
+# SKRIB_TEST_DATA_DIR must be truthy to enable the e2e project.
+# SKRIB_TIMING=1 turns on backend/plugin/fixture timing logs.
+# --workers=1 makes sure timings aren't interleaved across workers.
+# --reporter=list gives readable per-test output.
+export SKRIB_TEST_DATA_DIR=1
+export SKRIB_TIMING=1
+exec npx playwright test \
+    --project=e2e \
+    --workers=1 \
+    --reporter=list \
+    tests/e2e/startup-timing.spec.js \
+    "$@"

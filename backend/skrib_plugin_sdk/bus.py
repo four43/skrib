@@ -69,12 +69,13 @@ class PluginBus:
     async def emit_event(self, event_type: str | dict, **fields: Any) -> None:
         """Emit an internal event to subscribed plugins.
 
-        Accepts either an event_type string or a dict with a "type" key
-        (for compatibility with in-process emit_event calls).
+        Accepts either:
+        - a bare event name (will be auto-namespaced as ``{plugin_id}:{event}``), or
+        - a dict ``{"type": "core:foo", ...}`` for cross-namespace events
+          where the caller controls the full event_type.
         """
         if isinstance(event_type, dict):
-            # In-process compatibility: emit_event({"type": "core:foo", ...})
-            event_data = event_type
+            event_data = dict(event_type)
             et = event_data.pop("type", "")
             await self._client.send({
                 "type": "bus.emit_event",
@@ -84,6 +85,6 @@ class PluginBus:
         else:
             await self._client.send({
                 "type": "bus.emit_event",
-                "event_type": f"{self._plugin_id}:{event_type}",
+                "event_type": event_type,
                 **fields,
             })

@@ -15,6 +15,7 @@ from skrib.plugin_bus.approvals import (
     approve_plugin,
     reject_plugin,
     disable_plugin,
+    delete_approval,
     get_approval,
     get_plugin_secret,
     list_by_status,
@@ -81,14 +82,20 @@ SAMPLE_MANIFEST = {
 class TestManifestHash:
     def test_stable_hash(self):
         """Same manifest produces same hash regardless of key order."""
-        m1 = {"b": 2, "a": 1}
-        m2 = {"a": 1, "b": 2}
+        m1 = {"permissions": ["a", "b"], "id": "test", "description": "x"}
+        m2 = {"id": "test", "permissions": ["a", "b"], "description": "y"}
         assert _manifest_hash(m1) == _manifest_hash(m2)
 
-    def test_different_content_different_hash(self):
-        m1 = {"a": 1}
-        m2 = {"a": 2}
+    def test_different_permissions_different_hash(self):
+        m1 = {"id": "test", "permissions": ["bus.send"]}
+        m2 = {"id": "test", "permissions": ["bus.send", "core_api"]}
         assert _manifest_hash(m1) != _manifest_hash(m2)
+
+    def test_cosmetic_changes_same_hash(self):
+        """Non-security fields (name, description, entry) don't affect the hash."""
+        m1 = {"id": "test", "permissions": ["bus.send"], "name": "Old Name", "entry": "old.js"}
+        m2 = {"id": "test", "permissions": ["bus.send"], "name": "New Name", "entry": "new.js"}
+        assert _manifest_hash(m1) == _manifest_hash(m2)
 
 
 # ---------------------------------------------------------------------------
@@ -189,6 +196,15 @@ class TestAdminActions:
         assert diff is not None
         assert diff["plugin_id"] == "test.plugin"
         assert diff["manifest"]["permissions"] == ["bus.send", "bus.receive"]
+
+    def test_delete_approval_removes_record(self):
+        check_plugin_approval("stale.plugin", SAMPLE_MANIFEST)
+        assert get_approval("stale.plugin") is not None
+        assert delete_approval("stale.plugin") is True
+        assert get_approval("stale.plugin") is None
+
+    def test_delete_approval_missing_returns_false(self):
+        assert delete_approval("nonexistent.plugin") is False
 
 
 # ---------------------------------------------------------------------------

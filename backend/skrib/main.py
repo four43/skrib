@@ -3,6 +3,9 @@ import os
 import signal
 import sys
 
+from ._timing import mark as _t
+_t("main.py import begin")
+
 from fastapi import FastAPI, HTTPException
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import FileResponse
@@ -25,10 +28,8 @@ from .config import (
 from .database import init_db
 
 # Import plugin system
-from .plugins import registry
 from .plugins.middleware import PluginAuthMiddleware
 from .plugins.routes import router as plugins_router, fallback_router as plugins_fallback_router
-from .plugins.core_api_routes import router as core_api_router
 from .plugins.settings_routes import router as settings_router
 from .admin.routes import router as admin_plugins_router
 from .rooms.routes import router as rooms_router
@@ -38,13 +39,13 @@ from .themes.routes import router as themes_router
 from .users.routes import router as preferences_router
 from .ws.routes import router as ws_router
 
-# Initialize database and discover plugins at module level so that plugin
-# routes are registered before the app starts serving requests.  Doing this
-# in a startup event caused plugin routes to be added AFTER the catch-all
-# static Mount("/"), resulting in 404s for plugin API endpoints.
+_t("imports done")
+
+# Initialize database at module level
 init_db()
+_t("init_db done")
 load_rooms_from_db()
-registry.discover_plugins()
+_t("load_rooms_from_db done")
 
 # Create top-level app (no docs here — docs live under /api)
 app = FastAPI(title=APP_TITLE, version=APP_VERSION, docs_url=None, redoc_url=None)
@@ -103,49 +104,14 @@ api.include_router(server_router)
 api.include_router(preferences_router)
 api.include_router(ws_router)
 api.include_router(plugins_router)
-api.include_router(core_api_router)
 api.include_router(settings_router)
 api.include_router(admin_plugins_router)
 api.include_router(themes_router)
 api.include_router(backups_router)
 api.include_router(log_router)
 
-# Register plugin routes at module level, before the static catch-all mount
-print("\n[Plugins] Initializing plugin system...")
-for _plugin in registry.get_all_plugins():
-    try:
-        _plugin_router = _plugin.register_routes(app)
-        if _plugin_router:
-            # Add file/manifest routes to each plugin's sub-router so they
-            # aren't shadowed by the sub-router's prefix match (Starlette
-            # doesn't fall through to the fallback_router once a sub-router
-            # with a matching prefix is entered).
-            from .plugins.routes import get_plugin_file, load_plugin_manifest as _load_manifest
-
-            @_plugin_router.get("/manifest", name=f"manifest_{_plugin.id}")
-            async def _manifest(*, _pid=_plugin.id):
-                return _load_manifest(_pid)
-
-            @_plugin_router.get("/file/{file_path:path}", name=f"file_{_plugin.id}")
-            async def _file(file_path: str, *, _pid=_plugin.id):
-                return await get_plugin_file(_pid, file_path)
-
-            api.include_router(_plugin_router, prefix=f"/plugins/{_plugin.id}")
-            _route_names = [r.name for r in _plugin_router.routes if hasattr(r, 'name')]
-            print(f"[Plugins] Registered routes for: {_plugin.id} at /api/plugins/{_plugin.id} "
-                  f"({len(_plugin_router.routes)} routes: {_route_names})")
-        else:
-            print(f"[Plugins] No sub-router for: {_plugin.id} (will use fallback routes)")
-    except Exception as _e:
-        import traceback
-        print(f"[Plugins] Failed to register routes for {_plugin.id}: {_e}")
-        traceback.print_exc()
-
-_all_info = registry.get_all_plugin_info()
-print(f"[Plugins] Loaded {sum(1 for p in _all_info if p['enabled'])} plugins "
-      f"({sum(1 for p in _all_info if not p['enabled'])} disabled)")
-
-# Fallback parametric routes for plugins without sub-routers
+# Plugin routes — out-of-process plugins serve their own HTTP via middleware proxy;
+# fallback router handles manifest/file serving from filesystem
 api.include_router(plugins_fallback_router)
 
 
@@ -178,6 +144,7 @@ if STATIC_DIR.exists():
 @app.on_event("startup")
 async def startup_event():
     """Async plugin startup callbacks and status logging."""
+    _t("startup_event begin")
     from .database import get_db, get_setting
 
     with get_db() as conn:
@@ -194,54 +161,23 @@ async def startup_event():
     print(f"Users: {user_count}, Pending: {pending_count}")
     print(f"Registration mode: {reg_mode}")
 
-    # Register plugin WebSocket namespaces (core controls the namespace name)
     from . import ws
-    from .plugins.base import PluginBus
-    from .plugins.callbacks import PluginCallbacks
     from .plugins.core_api import CoreAPI
     core_api = CoreAPI(bus=ws.bus)
-
-    for plugin in registry.get_all_plugins():
-        try:
-            # Give every plugin a scoped bus so it can send outgoing messages
-            # under its own namespace (e.g. "four43.room-type-chat:message")
-            permissions = registry.get_plugin_permissions(plugin.id)
-            plugin.bus = PluginBus(ws.bus, plugin.id, permissions=permissions)
-            plugin.core_api = core_api
-            plugin._callbacks = PluginCallbacks(plugin)
-            plugin.register_callbacks(plugin._callbacks)
-
-            ws_handler = plugin.get_ws_handler()
-            if ws_handler:
-                async def scoped_handler(bus, ws_conn, username, msg, _pb=plugin.bus, _h=ws_handler):
-                    reply_to = bus.create_reply_token(ws_conn)
-                    try:
-                        await _h(_pb, reply_to, username, msg)
-                    finally:
-                        bus.invalidate_reply_token(reply_to)
-
-                ws.bus.register_namespace(plugin.id, scoped_handler)
-                print(f"[Plugins] Registered WebSocket namespace '{plugin.id}' for: {plugin.id}")
-        except Exception as e:
-            print(f"[Plugins] Failed to register WS for {plugin.id}: {e}")
-
-    # Call on_startup for all plugins
-    for plugin in registry.get_all_plugins():
-        try:
-            await plugin.on_startup()
-        except Exception as e:
-            print(f"[Plugins] Error in on_startup for {plugin.id}: {e}")
 
     # Start WebSocket heartbeat (periodic ping to detect dead connections)
     ws.bus.start_heartbeat()
 
     # Start Plugin Bus server (out-of-process plugin communication)
     from .config import PLUGIN_BUS_HOST, PLUGIN_BUS_PORT
-    from .plugin_bus.server import PluginBusServer
+    from .plugin_bus.server import PluginBusServer, MAX_MESSAGE_SIZE
     from .plugin_bus.bridge import PluginBusBridge
     from .plugin_bus.protocol import ApprovalStatus
-    from .plugin_bus.approvals import check_plugin_approval, get_plugin_secret
+    from .plugin_bus.approvals import check_plugin_approval, get_plugin_secret, sync_secret_files
     from websockets.asyncio.server import serve as ws_serve
+
+    # Ensure secret files exist for all approved plugins (backfill)
+    sync_secret_files()
 
     async def _approve_plugin(plugin_id: str, manifest: dict) -> ApprovalStatus:
         status = check_plugin_approval(plugin_id, manifest)
@@ -250,12 +186,19 @@ async def startup_event():
 
     plugin_bus = PluginBusServer(approve_plugin=_approve_plugin, get_plugin_secret=get_plugin_secret)
     bus_port = PLUGIN_BUS_PORT
-    if os.environ.get("SKRIB_DATA_DIR"):
+    if os.environ.get("SKRIB_PLUGIN_BUS_PORT"):
+        # Explicit bus port (e.g. E2E tests that start plugin processes)
+        bus_port = int(os.environ["SKRIB_PLUGIN_BUS_PORT"])
+    elif os.environ.get("SKRIB_DATA_DIR"):
         # Tests: use port 0 to let the OS assign a free port, avoiding conflicts
         bus_port = 0
-    plugin_bus_server = await ws_serve(plugin_bus.handle_connection, PLUGIN_BUS_HOST, bus_port)
+    plugin_bus_server = await ws_serve(
+        plugin_bus.handle_connection, PLUGIN_BUS_HOST, bus_port,
+        max_size=MAX_MESSAGE_SIZE,
+    )
     app.state.plugin_bus = plugin_bus
     app.state.plugin_bus_server = plugin_bus_server
+    _t("plugin bus serving")
 
     # Create the bridge that translates between bus frames and the WS manager
     bridge = PluginBusBridge(plugin_bus, ws.bus, core_api)
@@ -266,27 +209,18 @@ async def startup_event():
     # Start backup scheduler
     from .backups.services import start_backup_scheduler
     await start_backup_scheduler()
+    _t("startup_event done")
 
     print()
 
 
 @app.on_event("shutdown")
 async def shutdown_event():
-    """Call on_shutdown for all plugins, then auto-cleanup registered resources."""
+    """Shut down the plugin bus and clean up resources."""
     from . import ws
     ws.bus.stop_heartbeat()
     from .backups.services import stop_backup_scheduler
     stop_backup_scheduler()
-    print("\n[Plugins] Shutting down plugins...")
-    for plugin in registry.get_all_plugins():
-        try:
-            await plugin.on_shutdown()
-        except Exception as e:
-            print(f"[Plugins] Error in on_shutdown for {plugin.id}: {e}")
-        try:
-            await plugin._cleanup_all()
-        except Exception as e:
-            print(f"[Plugins] Error in cleanup for {plugin.id}: {e}")
 
     # Stop Plugin Bus bridge and server
     if hasattr(app.state, 'plugin_bus_bridge'):
@@ -296,11 +230,13 @@ async def shutdown_event():
         await app.state.plugin_bus_server.wait_closed()
         print("[PluginBus] Stopped")
 
+    # Close the shared proxy HTTP client
+    from .plugins.middleware import close_http_client
+    await close_http_client()
+
     # Close all database connections on this thread to avoid ResourceWarnings
     from .database import close_all_connections
-    from .plugins.base import close_all_plugin_connections
     close_all_connections()
-    close_all_plugin_connections()
 
 
 def signal_handler(sig, frame):

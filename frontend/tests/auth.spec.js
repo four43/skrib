@@ -45,6 +45,15 @@ test.describe('Login Page', () => {
     await expect(page.locator('#go-to-register-button')).toBeVisible();
   });
 
+  test('should have a username input field for assisted login', async ({ page }) => {
+    await page.goto('/login.html');
+
+    const usernameInput = page.locator('#login-username');
+    await expect(usernameInput).toBeVisible();
+    await expect(usernameInput).toHaveAttribute('type', 'text');
+    await expect(usernameInput).toHaveAttribute('autocomplete', 'username');
+  });
+
   test('login button should be clickable', async ({ page }) => {
     await page.goto('/login.html');
 

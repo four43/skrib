@@ -33,6 +33,12 @@ from .rate_limit import TokenBucket
 logger = logging.getLogger(__name__)
 
 
+# Maximum size of a single WebSocket frame on the bus. Frames larger than this
+# are rejected by the ``websockets`` library before this server sees them
+# (connection closes with code 1009). Advertised to plugins in ``hello_ack``.
+MAX_MESSAGE_SIZE = 65536
+
+
 # ---------------------------------------------------------------------------
 # Connected plugin state
 # ---------------------------------------------------------------------------
@@ -51,6 +57,8 @@ class PluginConnection:
 
     # Registrations made by this plugin
     room_types: list[str] = field(default_factory=list)
+    # room_type → {display_name, icon, description}
+    room_type_meta: dict[str, dict] = field(default_factory=dict)
     published_events: list[str] = field(default_factory=list)
     subscriptions: list[str] = field(default_factory=list)
     frontend_scripts: list[str] = field(default_factory=list)
@@ -134,14 +142,17 @@ class PluginBusServer:
         attempts.append(now)
         return True
 
+    # IPs exempt from connection rate limiting (local plugin processes)
+    RATE_LIMIT_EXEMPT_IPS = {"127.0.0.1", "::1"}
+
     async def handle_connection(self, ws: ServerConnection) -> None:
         """Handle a single plugin WebSocket connection lifecycle.
 
         This is the handler passed to ``websockets.serve()``.
         """
-        # Rate limit connections per IP
+        # Rate limit connections per IP (exempt localhost — local plugins)
         remote_ip = ws.remote_address[0] if ws.remote_address else "unknown"
-        if not self._check_connection_rate(remote_ip):
+        if remote_ip not in self.RATE_LIMIT_EXEMPT_IPS and not self._check_connection_rate(remote_ip):
             await self._send(ws, error_frame("rate_limited", "Too many connection attempts"))
             await ws.close(4029, "rate_limited")
             return
@@ -294,7 +305,7 @@ class PluginBusServer:
         ack = {
             "type": FrameType.HELLO_ACK.value,
             "status": ApprovalStatus.APPROVED.value,
-            "config": {"max_message_size": 65536},
+            "config": {"max_message_size": MAX_MESSAGE_SIZE},
         }
         try:
             await self._send(conn.ws, ack)
@@ -415,6 +426,11 @@ class PluginBusServer:
             self._room_type_map[room_type] = conn.plugin_id
             if room_type not in conn.room_types:
                 conn.room_types.append(room_type)
+            conn.room_type_meta[room_type] = {
+                "display_name": data["display_name"],
+                "icon": data.get("icon", ""),
+                "description": data.get("description", ""),
+            }
         logger.info("[PluginBus] Plugin '%s' registered room type '%s'", conn.plugin_id, room_type)
 
     async def _handle_register_frontend(self, conn: PluginConnection, data: dict) -> None:
@@ -451,22 +467,26 @@ class PluginBusServer:
     async def broadcast_to_subscribers(self, event_type: str, data: dict) -> None:
         """Send an event to all plugins subscribed to this event type.
 
-        Only delivers if the publishing plugin declared the event in its
-        published_events list. Event type format is "plugin_id:event_name".
+        Event type format is ``plugin_id:event_name`` or ``core:event_name``.
+        Plugin-namespaced events are only delivered if the publishing plugin
+        declared the name in ``published_events``. The ``core:`` namespace is
+        reserved for events emitted by core/bridge and is always allowed.
         """
-        # Validate that the source plugin declared this event
         if ":" in event_type:
             source_plugin_id, event_name = event_type.split(":", 1)
-            source_conn = self._plugins.get(source_plugin_id)
-            if not source_conn or event_name not in source_conn.published_events:
-                logger.warning(
-                    "[PluginBus] Dropping event '%s' — not in published_events of '%s'",
-                    event_type, source_plugin_id,
-                )
-                return
+            if source_plugin_id != "core":
+                source_conn = self._plugins.get(source_plugin_id)
+                if not source_conn or event_name not in source_conn.published_events:
+                    logger.warning(
+                        "[PluginBus] Dropping event '%s' — not in published_events of '%s'",
+                        event_type, source_plugin_id,
+                    )
+                    return
 
         for conn in list(self._plugins.values()):
             if conn.status != ApprovalStatus.APPROVED:
+                continue
+            if "bus.receive" not in conn.permissions:
                 continue
             for sub in conn.subscriptions:
                 if event_type == sub or event_type.startswith(sub + ":"):

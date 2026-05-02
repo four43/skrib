@@ -78,9 +78,7 @@ async function enrollPasskey() {
                     { type: "public-key", alg: -257 }
                 ],
                 authenticatorSelection: {
-                    authenticatorAttachment: "platform",
-                    requireResidentKey: true,
-                    residentKey: "required",
+                    residentKey: "preferred",
                     userVerification: "preferred"
                 },
                 timeout: 60000,

@@ -87,12 +87,11 @@
 - **Impact**: Denial of service.
 - **Fix**: Add per-IP rate limiting at the WebSocket accept level or on HELLO attempts.
 
-#### 11. CoreAPI HTTP routes lack plugin authentication
+#### 11. CoreAPI HTTP routes lack plugin authentication — **RESOLVED**
 
-- **Files**: `backend/skrib/plugins/core_api_routes.py` (lines ~38-80)
-- **Description**: The core API HTTP endpoints (`/api/core/rooms/*`, `/api/core/users/*`) are exposed without validating that requests come from an approved plugin. The comment says they require `X-Skrib-Plugin-Id` / `X-Skrib-Plugin-Secret` headers, but the code doesn't check them.
-- **Impact**: If endpoints are reachable, any authenticated user could call plugin-internal APIs.
-- **Fix**: Add plugin authentication middleware, or remove the HTTP endpoints (use bus frames only).
+- **Files**: `backend/skrib/plugins/core_api_routes.py` *(deleted)*
+- **Description**: The core API HTTP endpoints (`/api/core/rooms/*`, `/api/core/users/*`) relied on a client-supplied `X-Skrib-Plugin-Id` header that the middleware didn't strip on `/api/core/*`, so any authenticated user could fabricate it.
+- **Resolution**: The endpoints were unused (frontend doesn't call them; the SDK `CoreAPI` uses bus frames). Removed the file, the include in `main.py`, and the corresponding tests.
 
 #### 12. Insufficient manifest field validation
 

@@ -9,7 +9,6 @@ from .routes import router
 class AttachmentsPlugin(SkribPlugin):
     id = "four43.attachments"
     version = "1.0.0"
-    secret = ""
     permissions = ["bus.send", "bus.receive", "http.routes", "storage.read", "storage.write",
                    "frontend.register"]
     subscriptions = ["core:room_deleted", "core:message_deleted"]

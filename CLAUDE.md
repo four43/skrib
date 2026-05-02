@@ -95,7 +95,7 @@ frontend/src/            # Vanilla JS (Vite build)
 
 ## Out-of-Process Plugin Bus
 
-Plugins can run as separate processes communicating over a WebSocket bus on port 9000:
+Plugins run as separate processes communicating over a WebSocket bus on port 9000. **The full reference for the bus protocol, permissions model, SDK API, and approval workflow is in `docs/plugin-system.md`** — read that file before designing or modifying plugin behaviour. This section is just the orientation map:
 
 - **Bus server** (`backend/skrib/plugin_bus/server.py`) — accepts plugin connections, enforces permissions, rate-limits, routes frames
 - **Bridge** (`backend/skrib/plugin_bus/bridge.py`) — translates bus frames to/from the UnifiedConnectionManager and CoreAPI
@@ -103,11 +103,10 @@ Plugins can run as separate processes communicating over a WebSocket bus on port
 - **Approvals** (`backend/skrib/plugin_bus/approvals.py`) — admin must approve new plugins before activation; manifest changes re-trigger approval
 - **Settings** (`backend/skrib/plugin_bus/settings.py`) — typed plugin settings (server-scoped and user-scoped)
 - **SDK** (`backend/skrib_plugin_sdk/`) — Python SDK for writing out-of-process plugins
-- **Admin API** (`backend/skrib/admin/routes.py`) — `GET/POST /api/admin/plugins/*` for approval management
+- **Admin API** (`backend/skrib/admin/routes.py`) — `GET/POST/DELETE /api/admin/plugins/*` for approval management
 - **Settings API** (`backend/skrib/plugins/settings_routes.py`) — `GET/PATCH /api/plugins/{id}/settings/*`
-- **CoreAPI HTTP** (`backend/skrib/plugins/core_api_routes.py`) — `GET /api/core/rooms/*`, `GET /api/core/users/*`
 
-Each plugin has a `backend/plugin_bus.py` (SDK version) and `__main__.py` (entry point). The `ws/handlers.py` dispatcher tries bus-connected plugins first, then falls back to in-process.
+Each plugin has a `backend/plugin_bus.py` (SDK class) and `__main__.py` (entry point). There is no in-process fallback — `ws/handlers.py` dispatches every room action through the bus.
 
 ## Plugins — Frontend Build
 

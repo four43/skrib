@@ -199,7 +199,7 @@
     background: none;
     border: none;
     box-shadow: none;
-    padding: 4px 0;
+    padding: 8px 0;
 }
 
 .system-message-text {
@@ -209,8 +209,8 @@
     font-size: 13px;
     font-style: italic;
     display: inline-block;
-    padding: 8px 16px;
-    border-radius: 10px;
+    padding: 10px 24px;
+    border-radius: 16px;
     text-align: left;
     white-space: pre-wrap;
 }

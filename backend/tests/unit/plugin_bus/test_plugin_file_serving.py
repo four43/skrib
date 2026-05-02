@@ -97,13 +97,14 @@ class TestPluginFileServingRealApp:
         assert resp.status_code == 200
         assert resp.json()["id"] == "four43.web-push"
 
-    def test_plugin_own_route_still_works(self):
-        """Plugin's own endpoints still work."""
+    def test_plugin_own_route_requires_bus(self):
+        """Plugin-specific routes are served by out-of-process plugins via middleware proxy.
+        Without a running plugin, these routes return 404 from the fallback router."""
         from skrib.main import app
         client = TestClient(app, raise_server_exceptions=False)
         resp = client.get("/api/plugins/four43.web-push/vapid-key")
-        # May 401 without auth, but should NOT be 404
-        assert resp.status_code != 404
+        # No bus-connected plugin running, so no proxy target — 404 expected
+        assert resp.status_code == 404
 
 
 class TestPluginFileServing:

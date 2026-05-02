@@ -84,17 +84,23 @@ async def send_room_message(
 
     await plugin_bus.broadcast_to_room(room_id, "message", data=message)
 
-    # Notify other room members so their sidebar unread counts refresh
-    members = core_api.get_room_members(room_id)
-    for member in members:
-        if member != username:
-            level = core_api.get_notify_level(room_id, member)
-            notify_action = "new_message" if level == "all" else "update"
-            unread_count = core_api.get_unread_count(room_id, member)
-            await plugin_bus.notify_user(
-                member, notify_action,
-                room_id=room_id, sender=username, unread_count=unread_count,
-            )
+    # Notify other room members so their sidebar unread counts refresh.
+    # Best-effort: failures here shouldn't break message sending.
+    try:
+        members = await core_api.get_room_members(room_id)
+        if members is None:
+            print(f"[chat] WARNING: get_room_members({room_id}) returned None")
+            members = []
+        for member in members:
+            if member != username:
+                level = await core_api.get_notify_level(room_id, member)
+                notify_action = "new_message" if level == "all" else "update"
+                await plugin_bus.notify_user(
+                    member, notify_action,
+                    room_id=room_id, sender=username,
+                )
+    except Exception as e:
+        print(f"[chat] WARNING: notification failed for room {room_id}: {e}")
 
     return SendMessageResponse(message=message)
 
@@ -108,7 +114,7 @@ async def mark_read_endpoint(
 ):
     """Mark messages in a room as read up to a given message ID."""
     check_room_access(request, room_id)
-    core_api.mark_room_read(room_id, username, body.last_read_message_id)
+    await core_api.mark_room_read(room_id, username, body.last_read_message_id)
     return {}
 
 

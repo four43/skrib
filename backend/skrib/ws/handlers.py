@@ -1,9 +1,9 @@
 """Namespace handlers for the unified WebSocket bus."""
+import logging
+
 from fastapi import WebSocket
 
 from ..permissions import get_global_role
-from ..plugins import registry
-from ..plugins.base import PluginBus
 from ..rooms.services import (
     room_exists,
     is_dm,
@@ -11,6 +11,8 @@ from ..rooms.services import (
     get_room_members,
     get_room_role,
 )
+
+logger = logging.getLogger(__name__)
 
 
 def _get_bridge():
@@ -96,37 +98,30 @@ async def handle_room(bus, ws: WebSocket, username: str, msg: dict):
         reply_to = bus.create_reply_token(ws)
 
         try:
-            # First check bus-connected plugins (out-of-process)
             bridge = _get_bridge()
-            if bridge:
-                bus_plugin_id = bridge.get_bus_plugin_for_room_type(room_type)
-                if bus_plugin_id:
-                    sent = await bridge.dispatch_room_action(
-                        plugin_id=bus_plugin_id,
-                        room_id=room_id,
-                        action=action,
-                        username=username,
-                        msg=msg,
-                        reply_to=reply_to,
-                        user_role=user_role,
-                        room_role=room_role,
-                    )
-                    if sent:
-                        return
-                    # Fall through to in-process if send failed
+            bus_plugin_id = bridge.get_bus_plugin_for_room_type(room_type) if bridge else None
 
-            # Fall back to in-process plugin
-            plugin = registry.get_plugin_for_room_type(room_type)
-            if plugin:
-                room_bus = PluginBus(bus, plugin.id)
-                await plugin.handle_room_action(room_bus, reply_to, username, msg, action,
-                                                user_role=user_role, room_role=room_role)
-            else:
-                await ws.send_json({
-                    "type": "room:error",
-                    "room_id": room_id,
-                    "message": f"No plugin handles room type '{room_type}'",
-                })
+            if bus_plugin_id and await bridge.dispatch_room_action(
+                plugin_id=bus_plugin_id,
+                room_id=room_id,
+                action=action,
+                username=username,
+                msg=msg,
+                reply_to=reply_to,
+                user_role=user_role,
+                room_role=room_role,
+            ):
+                return
+
+            logger.error(
+                "[WS] No plugin available for room_type=%s (bridge=%s, plugin_id=%s)",
+                room_type, bool(bridge), bus_plugin_id,
+            )
+            await ws.send_json({
+                "type": "room:error",
+                "room_id": room_id,
+                "message": "Plugin unavailable, please try again shortly",
+            })
         finally:
             bus.invalidate_reply_token(reply_to)
 
