@@ -8,6 +8,8 @@
 	"initializeCommand": "touch .devcontainer/docker-compose.override.yml .devcontainer/docker-compose.override.dev.yml",
 	"onCreateCommand": ".devcontainer/on-create.sh",
 	"service": "app",
+	// The dev image stage ends on USER app-user (uid 1000, same as runtime).
+	"remoteUser": "app-user",
 	"runServices": [
 		"app",
 	],

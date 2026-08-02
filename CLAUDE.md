@@ -123,7 +123,7 @@ frontend/
 Manifests reference the built output: `"entry": "frontend/dist/plugin.js"`.
 
 Build orchestration lives in `frontend/util/`:
-- `install-plugins` — runs `npm install` in each plugin frontend
+- `install-plugins` — installs deps in each plugin frontend (`npm ci` on a cold install, `npm install` to reconcile an existing `node_modules`)
 - `build` — builds all plugins, then the main frontend
 - `dev` — builds plugins once, starts `npm run watch` in each (background), then runs `vite` dev server
 
@@ -131,9 +131,16 @@ These are wired into the main frontend `package.json` scripts (`npm run dev`, `n
 
 ## Running
 
+Python dependencies are managed by **uv** from `backend/uv.lock`.
+`./util/install-dependencies` is a thin wrapper over `uv sync` that takes an
+optional comma-separated list of extras. It installs with
+`--no-install-project`, so `skrib` and `skrib_plugin_sdk` are imported from the
+source tree (via cwd or `PYTHONPATH`), not from site-packages.
+
 ```bash
-# Backend
-cd backend && pip install -e . && uvicorn skrib.main:app --reload --host 0.0.0.0 --port 8000
+# Backend (creates backend/.venv, which the e2e harness finds automatically)
+cd backend && ./util/install-dependencies dev
+cd backend && .venv/bin/python -m uvicorn skrib.main:app --reload --host 0.0.0.0 --port 8000
 
 # Out-of-process plugins (optional — connects to bus on port 9000)
 cd backend && ./util/start-plugins          # start all plugin processes
@@ -142,9 +149,35 @@ cd backend && ./util/start-plugins --stop   # stop all plugin processes
 # Frontend (installs plugin deps, builds plugins, starts dev server)
 cd frontend && npm install && ./util/install-plugins && npm run dev  # port 5173
 
-# Docker
-docker-compose up --build
+# Docker — builds the production image and serves the built frontend on :8000
+docker compose up --build
 ```
+
+## Docker & Devcontainer
+
+`Dockerfile` is multi-stage: `base → {plugin-pkg, fe-deps → fe-build} → py-deps →
+dev → runtime`. Design notes in
+`docs/specs/2026-08-02-docker-multistage-nonroot-design.md`.
+
+- **`runtime` is the last stage**, so a build with no `--target` fails closed to
+  the production image: non-root uid-1000 `app-user`, Python plus the built
+  `frontend/dist` only — no Node, npm, uv, git, or sudo. It serves the frontend
+  via FastAPI `StaticFiles`, so production genuinely needs no Node.
+- **`dev` is the devcontainer target** (`build.target: dev`). Same uid-1000
+  `app-user`, plus passwordless sudo and every dev tool baked into the image —
+  nothing is apt-installed at container-create time.
+- **`docker-compose.yml` runs the production image** with no source mount, so it
+  doubles as a production smoke test. All dev behaviour lives in
+  `.devcontainer/docker-compose.override.yml`.
+- **`node_modules` are container-side named volumes**, seeded from the dev image
+  and layered over the `./:/workspace` bind mount, so host and container installs
+  stay separate. **Adding a plugin frontend means adding a volume line** (one per
+  `node_modules` tree) to `.devcontainer/docker-compose.override.yml`.
+  `on-create.sh` reconciles a stale volume with `npm install`; to reset one
+  entirely, `docker volume rm skrib-node-modules-<name>`.
+- **Never bind-mount a host dir over the container's `/tmp`** — under a non-root
+  user it deadlocks devcontainer setup with no error message. Host scratch access
+  is at `/host/tmp`.
 
 ## Testing
 

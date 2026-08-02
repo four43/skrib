@@ -1,71 +1,37 @@
 #!/bin/bash
-DIR="$(dirname "$(readlink -f "$0")")"
-cd "$DIR/../" || exit 1
+# Install Python dependencies with uv, from uv.lock.
+#
+# Usage:
+#   ./util/install-dependencies              # runtime dependencies only
+#   ./util/install-dependencies dev          # ... plus the "dev" extra
+#   ./util/install-dependencies dev,other    # comma-separated list of extras
+#
+# On a host this creates backend/.venv, which the e2e harness finds via
+# findVenvPython() in frontend/tests/e2e/fixtures.js. In the container the
+# Dockerfile sets UV_PROJECT_ENVIRONMENT=/usr/local so it installs into the
+# system prefix instead — the container is the isolation boundary.
+#
+# The project itself is deliberately not installed as a package
+# (--no-install-project): skrib and skrib_plugin_sdk are imported from this
+# directory via cwd or PYTHONPATH.
+#
+# Set UV_FROZEN=1 (the Dockerfile does) to fail rather than update uv.lock.
+set -euo pipefail
 
-read -r -d '' usage <<EOF
-$(basename "$0") [dependency groups]
-
-Installs dependencies via lock files or pyproject.toml if it has it. May optionally pass groups as a comma separated
-list.
-
-Requires:
-    pyproject.toml              Source for dependencies
-
-Optional:
-    requirements.lock.txt       A lock file of local dependencies, will get created if not provided
-    requirements.lock.dev.txt   A lock file of local dev dependencies, (when "dev" was passed) will get created if not
-                                provided
-
-Flags:
-    -h, --help                  Show this help message
-EOF
-
-set -eo pipefail
-
-if [[ "$1" == "-h" ]] || [[ "$1" == "--help" ]]; then
-    echo "$usage" >&2
+if [[ "${1:-}" == "-h" ]] || [[ "${1:-}" == "--help" ]]; then
+    sed -n '2,18p' "$0" | sed 's/^#\{1\} \{0,1\}//'
     exit 0
 fi
 
-pip_install_groups="$1"
+cd "$(dirname "$(readlink -f "$0")")/.."
 
-# Ignore LFS files in remote git dependencies, these are usually just test files
-# and are huge, so we don't want to download them.
-export GIT_LFS_SKIP_SMUDGE=1
-
-if [[ -n "$GITHUB_TOKEN" ]]; then
-    echo "Using \$GITHUB_TOKEN via https to authenticate git requests for all GitHub Repos" >&2
-    git config --global url."https://x-access-token:$GITHUB_TOKEN@github.com/".insteadOf "https://github.com/"
-    git config --global --add url."https://x-access-token:$GITHUB_TOKEN@github.com/".insteadOf "git@github.com:"
-    git config --global --add url."https://x-access-token:$GITHUB_TOKEN@github.com/".insteadOf "ssh://git@github.com/"
-else
-    echo "No \$GITHUB_TOKEN provided, will attempt to access public GitHub repos only" >&2
+args=(sync --no-install-project)
+if [[ -n "${1:-}" ]]; then
+    IFS=',' read -ra extras <<< "$1"
+    for extra in "${extras[@]}"; do
+        args+=(--extra "$extra")
+    done
 fi
 
-requirements_path="requirements.lock.${pip_install_groups}.txt"
-if [[ -z "$pip_install_groups" ]]; then
-    requirements_path="requirements.lock.txt"
-fi
-
-if [[ -f "${requirements_path}" ]]; then
-    echo "Installing dependencies for [${pip_install_groups}] (using ${requirements_path})..." >&2
-    pip install -vvv --no-deps -r "${requirements_path}"
-else
-    echo "Installing dependencies for [${pip_install_groups}] (using pyproject.toml)..." >&2
-    if [[ -z "$pip_install_groups" ]]; then
-        pip install ./
-    else
-        pip install "./[${pip_install_groups}]"
-    fi
-
-    # Ensure we don't save locally managed dependencies
-    pip freeze | grep -v '@ file:///' > "${requirements_path}"
-
-    # Copy this to a spot that isn't commonly mapped over so we can quickly fetch it back out and
-    # into our repo during dev
-    mkdir -p /opt/xwe-python-app
-    cp "${requirements_path}" /opt/xwe-python-app
-
-    chown -R "$(stat -c "%u:%g" /app)" "${requirements_path}"
-    echo "WARNING!: Didn't use a lock file, created one at: /opt/xwe-python-app/${requirements_path}" >&2
-fi
+echo "Installing dependencies: uv ${args[*]}" >&2
+exec uv "${args[@]}"

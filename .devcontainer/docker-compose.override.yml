@@ -1,16 +1,57 @@
+# Devcontainer overlay. Builds the `dev` Dockerfile stage — the py-deps
+# toolchain (uv, git) plus every dev tool baked in, dropped to the same non-root
+# uid-1000 app-user that runtime ships as, with passwordless sudo for root-ish
+# chores. Running as uid 1000 keeps bind-mounted files owned by the host user, so
+# there is no `user: "0:0"` override here.
 services:
   app:
+    hostname: skrib
+    container_name: skrib
     build:
-      context: .
       target: dev
+    # Its own tag, so building the devcontainer never overwrites skrib:latest
+    # (the production image the base compose file builds).
+    image: skrib:dev
     volumes:
       - ./:/workspace
-      - /tmp/app-container:/tmp:rw
-      - ./.cache/.vscode-server-extension:/root/.vscode-server/extensions
+      # Host-side access to a scratch dir WITHOUT clobbering the container's own
+      # /tmp. A shared host path mounted over /tmp deadlocks non-root setup on
+      # socket ownership, with no error message (devcontainers.md ⚠️).
+      - /tmp/app-container:/host/tmp:rw
+      # Cache dirs live under app-user's home now that this runs non-root, not
+      # /root (devcontainers.md §2, gotcha 1).
+      - ./.cache/.vscode-server-extension:/home/app-user/.vscode-server/extensions
       - /var/cache/apt:/var/cache/apt
-      - ~/.gitconfig:/root/.gitconfig:ro
+      - ~/.gitconfig:/home/app-user/.gitconfig:ro
+      # node_modules stay container-side, layered over the ./:/workspace bind
+      # mount and seeded from the dev image on first create. Keeps container and
+      # host installs separate so native binaries (rollup, playwright) can't
+      # conflict. Add a line here when adding a plugin frontend; on-create.sh
+      # reconciles a stale volume with npm install.
+      - skrib-node-modules-frontend:/workspace/frontend/node_modules
+      - skrib-node-modules-attachments:/workspace/backend/plugins/four43.attachments/frontend/node_modules
+      - skrib-node-modules-chat-typing:/workspace/backend/plugins/four43.chat-typing/frontend/node_modules
+      - skrib-node-modules-emoji-picker:/workspace/backend/plugins/four43.emoji-picker/frontend/node_modules
+      - skrib-node-modules-message-reactions:/workspace/backend/plugins/four43.message-reactions/frontend/node_modules
+      - skrib-node-modules-room-type-chat:/workspace/backend/plugins/four43.room-type-chat/frontend/node_modules
+      - skrib-node-modules-room-type-todo:/workspace/backend/plugins/four43.room-type-todo/frontend/node_modules
+      - skrib-node-modules-web-push:/workspace/backend/plugins/four43.web-push/frontend/node_modules
     environment:
-      - PYTHONPATH=/workspace
+      # The Python package lives at backend/skrib, so the repo root alone can't
+      # import it.
+      - PYTHONPATH=/workspace/backend
       - PYDEVD_WARN_EVALUATION_TIMEOUT=30
-    entrypoint: ""
-    command:    sleep infinity
+    ports:
+      - "5173:5173"  # vite dev server
+      - "8080:8080"  # research: WebRTC video chat
+    command: sleep infinity
+
+volumes:
+  skrib-node-modules-frontend:
+  skrib-node-modules-attachments:
+  skrib-node-modules-chat-typing:
+  skrib-node-modules-emoji-picker:
+  skrib-node-modules-message-reactions:
+  skrib-node-modules-room-type-chat:
+  skrib-node-modules-room-type-todo:
+  skrib-node-modules-web-push:

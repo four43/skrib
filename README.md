@@ -28,7 +28,7 @@ A self-hosted, end-to-end encrypted collaboration platform. Passwordless authent
 ### Docker
 
 ```bash
-docker-compose up --build
+docker compose up --build
 ```
 
 App available at http://localhost:8000. The first registered user is automatically approved as admin.
@@ -36,11 +36,12 @@ App available at http://localhost:8000. The first registered user is automatical
 ### Local Development
 
 ```bash
-# Backend
-cd backend && pip install -e . && uvicorn skrib.main:app --reload --host 0.0.0.0 --port 8000
+# Backend — uv-managed, from backend/uv.lock (creates backend/.venv)
+cd backend && ./util/install-dependencies dev
+cd backend && .venv/bin/python -m uvicorn skrib.main:app --reload --host 0.0.0.0 --port 8000
 
 # Frontend (separate terminal)
-cd frontend && npm install && npm run dev
+cd frontend && npm install && ./util/install-plugins && npm run dev
 ```
 
 Backend runs on port 8000, frontend dev server on port 5173 with API proxying.

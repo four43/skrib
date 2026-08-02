@@ -418,11 +418,28 @@ window.pluginLoader.registerWSHandler('myplugin', (action, data) => {
 
 ## Running the Application
 
+### Install dependencies
+
+Managed by **uv** from `uv.lock`. `./util/install-dependencies` wraps
+`uv sync --no-install-project` and takes an optional comma-separated list of
+extras, so `skrib` and `skrib_plugin_sdk` are imported from this directory rather
+than site-packages.
+
+```bash
+cd backend
+./util/install-dependencies dev    # omit "dev" for runtime dependencies only
+```
+
+This creates `backend/.venv`, which the e2e harness discovers via
+`findVenvPython()` in `frontend/tests/e2e/fixtures.js`. In Docker the Dockerfile
+sets `UV_PROJECT_ENVIRONMENT=/usr/local` so dependencies land in the system
+prefix instead.
+
 ### Start the server
 
 ```bash
 cd backend
-python -m uvicorn skrib.main:app --reload --host 0.0.0.0 --port 8000
+.venv/bin/python -m uvicorn skrib.main:app --reload --host 0.0.0.0 --port 8000
 ```
 
 ### Use the Admin CLI

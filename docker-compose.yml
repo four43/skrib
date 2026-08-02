@@ -1,39 +1,21 @@
+# The production image, as shipped. `runtime` is the last Dockerfile stage, so a
+# build with no --target lands here — which makes this file a production smoke
+# test: it serves the frontend that was built into the image, as a non-root user,
+# with no Node or package manager present.
+#
+# All development behaviour (dev image target, source mounts, dev server, ports
+# 5173/8080) lives in .devcontainer/docker-compose.override.yml.
 services:
   app:
     build:
       context: .
-      secrets:
-        - github_token
-      ssh:
-        - default
     image: skrib:latest
+    # Deliberately no source mount: mounting ./ over /app would shadow the
+    # frontend build baked into the image and defeat the point of this file.
     volumes:
-      # Mount backend for development hot-reload
-      - ./backend:/app
-      # Mount frontend for development hot-reload
-      - ./frontend:/frontend
-      # Mount database to persist data
+      # Persist the SQLite DB. The runtime stage sets SKRIB_DATA_DIR=/data.
       - ./data:/data
-      # Allow us to map in /tmp
-      - "${BITBUCKET_CLONE_DIR:-/tmp}:/tmp"
-    environment:
-      - PYTHONUNBUFFERED=1
     init: true
-    entrypoint: ""
     ports:
-      - "8000:8000"  # Running via "localhost" is a secure context so we can test Service Workers
-      - "8080:8080"  # Research: WebRTC video chat
-    command:
-      - sh
-      - -c
-      - |
-        npm run dev -- --host &
-        cd /app && python -m uvicorn skrib.main:app --host 0.0.0.0 --port 8000 --reload
-
-volumes:
-  caddy_data:
-  caddy_config:
-
-secrets:
-  github_token:
-    environment: GITHUB_TOKEN
+      # localhost is a secure context, so Service Workers can be tested
+      - "8000:8000"

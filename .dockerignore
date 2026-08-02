@@ -3,29 +3,36 @@
 .gitignore
 
 # Python
-__pycache__
-*.pyc
-*.pyo
-*.pyd
-.Python
-*.so
-*.egg
-*.egg-info
+# NOTE: patterns match the full path from the context root, so a bare
+# `__pycache__` would only match a top-level one. Use **/ for nested matches.
+**/__pycache__
+**/*.pyc
+**/*.pyo
+**/*.pyd
+**/*.so
+**/*.egg
+**/*.egg-info
+**/.venv
 build
+.Python
 .pytest_cache
 .coverage
 .cache
 .mypy_cache
 .tests-output
-.venv
 artifacts
 tmp
 
 # Node
 **/node_modules
+# Built in the image (fe-build stage) — never copy a stale host build in.
 frontend/dist
+backend/plugins/*/frontend/dist
 frontend/.env
 frontend/.env.local
+frontend/test-results
+frontend/playwright-report
+.playwright-mcp
 
 # IDE
 .vscode
@@ -47,3 +54,6 @@ data/
 docker-compose.yml
 Dockerfile
 .dockerignore
+
+# Worktrees (nested checkouts of this same repo)
+.worktrees

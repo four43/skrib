@@ -1,4 +1,11 @@
 #!/bin/bash
+# Install npm dependencies for every plugin frontend.
+#
+# Cold installs use `npm ci` for a deterministic tree from package-lock.json.
+# When node_modules is already present this reconciles with `npm install`
+# instead, which is a fast no-op when nothing changed — `npm ci` would wipe and
+# refetch ~140MB every time, which matters because the devcontainer runs this
+# on every container create to self-heal a stale node_modules volume.
 set -euo pipefail
 DIR="$(dirname "$(readlink -f "$0")")"
 
@@ -7,6 +14,12 @@ PLUGINS_DIR="$DIR/../../backend/plugins"
 for plugin_dir in "$PLUGINS_DIR"/*/frontend; do
     [ -f "$plugin_dir/package.json" ] || continue
     plugin_name="$(basename "$(dirname "$plugin_dir")")"
-    echo "Installing plugin dependencies: $plugin_name"
-    (cd "$plugin_dir" && npm install)
+
+    if [ -d "$plugin_dir/node_modules" ] || [ ! -f "$plugin_dir/package-lock.json" ]; then
+        echo "Installing plugin dependencies: $plugin_name (npm install)"
+        (cd "$plugin_dir" && npm install)
+    else
+        echo "Installing plugin dependencies: $plugin_name (npm ci)"
+        (cd "$plugin_dir" && npm ci)
+    fi
 done
