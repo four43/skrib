@@ -12,7 +12,7 @@ from __future__ import annotations
 
 import asyncio
 import logging
-from typing import TYPE_CHECKING
+from typing import TYPE_CHECKING, Any
 
 from .protocol import (
     FrameType,
@@ -50,6 +50,12 @@ class PluginBusBridge:
         self._ws = ws_manager
         self._core_api = core_api
         self._pending_callbacks: dict[str, asyncio.Future] = {}
+
+        # In-process plugins: plugin_id -> deliver coroutine, and the room
+        # types they own. These bypass the bus server entirely — they are
+        # trusted code sharing this interpreter.
+        self._inprocess: dict[str, Any] = {}
+        self._inprocess_room_types: dict[str, str] = {}
 
         # Register ourselves as the core handler on the bus server
         self._server.set_core_handler(self._handle_plugin_frame)
@@ -93,7 +99,7 @@ class PluginBusBridge:
             else:
                 logger.warning("[Bridge] Unhandled frame type '%s' from plugin '%s'", frame_type, plugin_id)
         except FrameValidationError as e:
-            await self._server.send_to_plugin(plugin_id, error_frame(e.code, e.message, data.get("request_id")))
+            await self._send_to_plugin(plugin_id, error_frame(e.code, e.message, data.get("request_id")))
 
     # ------------------------------------------------------------------
     # Bus operations: plugin → client WebSockets
@@ -200,7 +206,7 @@ class PluginBusBridge:
                 "error": str(e),
             }
 
-        await self._server.send_to_plugin(plugin_id, response)
+        await self._send_to_plugin(plugin_id, response)
 
     async def _call_core_api(self, method: str, params: dict):
         """Dispatch a core_api method call."""
@@ -244,7 +250,7 @@ class PluginBusBridge:
             "endpoint": endpoint,
             "data": payload,
         }
-        sent = await self._server.send_to_plugin(plugin_id, frame)
+        sent = await self._send_to_plugin(plugin_id, frame)
         if not sent:
             self._pending_callbacks.pop(request_id, None)
             return None
@@ -282,7 +288,7 @@ class PluginBusBridge:
             "room_role": room_role or "",
             "data": msg,
         }
-        return await self._server.send_to_plugin(plugin_id, frame)
+        return await self._send_to_plugin(plugin_id, frame)
 
     # ------------------------------------------------------------------
     # Core → Plugin: lifecycle events
@@ -306,9 +312,9 @@ class PluginBusBridge:
         if not room_id or not room_type:
             return
         # Typed lifecycle frame to the room-type owner
-        plugin_id = self._server.room_type_map.get(room_type)
+        plugin_id = self.get_bus_plugin_for_room_type(room_type)
         if plugin_id:
-            await self._server.send_to_plugin(plugin_id, {
+            await self._send_to_plugin(plugin_id, {
                 "type": FrameType.LIFECYCLE_ROOM_CREATED.value,
                 "room_id": room_id,
                 "room_type": room_type,
@@ -324,9 +330,9 @@ class PluginBusBridge:
         room_type = event.get("room_type")
         if not room_id or not room_type:
             return
-        plugin_id = self._server.room_type_map.get(room_type)
+        plugin_id = self.get_bus_plugin_for_room_type(room_type)
         if plugin_id:
-            await self._server.send_to_plugin(plugin_id, {
+            await self._send_to_plugin(plugin_id, {
                 "type": FrameType.LIFECYCLE_ROOM_DELETED.value,
                 "room_id": room_id,
                 "room_type": room_type,
@@ -342,9 +348,9 @@ class PluginBusBridge:
         if not room_id or not username:
             return
         if room_type:
-            plugin_id = self._server.room_type_map.get(room_type)
+            plugin_id = self.get_bus_plugin_for_room_type(room_type)
             if plugin_id:
-                await self._server.send_to_plugin(plugin_id, {
+                await self._send_to_plugin(plugin_id, {
                     "type": FrameType.LIFECYCLE_USER_JOINED.value,
                     "room_id": room_id,
                     "username": username,
@@ -361,9 +367,9 @@ class PluginBusBridge:
         if not room_id or not username:
             return
         if room_type:
-            plugin_id = self._server.room_type_map.get(room_type)
+            plugin_id = self.get_bus_plugin_for_room_type(room_type)
             if plugin_id:
-                await self._server.send_to_plugin(plugin_id, {
+                await self._send_to_plugin(plugin_id, {
                     "type": FrameType.LIFECYCLE_USER_LEFT.value,
                     "room_id": room_id,
                     "username": username,
@@ -378,5 +384,35 @@ class PluginBusBridge:
     # ------------------------------------------------------------------
 
     def get_bus_plugin_for_room_type(self, room_type: str) -> str | None:
-        """Return plugin_id if a bus-connected plugin handles this room type."""
+        """Return the plugin_id handling this room type, either runtime.
+
+        In-process plugins are checked first. ws/handlers.py calls this and
+        then dispatch_room_action, both of which are runtime-agnostic, so it
+        needs no knowledge of where a plugin runs.
+        """
+        inproc = self._inprocess_room_types.get(room_type)
+        if inproc is not None:
+            return inproc
         return self._server.room_type_map.get(room_type)
+
+    def register_inprocess(self, plugin_id: str, deliver, room_types: list[str]) -> None:
+        """Register an in-process plugin's inbound frame sink and room types."""
+        self._inprocess[plugin_id] = deliver
+        for rt in room_types:
+            self._inprocess_room_types[rt] = plugin_id
+
+    def unregister_inprocess(self, plugin_id: str) -> None:
+        """Remove an in-process plugin and any room types it owned."""
+        self._inprocess.pop(plugin_id, None)
+        for rt in [
+            rt for rt, pid in self._inprocess_room_types.items() if pid == plugin_id
+        ]:
+            del self._inprocess_room_types[rt]
+
+    async def _send_to_plugin(self, plugin_id: str, frame: dict) -> bool:
+        """Send a frame to a plugin, in-process or over the bus."""
+        deliver = self._inprocess.get(plugin_id)
+        if deliver is not None:
+            await deliver(frame)
+            return True
+        return await self._server.send_to_plugin(plugin_id, frame)
