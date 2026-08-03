@@ -78,10 +78,15 @@ class PluginRegistry:
     def all(self) -> list[dict]:
         """Every active plugin, in-process first. Ids are unique.
 
-        Each source is enumerated independently: a defect in one (e.g. a
-        raising in-process host) must not hide the other source's plugins
-        from the listing — a broken host should cost you that host's
-        plugins, not every bus-connected one too.
+        Two failure modes are guarded independently, per source:
+        enumeration itself raising (e.g. a broken ``plugin_records()``
+        call), and enumeration succeeding but returning a list with one bad
+        entry in it — the more realistic failure, since a buggy host is far
+        more likely to hand back a malformed record than to raise outright.
+        Either way, a defect confined to one source or one item must not
+        hide anything else: a broken host should cost you that host's
+        plugins, not every bus-connected one too, and one bad record should
+        cost you that one plugin, not its whole source.
         """
         records: list[dict] = []
         seen: set[str] = set()
@@ -93,6 +98,9 @@ class PluginRegistry:
                 logger.exception("[PluginRegistry] in-process host failed to enumerate plugins")
             else:
                 for rec in host_records:
+                    if not isinstance(rec, dict) or not rec.get("id"):
+                        logger.warning("[PluginRegistry] Skipping malformed in-process record: %r", rec)
+                        continue
                     records.append(rec)
                     seen.add(rec["id"])
 
@@ -109,7 +117,13 @@ class PluginRegistry:
                 for plugin_id, conn in bus_connections:
                     if plugin_id in seen:
                         continue
-                    rec = self._record_from_conn(conn)
+                    try:
+                        rec = self._record_from_conn(conn)
+                    except Exception:
+                        logger.exception(
+                            "[PluginRegistry] Skipping malformed bus connection for '%s'", plugin_id
+                        )
+                        continue
                     if rec is not None:
                         records.append(rec)
                         seen.add(plugin_id)

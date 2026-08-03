@@ -224,6 +224,65 @@ class TestAllGuardsSourcesIndependently:
         assert ids == ["four43.inproc-one"]
 
 
+class TestAllGuardsPerItemWithinASource:
+    """A source's enumeration *call* can succeed while the list it returns
+    still contains one bad entry — a more realistic failure than the whole
+    call raising (a buggy ``plugin_records()`` is far more likely to return
+    a malformed entry than to raise). This drives the *real*
+    ``PluginRegistry.all()`` (not a test-double registry), since the defect
+    this guards against lives inside ``all()``'s own per-item loops — see
+    Task 4C's third follow-up review.
+    """
+
+    class _HostWithJunkAmongHealthyRecords:
+        """plugin_records() succeeds, but one entry in the list is junk."""
+
+        def plugin_records(self):
+            return [
+                {
+                    "id": "four43.inproc-healthy",
+                    "version": "1.0.0",
+                    "permissions": [],
+                    "room_types": ["todo"],
+                    "room_type_meta": {},
+                    "frontend_scripts": [],
+                    "frontend_styles": [],
+                    "http_base_url": None,
+                    "runtime": "in_process",
+                },
+                None,  # e.g. a buggy host appending before populating
+            ]
+
+    class _ApprovedButMalformedConn:
+        """Passes the approval check but is missing plugin_id entirely —
+        the shape a genuinely corrupt PluginConnection-like object could
+        take, as opposed to one that's merely missing optional fields
+        (which _record_from_conn already tolerates via getattr defaults).
+        """
+        status = ApprovalStatus.APPROVED
+
+    def test_junk_inprocess_record_does_not_hide_healthy_records(self):
+        reg = PluginRegistry(
+            _FakeBusServer({"four43.bus-one": _FakeConn("four43.bus-one")}),
+            self._HostWithJunkAmongHealthyRecords(),
+        )
+
+        ids = sorted(r["id"] for r in reg.all())
+        assert ids == ["four43.bus-one", "four43.inproc-healthy"]
+
+    def test_junk_bus_connection_does_not_hide_healthy_records(self):
+        reg = PluginRegistry(
+            _FakeBusServer({
+                "four43.bus-healthy": _FakeConn("four43.bus-healthy"),
+                "four43.bus-broken": self._ApprovedButMalformedConn(),
+            }),
+            _FakeHost(),
+        )
+
+        ids = sorted(r["id"] for r in reg.all())
+        assert ids == ["four43.bus-healthy", "four43.inproc-one"]
+
+
 def test_record_matches_a_real_plugin_connection():
     """A hand-rolled fake conn double can silently drift from the real
     ``PluginConnection`` dataclass if a field is ever renamed. Build a real
