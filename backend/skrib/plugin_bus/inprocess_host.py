@@ -19,6 +19,8 @@ from typing import Any
 from skrib_plugin_sdk.database import init_schema
 from skrib_plugin_sdk.inprocess import InProcessClient
 
+from .settings import register_inprocess_settings_schema, unregister_inprocess_settings_schema
+
 logger = logging.getLogger(__name__)
 
 
@@ -80,6 +82,7 @@ class InProcessHost:
         self._plugins_dir = Path(plugins_dir)
         self._instances: dict[str, Any] = {}
         self._failures: dict[str, str] = {}
+        self._http_urls: dict[str, str | None] = {}
 
     @property
     def failures(self) -> dict[str, str]:
@@ -135,19 +138,60 @@ class InProcessHost:
         ):
             client.on_frame(lt, plugin._handle_lifecycle)
 
+        # Bus plugins get their HTTP server started by SkribPlugin.run(); in-process
+        # plugins need the host to do it, because their CRUD routes are still served
+        # through the middleware proxy at /api/plugins/{id}/...
+        http_base_url = None
+        if plugin.http_port is not None:
+            http_base_url = await plugin._start_http_server()
+        self._http_urls[plugin.id] = http_base_url
+
         await client.connect()
         self._bridge.register_inprocess(plugin.id, client.deliver, plugin.room_types)
         await plugin.on_connect()
+
+        # The bus server registers settings schemas when it handles a
+        # register.settings frame. In-process plugins never send one, so do it here.
+        if plugin.settings:
+            register_inprocess_settings_schema(plugin.id, plugin.settings)
+
         self._instances[plugin.id] = plugin
+
+    def plugin_records(self) -> list[dict]:
+        """Uniform records for every running in-process plugin.
+
+        Key set matches what the bus server exposes per connection, so the plugin
+        registry can merge both sources without special-casing either runtime.
+        """
+        records = []
+        for plugin_id, plugin in self._instances.items():
+            records.append({
+                "id": plugin_id,
+                "version": plugin.version,
+                "permissions": list(plugin.permissions),
+                "room_types": list(plugin.room_types),
+                "room_type_meta": dict(plugin.room_type_meta),
+                "frontend_scripts": list(plugin.frontend_scripts),
+                "frontend_styles": list(plugin.frontend_styles),
+                "http_base_url": self._http_urls.get(plugin_id),
+                "runtime": "in_process",
+            })
+        return records
 
     async def stop(self) -> None:
         """Unregister and shut down every in-process plugin."""
         for plugin_id, plugin in list(self._instances.items()):
             self._bridge.unregister_inprocess(plugin_id)
+            unregister_inprocess_settings_schema(plugin_id)
             try:
                 await plugin.on_disconnect()
             except Exception:
                 logger.exception("[InProcess] Error stopping %s", plugin_id)
+            try:
+                await plugin._stop_http_server()
+            except Exception:
+                logger.exception("[InProcess] Error stopping HTTP server for %s", plugin_id)
             if plugin._client is not None:
                 await plugin._client.close()
         self._instances.clear()
+        self._http_urls.clear()

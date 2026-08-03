@@ -220,3 +220,75 @@ async def test_start_starts_healthy_plugin_despite_sibling_failure(tmp_path, bri
 
     assert started == ["test.healthy"]
     assert set(host.failures) == {"test.broken"}
+
+
+@pytest.mark.asyncio
+async def test_started_plugin_gets_an_http_server_and_a_record(bridge, tmp_path, monkeypatch):
+    """A started in-process plugin exposes an http_base_url and a full record."""
+    host = InProcessHost(bridge, PLUGINS_DIR)
+    await host._start_one("four43.room-type-todo", PLUGINS_DIR / "four43.room-type-todo")
+    try:
+        records = {r["id"]: r for r in host.plugin_records()}
+        rec = records["four43.room-type-todo"]
+
+        assert rec["runtime"] == "in_process"
+        assert rec["room_types"] == ["todo"]
+        assert rec["http_base_url"].startswith("http://127.0.0.1:")
+        assert set(rec) == {
+            "id", "version", "permissions", "room_types", "room_type_meta",
+            "frontend_scripts", "frontend_styles", "http_base_url", "runtime",
+        }
+    finally:
+        await host.stop()
+
+
+@pytest.mark.asyncio
+async def test_stop_shuts_down_the_http_server(bridge):
+    """stop() must not leave a listening socket behind."""
+    host = InProcessHost(bridge, PLUGINS_DIR)
+    await host._start_one("four43.room-type-todo", PLUGINS_DIR / "four43.room-type-todo")
+    url = host.plugin_records()[0]["http_base_url"]
+    await host.stop()
+
+    assert host.plugin_records() == []
+    import httpx
+    with pytest.raises(Exception):
+        async with httpx.AsyncClient(timeout=1.0) as c:
+            await c.get(f"{url}/")
+
+
+@pytest.mark.asyncio
+async def test_start_registers_settings_schema(tmp_path, bridge):
+    """An in-process plugin's settings schema becomes visible through the
+    same lookup the bus server's connections use (get_settings_schema), so
+    the settings API and admin routes don't need runtime-specific branching.
+
+    None of the real in-process candidate plugins declare `settings`, so this
+    uses a minimal fake plugin (same pattern as `_write_plugin`) to exercise
+    the registration path directly.
+    """
+    plugin_dir = tmp_path / "test.withsettings"
+    backend_dir = plugin_dir / "backend"
+    backend_dir.mkdir(parents=True)
+    (plugin_dir / "manifest.json").write_text(json.dumps(
+        {"id": "test.withsettings", "version": "1.0.0", "runtime": "in_process", "permissions": []}
+    ))
+    (backend_dir / "plugin_bus.py").write_text(
+        "from skrib_plugin_sdk import SkribPlugin\n\n\n"
+        "class Plugin(SkribPlugin):\n"
+        "    id = 'test.withsettings'\n"
+        "    version = '1.0.0'\n"
+        "    settings = [{'key': 'greeting', 'label': 'Greeting', 'type': 'string',\n"
+        "                 'default': 'hi', 'scope': 'server'}]\n"
+    )
+    host = InProcessHost(bridge, tmp_path)
+
+    await host._start_one("test.withsettings", plugin_dir)
+    try:
+        from skrib.plugin_bus.settings import get_settings_schema
+        assert get_settings_schema("test.withsettings") == [
+            {"key": "greeting", "label": "Greeting", "type": "string",
+             "default": "hi", "scope": "server"}
+        ]
+    finally:
+        await host.stop()

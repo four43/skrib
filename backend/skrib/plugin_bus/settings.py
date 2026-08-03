@@ -27,14 +27,39 @@ logger = logging.getLogger(__name__)
 
 
 # ---------------------------------------------------------------------------
-# Schema queries (from bus-connected plugin state)
+# Schema queries (from bus-connected plugin state, or an in-process plugin)
 # ---------------------------------------------------------------------------
 
+# In-process plugins share this interpreter with core, so there is no
+# PluginConnection to hang a schema off of, and no register.settings frame to
+# send it in — nothing ever crosses the bus. InProcessHost registers the
+# schema here directly, at startup, as the in-process equivalent of what the
+# bus server does when it handles that frame (see server.py's
+# _handle_register_settings, which stores it on conn.settings_schema).
+_inprocess_settings_schemas: dict[str, list[dict]] = {}
+
+
+def register_inprocess_settings_schema(plugin_id: str, schema: list[dict]) -> None:
+    """Register the settings schema for an in-process plugin.
+
+    Called by InProcessHost once at plugin startup, since in-process plugins
+    never send a register.settings frame for the bus server to observe.
+    """
+    _inprocess_settings_schemas[plugin_id] = schema
+
+
+def unregister_inprocess_settings_schema(plugin_id: str) -> None:
+    """Drop a stopped in-process plugin's settings schema."""
+    _inprocess_settings_schemas.pop(plugin_id, None)
+
+
 def get_settings_schema(plugin_id: str) -> list[dict]:
-    """Get the settings schema for a plugin from the bus server.
+    """Get the settings schema for a plugin, in-process or bus-connected.
 
     Returns an empty list if the plugin isn't connected or hasn't registered settings.
     """
+    if plugin_id in _inprocess_settings_schemas:
+        return _inprocess_settings_schemas[plugin_id]
     try:
         from ..main import app
         plugin_bus = getattr(app.state, "plugin_bus", None)
