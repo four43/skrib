@@ -217,7 +217,7 @@ cd frontend && ./util/test-e2e --grep "room members"        # filter by test nam
 cd frontend && ./util/test
 
 # Plugin bus unit tests (bus server, bridge, SDK, approvals, settings)
-cd backend && python -m pytest test_plugin_bus/ -v
+cd backend && python -m pytest tests/unit/plugin_bus/ -v
 ```
 
 - E2E tests live in `frontend/tests/e2e/*.spec.js`, fixtures in `frontend/tests/e2e/fixtures.js`

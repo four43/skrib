@@ -13,7 +13,7 @@
 - **No migration functions.** Modify schema and delete `data/*` to reset (`CLAUDE.md`).
 - **Red/green tests first.** Write the failing test, watch it fail, then implement.
 - **E2E tests run via `cd frontend && ./util/test-e2e`**, never `npx playwright test` directly — the wrapper sets `SKRIB_TEST_DATA_DIR` and builds the frontend.
-- **Plugin bus unit tests:** `cd backend && python -m pytest test_plugin_bus/ -v`. All 191 must stay green.
+- **Plugin bus unit tests:** `cd backend && python -m pytest tests/unit/plugin_bus/ -v`. All 191 must stay green.
 - **In-process plugins are trusted by definition.** Permissions are unenforceable in a shared interpreter, so do not add permission checks to the in-process path — that would be theater. See `docs/spec/2026-08-02-extension-model.md` §3.1.
 - **Do not touch `skrib/plugin_bus/server.py`.** The bus server stays exactly as it is; in-process plugins are registered alongside it, not inside it.
 - **Out of scope:** the core item log and signal channel (`docs/spec/2026-08-02-core-log-and-signal.md`), the `kind` manifest field, folding themes in, and splitting link previews out. Those are separate phases.
@@ -25,9 +25,9 @@
 **Create:**
 - `backend/skrib_plugin_sdk/inprocess.py` — `InProcessClient`, a `BusClient`-shaped transport that calls the bridge directly.
 - `backend/skrib/plugin_bus/inprocess_host.py` — `InProcessHost`: discovers, imports, instantiates and registers `runtime: in_process` plugins.
-- `backend/test_plugin_bus/test_inprocess_client.py` — unit tests for the client.
-- `backend/test_plugin_bus/test_inprocess_host.py` — unit tests for the host.
-- `backend/test_plugin_bus/test_notify_levels_batch.py` — unit tests for the batched core API method.
+- `backend/tests/unit/plugin_bus/test_inprocess_client.py` — unit tests for the client.
+- `backend/tests/unit/plugin_bus/test_inprocess_host.py` — unit tests for the host.
+- `backend/tests/unit/plugin_bus/test_notify_levels_batch.py` — unit tests for the batched core API method.
 
 **Modify:**
 - `backend/skrib/rooms/services.py` — add `get_notify_levels(room_id)`.
@@ -55,7 +55,7 @@ This is the diagnostic. `get_notify_level` is currently called once per member i
 - Modify: `backend/skrib_plugin_sdk/core_api.py` (after `get_notify_level`, line ~42)
 - Modify: `backend/skrib/plugin_bus/bridge.py:205-221` (`_call_core_api`)
 - Modify: `backend/plugins/four43.room-type-chat/backend/plugin_bus.py:131-142`
-- Test: `backend/test_plugin_bus/test_notify_levels_batch.py`
+- Test: `backend/tests/unit/plugin_bus/test_notify_levels_batch.py`
 
 **Interfaces:**
 - Consumes: nothing from earlier tasks.
@@ -63,7 +63,7 @@ This is the diagnostic. `get_notify_level` is currently called once per member i
 
 - [ ] **Step 1: Write the failing test**
 
-Create `backend/test_plugin_bus/test_notify_levels_batch.py`:
+Create `backend/tests/unit/plugin_bus/test_notify_levels_batch.py`:
 
 ```python
 """The batched notify-level lookup must return one dict for the whole room."""
@@ -87,11 +87,11 @@ def test_get_notify_levels_unknown_room_is_empty():
     assert get_notify_levels("no-such-room") == {}
 ```
 
-Reuse whatever room-seeding fixture `test_plugin_bus/conftest.py` already provides; if there is no `seeded_room` fixture, add one there that creates a room and three members via `skrib.rooms.services`.
+Reuse whatever room-seeding fixture `tests/unit/plugin_bus/conftest.py` already provides; if there is no `seeded_room` fixture, add one there that creates a room and three members via `skrib.rooms.services`.
 
 - [ ] **Step 2: Run the test and confirm it fails**
 
-Run: `cd backend && python -m pytest test_plugin_bus/test_notify_levels_batch.py -v`
+Run: `cd backend && python -m pytest tests/unit/plugin_bus/test_notify_levels_batch.py -v`
 Expected: FAIL with `ImportError: cannot import name 'get_notify_levels'`.
 
 - [ ] **Step 3: Add the core service function**
@@ -118,7 +118,7 @@ def get_notify_levels(room_id: str) -> dict[str, str]:
 
 - [ ] **Step 4: Run the test and confirm it passes**
 
-Run: `cd backend && python -m pytest test_plugin_bus/test_notify_levels_batch.py -v`
+Run: `cd backend && python -m pytest tests/unit/plugin_bus/test_notify_levels_batch.py -v`
 Expected: PASS (2 passed).
 
 - [ ] **Step 5: Expose it on the in-process CoreAPI**
@@ -176,7 +176,7 @@ Keep the existing `except Exception:` body exactly as it is. Note this also drop
 
 - [ ] **Step 9: Run the plugin bus suite**
 
-Run: `cd backend && python -m pytest test_plugin_bus/ -v`
+Run: `cd backend && python -m pytest tests/unit/plugin_bus/ -v`
 Expected: PASS, 193 passed (191 existing + 2 new).
 
 - [ ] **Step 10: Run the simplest msg-2 reproducer — this is the diagnostic**
@@ -202,7 +202,7 @@ cd /workspace
 git add backend/skrib/rooms/services.py backend/skrib/plugins/core_api.py \
         backend/skrib_plugin_sdk/core_api.py backend/skrib/plugin_bus/bridge.py \
         backend/plugins/four43.room-type-chat/backend/plugin_bus.py \
-        backend/test_plugin_bus/test_notify_levels_batch.py
+        backend/tests/unit/plugin_bus/test_notify_levels_batch.py
 git commit -m "perf: Batch notify-level lookup into one core_api call
 
 get_notify_level was called once per room member inside the chat
@@ -222,7 +222,7 @@ Co-Authored-By: Claude Opus 5 (1M context) <noreply@anthropic.com>"
 
 **Files:**
 - Create: `backend/skrib_plugin_sdk/inprocess.py`
-- Test: `backend/test_plugin_bus/test_inprocess_client.py`
+- Test: `backend/tests/unit/plugin_bus/test_inprocess_client.py`
 
 **Interfaces:**
 - Consumes: nothing from earlier tasks.
@@ -241,7 +241,7 @@ Co-Authored-By: Claude Opus 5 (1M context) <noreply@anthropic.com>"
 
 - [ ] **Step 1: Write the failing test**
 
-Create `backend/test_plugin_bus/test_inprocess_client.py`:
+Create `backend/tests/unit/plugin_bus/test_inprocess_client.py`:
 
 ```python
 """InProcessClient must satisfy the same contract as BusClient."""
@@ -353,7 +353,7 @@ async def test_send_before_connect_raises():
 
 - [ ] **Step 2: Run the test and confirm it fails**
 
-Run: `cd backend && python -m pytest test_plugin_bus/test_inprocess_client.py -v`
+Run: `cd backend && python -m pytest tests/unit/plugin_bus/test_inprocess_client.py -v`
 Expected: FAIL with `ModuleNotFoundError: No module named 'skrib_plugin_sdk.inprocess'`.
 
 - [ ] **Step 3: Write the implementation**
@@ -472,7 +472,7 @@ class InProcessClient:
 
 - [ ] **Step 4: Run the test and confirm it passes**
 
-Run: `cd backend && python -m pytest test_plugin_bus/test_inprocess_client.py -v`
+Run: `cd backend && python -m pytest tests/unit/plugin_bus/test_inprocess_client.py -v`
 Expected: PASS (6 passed).
 
 - [ ] **Step 5: Commit**
@@ -480,7 +480,7 @@ Expected: PASS (6 passed).
 ```bash
 cd /workspace
 git add backend/skrib_plugin_sdk/inprocess.py \
-        backend/test_plugin_bus/test_inprocess_client.py
+        backend/tests/unit/plugin_bus/test_inprocess_client.py
 git commit -m "feat: Add InProcessClient transport to the plugin SDK
 
 SkribPlugin reaches its transport only through the BusClient interface,
@@ -503,7 +503,7 @@ Every core→plugin path in the bridge funnels through `self._server.send_to_plu
 
 **Files:**
 - Modify: `backend/skrib/plugin_bus/bridge.py`
-- Test: `backend/test_plugin_bus/test_inprocess_host.py` (first two tests only)
+- Test: `backend/tests/unit/plugin_bus/test_inprocess_host.py` (first two tests only)
 
 **Interfaces:**
 - Consumes: `InProcessClient.deliver` from Task 2.
@@ -515,7 +515,7 @@ Every core→plugin path in the bridge funnels through `self._server.send_to_plu
 
 - [ ] **Step 1: Write the failing test**
 
-Create `backend/test_plugin_bus/test_inprocess_host.py` with the routing tests:
+Create `backend/tests/unit/plugin_bus/test_inprocess_host.py` with the routing tests:
 
 ```python
 """In-process plugins must be reachable through the same bridge paths."""
@@ -562,11 +562,11 @@ def test_unregister_removes_room_types(bridge):
     assert bridge.get_bus_plugin_for_room_type("chat") is None
 ```
 
-Add a `bridge` fixture to `backend/test_plugin_bus/conftest.py` if one does not already exist. `test_plugin_bus/` already constructs bridges for existing tests — reuse that construction rather than writing a new one.
+Add a `bridge` fixture to `backend/tests/unit/plugin_bus/conftest.py` if one does not already exist. `tests/unit/plugin_bus/` already constructs bridges for existing tests — reuse that construction rather than writing a new one.
 
 - [ ] **Step 2: Run the test and confirm it fails**
 
-Run: `cd backend && python -m pytest test_plugin_bus/test_inprocess_host.py -v`
+Run: `cd backend && python -m pytest tests/unit/plugin_bus/test_inprocess_host.py -v`
 Expected: FAIL with `AttributeError: 'PluginBusBridge' object has no attribute 'register_inprocess'`.
 
 - [ ] **Step 3: Add the in-process registry to the bridge**
@@ -638,7 +638,7 @@ Verify with: `grep -n "_server.send_to_plugin" skrib/plugin_bus/bridge.py` — a
 
 - [ ] **Step 6: Run the tests and confirm they pass**
 
-Run: `cd backend && python -m pytest test_plugin_bus/ -v`
+Run: `cd backend && python -m pytest tests/unit/plugin_bus/ -v`
 Expected: PASS, 196 passed. The 191 pre-existing tests must all still pass — they exercise the bus-server path, which `_send_to_plugin` falls through to unchanged.
 
 - [ ] **Step 7: Commit**
@@ -646,8 +646,8 @@ Expected: PASS, 196 passed. The 191 pre-existing tests must all still pass — t
 ```bash
 cd /workspace
 git add backend/skrib/plugin_bus/bridge.py \
-        backend/test_plugin_bus/test_inprocess_host.py \
-        backend/test_plugin_bus/conftest.py
+        backend/tests/unit/plugin_bus/test_inprocess_host.py \
+        backend/tests/unit/plugin_bus/conftest.py
 git commit -m "feat: Route core->plugin frames to in-process plugins
 
 Every core->plugin path in the bridge funnelled through
@@ -666,7 +666,7 @@ Co-Authored-By: Claude Opus 5 (1M context) <noreply@anthropic.com>"
 
 **Files:**
 - Create: `backend/skrib/plugin_bus/inprocess_host.py`
-- Test: `backend/test_plugin_bus/test_inprocess_host.py` (append)
+- Test: `backend/tests/unit/plugin_bus/test_inprocess_host.py` (append)
 
 **Interfaces:**
 - Consumes: `InProcessClient` (Task 2); `bridge.register_inprocess` / `unregister_inprocess` (Task 3).
@@ -678,7 +678,7 @@ Co-Authored-By: Claude Opus 5 (1M context) <noreply@anthropic.com>"
 
 - [ ] **Step 1: Write the failing test**
 
-Append to `backend/test_plugin_bus/test_inprocess_host.py`:
+Append to `backend/tests/unit/plugin_bus/test_inprocess_host.py`:
 
 ```python
 import json
@@ -714,7 +714,7 @@ def test_discover_ignores_directories_without_manifests(tmp_path):
 
 - [ ] **Step 2: Run the test and confirm it fails**
 
-Run: `cd backend && python -m pytest test_plugin_bus/test_inprocess_host.py -v`
+Run: `cd backend && python -m pytest tests/unit/plugin_bus/test_inprocess_host.py -v`
 Expected: FAIL with `ModuleNotFoundError: No module named 'skrib.plugin_bus.inprocess_host'`.
 
 - [ ] **Step 3: Write the implementation**
@@ -870,7 +870,7 @@ class InProcessHost:
 
 - [ ] **Step 4: Run the tests and confirm they pass**
 
-Run: `cd backend && python -m pytest test_plugin_bus/ -v`
+Run: `cd backend && python -m pytest tests/unit/plugin_bus/ -v`
 Expected: PASS, 198 passed.
 
 - [ ] **Step 5: Commit**
@@ -878,7 +878,7 @@ Expected: PASS, 198 passed.
 ```bash
 cd /workspace
 git add backend/skrib/plugin_bus/inprocess_host.py \
-        backend/test_plugin_bus/test_inprocess_host.py
+        backend/tests/unit/plugin_bus/test_inprocess_host.py
 git commit -m "feat: Add InProcessHost to load runtime: in_process plugins
 
 Imports each plugin's backend/plugin_bus.py, instantiates it, wires an
@@ -941,7 +941,7 @@ Expected: the server boots, prints no `[Plugins] in-process:` line, and `/api/se
 
 - [ ] **Step 4: Run the full backend suite**
 
-Run: `cd backend && python -m pytest test_plugin_bus/ -v`
+Run: `cd backend && python -m pytest tests/unit/plugin_bus/ -v`
 Expected: PASS, 198 passed.
 
 - [ ] **Step 5: Commit**
@@ -1195,7 +1195,7 @@ Co-Authored-By: Claude Opus 5 (1M context) <noreply@anthropic.com>"
 
 - [ ] **Step 1: Run the whole backend suite**
 
-Run: `cd backend && python -m pytest test_plugin_bus/ -v`
+Run: `cd backend && python -m pytest tests/unit/plugin_bus/ -v`
 Expected: PASS, 198 passed.
 
 - [ ] **Step 2: Run the frontend unit tests**
@@ -1254,7 +1254,7 @@ run in-process; web-push and attachments stay sandboxed on the bus.
 
 **Spec coverage.** This plan implements the parts of `docs/spec/2026-08-02-extension-model.md` needed for green tests: the `runtime` manifest field (§1), one SDK for both runtimes (§3), the security bifurcation (§3.1), and the in/out placement for six of the seven plugins (§4), plus the `get_notify_levels` batching (§4.1). Deliberately **not** covered, and still open in `TODO.md`: the `kind` and `applies_to` manifest fields, moving `subscriptions` out of Python class attributes, core-owned plugin supervision (§5), splitting link previews out of the chat plugin, folding themes in, and splitting `bus.send`. `four43.chat-typing` is flipped to in-process rather than deleted, because deleting it needs the core signal channel from the P2 spec.
 
-**Placeholder scan.** Every code step carries real code. The two places that intentionally defer to existing repo conventions are the `seeded_room` and `bridge` pytest fixtures — both say to reuse what `test_plugin_bus/conftest.py` already has rather than inventing a parallel construction, which is the correct instruction rather than a placeholder.
+**Placeholder scan.** Every code step carries real code. The two places that intentionally defer to existing repo conventions are the `seeded_room` and `bridge` pytest fixtures — both say to reuse what `tests/unit/plugin_bus/conftest.py` already has rather than inventing a parallel construction, which is the correct instruction rather than a placeholder.
 
 **Type consistency.** `get_notify_levels(room_id) -> dict[str, str]` is spelled identically in the core service, both CoreAPI classes, the bridge dispatch, and the chat plugin call site. `InProcessClient`'s method set matches the `BusClient` surface `SkribPlugin` actually uses (`connected`, `on_frame`, `connect`, `run`, `run_with_reconnect`, `send`, `request`, `close`) plus `deliver`. `register_inprocess(plugin_id, deliver, room_types)` is spelled the same in Task 3's implementation and Task 4's call site.
 
