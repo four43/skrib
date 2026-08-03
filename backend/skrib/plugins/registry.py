@@ -9,12 +9,9 @@ Adding a third runtime means changing this file, not four others.
 """
 from __future__ import annotations
 
-import logging
 from typing import Any
 
 from ..plugin_bus.protocol import ApprovalStatus
-
-logger = logging.getLogger(__name__)
 
 RECORD_KEYS = (
     "id", "version", "permissions", "room_types", "room_type_meta",
@@ -38,8 +35,13 @@ class PluginRegistry:
         one stays there awaiting admin approval. Bus presence alone is
         therefore not "active"; every caller needs this same approval check,
         so it lives here rather than in each of them.
+
+        A security gate must fail closed: a connection with no ``status`` at
+        all (unreachable with the real ``PluginConnection`` dataclass, whose
+        ``status`` field always defaults to APPROVED) is treated as
+        not-approved, not as implicitly approved.
         """
-        status = getattr(conn, "status", ApprovalStatus.APPROVED)
+        status = getattr(conn, "status", None)
         if status != ApprovalStatus.APPROVED:
             return None
         return {
@@ -94,3 +96,26 @@ class PluginRegistry:
 
     def is_active(self, plugin_id: str) -> bool:
         return self.get(plugin_id) is not None
+
+    def room_type_owner(self, room_type: str) -> str | None:
+        """Return the id of the plugin that owns this room type, or None.
+
+        In-process is checked first, matching ``get``/``all``'s precedence.
+        For the bus half this reads ``room_type_map`` directly rather than
+        going through ``all()``/``_record_from_conn``: a room type can only
+        ever land in that map via a REGISTER_ROOM_TYPE frame, which the bus
+        server's message loop refuses to accept from a non-approved
+        connection (see ``PluginBusServer._message_loop``), and the mapping
+        is removed the moment that connection is cleaned up — so an entry
+        here is already guaranteed approved, with no separate check needed.
+        This mirrors ``PluginBusBridge.get_bus_plugin_for_room_type``, which
+        callers that already hold a bridge reference (rooms/services.py)
+        should use directly instead of adding a registry dependency.
+        """
+        if self._host is not None:
+            for rec in self._host.plugin_records():
+                if room_type in rec["room_types"]:
+                    return rec["id"]
+        if self._bus is not None:
+            return self._bus.room_type_map.get(room_type)
+        return None

@@ -59,6 +59,56 @@ class TestServerInfo:
         assert resp.status_code == 200
         assert resp.json()["registration_mode"] == "open"
 
+    def test_update_dm_room_type_accepts_inprocess_plugin(self, client):
+        """dm_room_type can name an in-process plugin — server/routes.py:57
+        from Task 4C's follow-up review."""
+        from skrib.main import app
+        from skrib.plugins.registry import PluginRegistry
+        from unittest.mock import MagicMock
+
+        class _FakeInProcessHost:
+            def plugin_records(self):
+                return [{
+                    "id": "four43.inproc-chat", "version": "1.0.0", "permissions": [],
+                    "room_types": ["chat"], "room_type_meta": {}, "frontend_scripts": [],
+                    "frontend_styles": [], "http_base_url": None, "runtime": "in_process",
+                }]
+
+        saved = getattr(app.state, "plugin_registry", None)
+        mock_bus = MagicMock()
+        mock_bus.room_type_map = {}
+        app.state.plugin_registry = PluginRegistry(mock_bus, _FakeInProcessHost())
+        try:
+            token = _create_user("admin", role="admin")
+            resp = client.patch("/api/server",
+                                json={"dm_room_type": "four43.inproc-chat"}, headers=_auth(token))
+            assert resp.status_code == 200
+        finally:
+            if saved is not None:
+                app.state.plugin_registry = saved
+            else:
+                del app.state.plugin_registry
+
+    def test_update_dm_room_type_rejects_unknown_plugin(self, client):
+        from skrib.main import app
+        from skrib.plugins.registry import PluginRegistry
+        from unittest.mock import MagicMock
+
+        saved = getattr(app.state, "plugin_registry", None)
+        mock_bus = MagicMock()
+        mock_bus.room_type_map = {}
+        app.state.plugin_registry = PluginRegistry(mock_bus, None)
+        try:
+            token = _create_user("admin", role="admin")
+            resp = client.patch("/api/server",
+                                json={"dm_room_type": "four43.does-not-exist"}, headers=_auth(token))
+            assert resp.status_code == 400
+        finally:
+            if saved is not None:
+                app.state.plugin_registry = saved
+            else:
+                del app.state.plugin_registry
+
 
 # ---------------------------------------------------------------------------
 # Tests: Server icon

@@ -1,8 +1,7 @@
 """The registry must present both runtimes through one interface."""
-import pytest
-
 from skrib.plugin_bus.protocol import ApprovalStatus
-from skrib.plugins.registry import PluginRegistry
+from skrib.plugin_bus.server import PluginConnection
+from skrib.plugins.registry import RECORD_KEYS, PluginRegistry
 
 
 class _FakeConn:
@@ -20,11 +19,12 @@ class _FakeConn:
 
 class _FakeBusServer:
     """Mirrors PluginBusServer's actual public surface: a ``plugins`` property
-    (dict[id, conn]) and a ``get_plugin`` lookup — see server.py."""
+    (dict[id, conn]), ``room_type_map``, and a ``get_plugin`` lookup — see
+    server.py."""
 
-    def __init__(self, conns):
+    def __init__(self, conns, room_type_map=None):
         self._conns = conns
-        self.room_type_map = {"chat": "four43.bus-one"}
+        self.room_type_map = room_type_map if room_type_map is not None else {"chat": "four43.bus-one"}
 
     @property
     def plugins(self):
@@ -35,8 +35,8 @@ class _FakeBusServer:
 
 
 class _FakeHost:
-    def plugin_records(self):
-        return [{
+    def __init__(self, records=None):
+        self._records = records if records is not None else [{
             "id": "four43.inproc-one",
             "version": "2.0.0",
             "permissions": ["bus.send"],
@@ -47,6 +47,9 @@ class _FakeHost:
             "http_base_url": "http://127.0.0.1:9222",
             "runtime": "in_process",
         }]
+
+    def plugin_records(self):
+        return self._records
 
 
 def test_get_resolves_both_runtimes():
@@ -77,7 +80,7 @@ def test_records_share_one_key_set():
     reg = PluginRegistry(_FakeBusServer({"four43.bus-one": _FakeConn("four43.bus-one")}), _FakeHost())
     shapes = {frozenset(r) for r in reg.all()}
 
-    assert len(shapes) == 1
+    assert shapes == {frozenset(RECORD_KEYS)}
 
 
 def test_works_with_no_in_process_host():
@@ -138,3 +141,82 @@ class TestPendingBusPluginIsNotActive:
 
         assert reg.get("four43.rejected-one") is None
         assert reg.is_active("four43.rejected-one") is False
+
+    def test_missing_status_fails_closed(self):
+        """A security gate must fail closed: if a connection object somehow
+        has no ``status`` at all, treat it as not-approved rather than
+        defaulting to APPROVED. Unreachable with the real ``PluginConnection``
+        dataclass (its ``status`` field always defaults to APPROVED), but
+        worth guarding since ``_record_from_conn`` reads every other
+        attribute with a permissive ``getattr(..., default)``.
+        """
+        conn = _FakeConn("four43.no-status")
+        del conn.status
+        reg = PluginRegistry(_FakeBusServer({"four43.no-status": conn}), None)
+
+        assert reg.get("four43.no-status") is None
+        assert reg.is_active("four43.no-status") is False
+
+
+class TestRoomTypeOwner:
+    """room_type_owner(room_type) -> plugin id, for callers that only need
+    the owning id (room creation / DM room-type validation) rather than a
+    full record — see rooms/routes.py and server/routes.py.
+    """
+
+    def test_resolves_bus_owned_room_type(self):
+        reg = PluginRegistry(_FakeBusServer({}, room_type_map={"chat": "four43.bus-chat"}), None)
+
+        assert reg.room_type_owner("chat") == "four43.bus-chat"
+
+    def test_resolves_in_process_owned_room_type(self):
+        reg = PluginRegistry(_FakeBusServer({}, room_type_map={}), _FakeHost())
+
+        assert reg.room_type_owner("todo") == "four43.inproc-one"
+
+    def test_unknown_room_type_returns_none(self):
+        reg = PluginRegistry(_FakeBusServer({}, room_type_map={}), _FakeHost())
+
+        assert reg.room_type_owner("nonexistent") is None
+
+    def test_in_process_wins_when_both_own_the_same_room_type(self):
+        reg = PluginRegistry(
+            _FakeBusServer({}, room_type_map={"todo": "four43.bus-todo"}),
+            _FakeHost(),
+        )
+
+        assert reg.room_type_owner("todo") == "four43.inproc-one"
+
+
+def test_record_matches_a_real_plugin_connection():
+    """A hand-rolled fake conn double can silently drift from the real
+    ``PluginConnection`` dataclass if a field is ever renamed. Build a real
+    one and assert the record reflects it, so that drift fails a test
+    instead of failing silently in production.
+    """
+    conn = PluginConnection(
+        plugin_id="four43.real-one",
+        version="3.2.1",
+        ws=None,
+        permissions={"bus.send", "core.read"},
+        room_types=["chat"],
+        room_type_meta={"chat": {"display_name": "Chat"}},
+        frontend_scripts=["frontend/dist/plugin.js"],
+        frontend_styles=["frontend/dist/plugin.css"],
+        http_base_url="http://127.0.0.1:9333",
+    )
+    reg = PluginRegistry(_FakeBusServer({"four43.real-one": conn}), None)
+
+    record = reg.get("four43.real-one")
+    permissions = record.pop("permissions")
+    assert set(permissions) == {"bus.send", "core.read"}
+    assert record == {
+        "id": "four43.real-one",
+        "version": "3.2.1",
+        "room_types": ["chat"],
+        "room_type_meta": {"chat": {"display_name": "Chat"}},
+        "frontend_scripts": ["frontend/dist/plugin.js"],
+        "frontend_styles": ["frontend/dist/plugin.css"],
+        "http_base_url": "http://127.0.0.1:9333",
+        "runtime": "process",
+    }

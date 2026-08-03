@@ -4,7 +4,7 @@ import secrets
 from datetime import datetime
 from unittest.mock import patch, MagicMock
 
-from skrib.database import get_db
+from skrib.database import get_db, set_setting
 from skrib.rooms.services import ROOMS, ROOMS_LOCK
 
 from .conftest import do_full_registration, set_mode
@@ -17,6 +17,31 @@ def _mock_plugin_bus(room_types=None):
     mock_bus = MagicMock()
     mock_bus.room_type_map = room_types
     return mock_bus
+
+
+class _FakeInProcessHost:
+    """A minimal in-process host double — see skrib.plugin_bus.inprocess_host
+    .InProcessHost.plugin_records() for the real shape this mirrors."""
+
+    def __init__(self, records):
+        self._records = records
+
+    def plugin_records(self):
+        return self._records
+
+
+def _inprocess_record(plugin_id: str, room_types: list) -> dict:
+    return {
+        "id": plugin_id,
+        "version": "1.0.0",
+        "permissions": [],
+        "room_types": room_types,
+        "room_type_meta": {},
+        "frontend_scripts": [],
+        "frontend_styles": [],
+        "http_base_url": None,
+        "runtime": "in_process",
+    }
 
 
 # ---------------------------------------------------------------------------
@@ -66,9 +91,19 @@ def _add_member(room_id: str, username: str, room_role: str = "member"):
         conn.commit()
 
 
-def _set_mock_plugin_bus(app, room_types=None):
-    """Set a mock plugin bus on app.state for room creation tests."""
-    app.state.plugin_bus = _mock_plugin_bus(room_types)
+def _set_mock_plugin_bus(app, room_types=None, inprocess_host=None):
+    """Install a registry wrapping a mock plugin bus for room creation tests.
+
+    ``create_new_room``/``create_dm`` read ``app.state.plugin_registry``, not
+    ``app.state.plugin_bus`` directly — the registry is constructed once at
+    app startup and holds its own reference, so reassigning
+    ``app.state.plugin_bus`` afterwards (the old approach) has no effect on
+    it. Install a fresh registry instead.
+    """
+    from skrib.plugins.registry import PluginRegistry
+    mock_bus = _mock_plugin_bus(room_types)
+    app.state.plugin_bus = mock_bus
+    app.state.plugin_registry = PluginRegistry(mock_bus, inprocess_host)
 
 
 # ---------------------------------------------------------------------------
@@ -143,6 +178,20 @@ class TestCreateRoom:
                            headers=_auth(token))
         assert resp.status_code == 400
 
+    def test_create_room_with_inprocess_room_type_succeeds(self, client):
+        """A room type owned by an in-process plugin (no bus connection at
+        all) must be just as usable as a bus-owned one — this is the
+        rooms/routes.py:101 call site from Task 4C's follow-up review."""
+        from skrib.main import app
+        host = _FakeInProcessHost([_inprocess_record("four43.inproc-todo", ["todo"])])
+        _set_mock_plugin_bus(app, room_types={}, inprocess_host=host)
+        token = _create_user("alice")
+
+        resp = client.post("/api/rooms", json={"room_id": "my-inprocess-room", "room_type": "todo"},
+                           headers=_auth(token))
+        assert resp.status_code == 200
+        assert resp.json()["room_id"] == "my-inprocess-room"
+
     def test_create_room_invalid_type(self, client):
         from skrib.main import app
         _set_mock_plugin_bus(app, room_types={})
@@ -155,6 +204,54 @@ class TestCreateRoom:
     def test_create_room_unauthenticated(self, client):
         resp = client.post("/api/rooms", json={"room_id": "test", "room_type": "chat"})
         assert resp.status_code == 401
+
+
+# ---------------------------------------------------------------------------
+# Tests: Create DM
+# ---------------------------------------------------------------------------
+
+class TestCreateDM:
+    def test_create_dm_with_inprocess_dm_room_type_resolves(self, client):
+        """dm_room_type can name an in-process plugin — rooms/routes.py:148
+        from Task 4C's follow-up review."""
+        from skrib.main import app
+        host = _FakeInProcessHost([_inprocess_record("four43.inproc-chat", ["chat"])])
+        saved = getattr(app.state, "plugin_registry", None)
+        from skrib.plugins.registry import PluginRegistry
+        app.state.plugin_registry = PluginRegistry(_mock_plugin_bus({}), host)
+        set_setting("dm_room_type", "four43.inproc-chat")
+        try:
+            token = _create_user("alice")
+            _create_user("bob")
+
+            resp = client.post("/api/rooms/dm", json={"usernames": ["bob"]}, headers=_auth(token))
+            assert resp.status_code == 200
+            assert resp.json()["room"]["room_type"] == "chat"
+        finally:
+            if saved is not None:
+                app.state.plugin_registry = saved
+            else:
+                del app.state.plugin_registry
+
+    def test_create_dm_missing_dm_plugin_fails(self, client):
+        """No registry entry for the configured dm_room_type plugin — 500,
+        not a silent wrong room type."""
+        from skrib.main import app
+        saved = getattr(app.state, "plugin_registry", None)
+        from skrib.plugins.registry import PluginRegistry
+        app.state.plugin_registry = PluginRegistry(_mock_plugin_bus({}), None)
+        set_setting("dm_room_type", "four43.does-not-exist")
+        try:
+            token = _create_user("alice")
+            _create_user("bob")
+
+            resp = client.post("/api/rooms/dm", json={"usernames": ["bob"]}, headers=_auth(token))
+            assert resp.status_code == 500
+        finally:
+            if saved is not None:
+                app.state.plugin_registry = saved
+            else:
+                del app.state.plugin_registry
 
 
 # ---------------------------------------------------------------------------

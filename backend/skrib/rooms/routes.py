@@ -96,10 +96,10 @@ async def create_new_room(
             detail="Room name must be lowercase letters, numbers, and hyphens only (e.g. 'my-room')"
         )
 
-    # Validate the room type is provided by a connected plugin
+    # Validate the room type is provided by an active plugin (either runtime)
     from ..main import app as _app
-    _plugin_bus = getattr(_app.state, 'plugin_bus', None)
-    if not _plugin_bus or request.room_type not in _plugin_bus.room_type_map:
+    _registry = getattr(_app.state, 'plugin_registry', None)
+    if not _registry or _registry.room_type_owner(request.room_type) is None:
         raise HTTPException(
             status_code=400,
             detail=f"Unsupported room type: '{request.room_type}'"
@@ -145,15 +145,15 @@ async def create_dm(
 
     # Resolve DM room type from server setting (plugin ID -> room type)
     from ..main import app as _app
-    _plugin_bus = getattr(_app.state, 'plugin_bus', None)
+    _registry = getattr(_app.state, 'plugin_registry', None)
     dm_plugin_id = get_setting('dm_room_type', 'four43.room-type-chat')
-    dm_conn = _plugin_bus.get_plugin(dm_plugin_id) if _plugin_bus else None
-    if not dm_conn or not dm_conn.room_types:
+    dm_record = _registry.get(dm_plugin_id) if _registry else None
+    if not dm_record or not dm_record["room_types"]:
         raise HTTPException(
             status_code=500,
             detail=f"DM room type plugin '{dm_plugin_id}' is not available"
         )
-    room_type = dm_conn.room_types[0]
+    room_type = dm_record["room_types"][0]
 
     # Verify all target users exist
     from ..database import get_db

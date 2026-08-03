@@ -7,6 +7,7 @@ from pydantic import BaseModel
 from typing import Optional, List, Dict
 
 from ..dependencies import require_admin
+from .registry import PluginRegistry
 
 # All plugins live in backend/plugins/
 PLUGINS_DIR = Path(__file__).parent.parent.parent / "plugins"
@@ -75,6 +76,11 @@ def _plugin_info_from_registry(plugin_id: str, record: dict) -> Optional[PluginI
     Both runtimes' records share one key set (see plugins/registry.py), so
     this one function builds a PluginInfo for either — a bus-connected
     plugin or an in-process one — without needing to know which.
+
+    Raises whatever a malformed record raises (e.g. ``KeyError`` for a
+    missing key) rather than swallowing it — that's the caller's job, since
+    the caller is the one that knows losing one plugin's listing beats
+    losing everyone's.
     """
     try:
         info = load_plugin_manifest(plugin_id)
@@ -95,6 +101,21 @@ def _plugin_info_from_registry(plugin_id: str, record: dict) -> Optional[PluginI
     return info
 
 
+def _active_records(registry: PluginRegistry) -> List[dict]:
+    """registry.all(), or [] if enumerating it fails.
+
+    Two independently-owned data sources feed this (a bus connection map and
+    a live plugin host) — a defect in either must not take the whole listing
+    down. Mirrors the fail-soft guarantee the old ``_get_bus_plugins()`` had
+    around its own enumeration.
+    """
+    try:
+        return registry.all()
+    except Exception as e:
+        print(f"[Plugins] Failed to enumerate active plugins: {e}")
+        return []
+
+
 @router.get("", response_model=List[PluginInfo])
 async def list_plugins():
     """List all plugins — combines active (bus-connected or in-process) and filesystem-discovered plugins."""
@@ -103,9 +124,13 @@ async def list_plugins():
 
     plugins = []
     active_ids = set()
-    for record in (registry.all() if registry else []):
-        plugin_id = record["id"]
-        info = _plugin_info_from_registry(plugin_id, record)
+    for record in (_active_records(registry) if registry else []):
+        plugin_id = record.get("id", "<unknown>")
+        try:
+            info = _plugin_info_from_registry(plugin_id, record)
+        except Exception as e:
+            print(f"[Plugins] Failed to list active plugin {plugin_id}, skipping: {e}")
+            continue
         if info is None:
             print(f"[Plugins] Active plugin {plugin_id} has no on-disk manifest, skipping")
             continue

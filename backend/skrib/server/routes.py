@@ -56,9 +56,9 @@ async def update_server(
 
     if updates.dm_room_type is not None:
         from ..main import app as _app
-        _plugin_bus = getattr(_app.state, 'plugin_bus', None)
-        _conn = _plugin_bus.get_plugin(updates.dm_room_type) if _plugin_bus else None
-        if not _conn or not _conn.room_types:
+        _registry = getattr(_app.state, 'plugin_registry', None)
+        _record = _registry.get(updates.dm_room_type) if _registry else None
+        if not _record or not _record["room_types"]:
             raise HTTPException(
                 status_code=400,
                 detail=f"Plugin '{updates.dm_room_type}' not found or does not provide a room type"

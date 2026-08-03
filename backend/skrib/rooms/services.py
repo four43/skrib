@@ -449,9 +449,8 @@ async def get_unread_counts(username: str) -> Dict[str, int]:
     if not rooms:
         return {}
 
-    # Group by room type and delegate to bus-connected plugins
+    # Group by room type and delegate to the owning plugin, either runtime
     from ..main import app as _app
-    _plugin_bus = getattr(_app.state, 'plugin_bus', None)
     _bridge = getattr(_app.state, 'plugin_bus_bridge', None)
 
     by_type: Dict[str, Dict[str, int]] = {}
@@ -463,7 +462,7 @@ async def get_unread_counts(username: str) -> Dict[str, int]:
 
     result = {}
     for room_type, positions in by_type.items():
-        plugin_id = _plugin_bus.room_type_map.get(room_type) if _plugin_bus else None
+        plugin_id = _bridge.get_bus_plugin_for_room_type(room_type) if _bridge else None
         if plugin_id and _bridge:
             counts = await _bridge.send_callback(
                 plugin_id, "/unread-counts-batch", {"room_positions": positions}
@@ -687,16 +686,15 @@ async def get_unread_count_for_room(room_id: str, username: str) -> int:
             return 0
         last_read = row['last_read_message_id'] or 0
 
-    # Get room type and delegate to bus-connected plugin
+    # Get room type and delegate to the owning plugin, either runtime
     room_type = get_room_type(room_id)
     if not room_type:
         return 0
 
     from ..main import app as _app
-    _plugin_bus = getattr(_app.state, 'plugin_bus', None)
     _bridge = getattr(_app.state, 'plugin_bus_bridge', None)
 
-    plugin_id = _plugin_bus.room_type_map.get(room_type) if _plugin_bus else None
+    plugin_id = _bridge.get_bus_plugin_for_room_type(room_type) if _bridge else None
     if plugin_id and _bridge:
         count = await _bridge.send_callback(
             plugin_id, "/unread-count", {"room_id": room_id, "since_message_id": last_read}
