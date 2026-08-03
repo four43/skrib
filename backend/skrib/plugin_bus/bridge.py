@@ -286,13 +286,24 @@ class PluginBusBridge:
     # Core → Plugin: lifecycle events
     # ------------------------------------------------------------------
 
+    async def _broadcast_core_event(self, event_name: str, payload: dict) -> None:
+        """Deliver a ``core:*`` event to feature plugins that subscribed to it.
+
+        The room-type owner receives the typed ``lifecycle.*`` frame separately;
+        this is how everyone else (attachments, etc.) hears about lifecycle changes.
+        """
+        await self._server.broadcast_to_subscribers(
+            f"core:{event_name}",
+            {"type": FrameType.EVENT.value, "event_type": f"core:{event_name}", **payload},
+        )
+
     async def _on_room_created(self, event: dict) -> None:
         room_id = event.get("room_id")
         room_type = event.get("room_type")
         creator = event.get("creator")
         if not room_id or not room_type:
             return
-        # Send to the plugin that owns this room type
+        # Typed lifecycle frame to the room-type owner
         plugin_id = self._server.room_type_map.get(room_type)
         if plugin_id:
             await self._server.send_to_plugin(plugin_id, {
@@ -301,6 +312,10 @@ class PluginBusBridge:
                 "room_type": room_type,
                 "creator": creator or "",
             })
+        # Generic event for feature plugins subscribed to "core:room_created"
+        await self._broadcast_core_event("room_created", {
+            "room_id": room_id, "room_type": room_type, "creator": creator or "",
+        })
 
     async def _on_room_deleted(self, event: dict) -> None:
         room_id = event.get("room_id")
@@ -314,6 +329,9 @@ class PluginBusBridge:
                 "room_id": room_id,
                 "room_type": room_type,
             })
+        await self._broadcast_core_event("room_deleted", {
+            "room_id": room_id, "room_type": room_type,
+        })
 
     async def _on_user_joined(self, event: dict) -> None:
         room_id = event.get("room_id")
@@ -321,7 +339,6 @@ class PluginBusBridge:
         room_type = event.get("room_type")
         if not room_id or not username:
             return
-        # Send to room type owner if known, otherwise broadcast to all plugins
         if room_type:
             plugin_id = self._server.room_type_map.get(room_type)
             if plugin_id:
@@ -330,6 +347,10 @@ class PluginBusBridge:
                     "room_id": room_id,
                     "username": username,
                 })
+        await self._broadcast_core_event("user_joined", {
+            "room_id": room_id, "username": username,
+            "room_type": room_type or "",
+        })
 
     async def _on_user_left(self, event: dict) -> None:
         room_id = event.get("room_id")
@@ -345,6 +366,10 @@ class PluginBusBridge:
                     "room_id": room_id,
                     "username": username,
                 })
+        await self._broadcast_core_event("user_left", {
+            "room_id": room_id, "username": username,
+            "room_type": room_type or "",
+        })
 
     # ------------------------------------------------------------------
     # Query helpers for handlers.py

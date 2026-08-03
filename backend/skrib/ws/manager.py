@@ -267,8 +267,74 @@ class UnifiedConnectionManager:
 
         namespace = parts[0]
         handler = self.namespace_handlers.get(namespace)
-        if not handler:
-            await ws.send_json({"type": "system:error", "message": f"Unknown namespace: {namespace}"})
+        if handler:
+            await handler(self, ws, username, msg)
             return
 
-        await handler(self, ws, username, msg)
+        # Fallback: namespace may belong to a bus-connected plugin.
+        if await self._dispatch_plugin_namespace(ws, username, namespace, parts[1], msg):
+            return
+
+        await ws.send_json({"type": "system:error", "message": f"Unknown namespace: {namespace}"})
+
+    async def _dispatch_plugin_namespace(self, ws: 'WebSocket', username: str,
+                                        plugin_id: str, action: str, msg: dict) -> bool:
+        """Dispatch a ``{plugin_id}:{action}`` message to a bus-connected plugin.
+
+        This is the path feature plugins (typing, reactions, web-push) take —
+        their frontends send messages on their own namespace and the bridge
+        forwards them as ``room.action`` frames so the SDK's
+        ``@on_room_action`` decorators fire.
+
+        Returns True if the message was dispatched (or rejected with an error
+        sent to the client), False if no plugin matches the namespace.
+        """
+        try:
+            from ..main import app
+            bridge = getattr(app.state, 'plugin_bus_bridge', None)
+            plugin_bus = getattr(app.state, 'plugin_bus', None)
+            if not bridge or not plugin_bus or not plugin_bus.get_plugin(plugin_id):
+                return False
+        except Exception:
+            return False
+
+        room_id = msg.get("room_id", "")
+        # If the message claims a room, enforce membership the same way
+        # handle_room does.
+        if room_id:
+            from ..rooms.services import room_exists, get_room_members, get_room_role
+            from ..permissions import get_global_role
+            if not room_exists(room_id):
+                await ws.send_json({"type": f"{plugin_id}:error", "room_id": room_id, "message": "Room not found"})
+                return True
+            if username not in get_room_members(room_id):
+                await ws.send_json({"type": f"{plugin_id}:error", "room_id": room_id, "message": "Not a member of this room"})
+                return True
+            user_role = get_global_role(username)
+            room_role = get_room_role(room_id, username)
+        else:
+            from ..permissions import get_global_role
+            user_role = get_global_role(username)
+            room_role = None
+
+        reply_to = self.create_reply_token(ws)
+        try:
+            sent = await bridge.dispatch_room_action(
+                plugin_id=plugin_id,
+                room_id=room_id,
+                action=action,
+                username=username,
+                msg=msg,
+                reply_to=reply_to,
+                user_role=user_role,
+                room_role=room_role,
+            )
+            if not sent:
+                await ws.send_json({
+                    "type": f"{plugin_id}:error",
+                    "room_id": room_id,
+                    "message": "Plugin unavailable",
+                })
+        finally:
+            self.invalidate_reply_token(reply_to)
+        return True

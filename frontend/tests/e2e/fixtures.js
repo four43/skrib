@@ -88,15 +88,38 @@ function getFreePort() {
 }
 
 /**
- * Spawn all out-of-process plugin processes, connecting them to the given bus.
- * Returns an array of child processes.
+ * Discover bundled plugin directories — anything under backend/plugins/ with
+ * a __main__.py and a manifest.json. Returns [{ id, dir }].
+ */
+function discoverBundledPlugins(backendDir) {
+    const pluginsDir = join(backendDir, 'plugins');
+    const out = [];
+    for (const name of readdirSync(pluginsDir).filter(d => d.startsWith('four43.'))) {
+        const dir = join(pluginsDir, name);
+        if (existsSync(join(dir, '__main__.py')) && existsSync(join(dir, 'manifest.json'))) {
+            out.push({ id: name, dir });
+        }
+    }
+    return out;
+}
+
+/**
+ * Spawn all bundled plugin processes, connecting them to the given bus.
+ *
+ * Each child captures stdout/stderr into a per-process buffer that we surface
+ * if the process exits prematurely or if the readiness wait times out — so a
+ * crashing plugin shows its traceback instead of a cryptic 15-second timeout.
+ *
+ * Returns { procs, failures } where failures is a Promise that resolves to
+ * { id, code, stderr } the moment any plugin exits, or never resolves if all
+ * stay alive.
  */
 function startPlugins(backendDir, busPort, dataDir) {
-    const pluginsDir = join(backendDir, 'plugins');
     const procs = [];
-    for (const dir of readdirSync(pluginsDir).filter(d => d.startsWith('four43.'))) {
-        const mainPy = join(pluginsDir, dir, '__main__.py');
-        if (!existsSync(mainPy)) continue;
+    const earlyExits = [];
+    for (const { id, dir } of discoverBundledPlugins(backendDir)) {
+        const mainPy = join(dir, '__main__.py');
+        const buf = { id, stdout: '', stderr: '' };
         const p = spawn(VENV_PYTHON, [mainPy], {
             env: {
                 ...process.env,
@@ -106,26 +129,99 @@ function startPlugins(backendDir, busPort, dataDir) {
             },
             stdio: ['ignore', 'pipe', 'pipe'],
         });
-        if (TIMING) {
-            const tag = `plugin:${dir}`;
-            p.stdout.on('data', d => process.stderr.write(`[${tag} stdout] ${d}`));
-            p.stderr.on('data', d => process.stderr.write(`[${tag} stderr] ${d}`));
-        } else {
-            p.stdout.resume();
-            p.stderr.resume();
-        }
+        p.stdout.setEncoding('utf8');
+        p.stderr.setEncoding('utf8');
+        p.stdout.on('data', d => {
+            buf.stdout += d;
+            if (TIMING) process.stderr.write(`[plugin:${id} stdout] ${d}`);
+        });
+        p.stderr.on('data', d => {
+            buf.stderr += d;
+            if (TIMING) process.stderr.write(`[plugin:${id} stderr] ${d}`);
+        });
+        p.skribBuf = buf;
+        earlyExits.push(new Promise(resolve => {
+            p.on('exit', code => {
+                if (code !== null && code !== 0) resolve({ id, code, stderr: buf.stderr });
+            });
+        }));
         procs.push(p);
     }
-    return procs;
+    const earlyExit = Promise.race(earlyExits);
+    return { procs, earlyExit };
+}
+
+/**
+ * Wait for every bundled plugin to be connected and registered on the bus.
+ *
+ * Polls GET /api/plugins until every expected plugin id appears with at
+ * least its declared room_types registered. If any plugin process exits
+ * before that happens, throws with the captured stderr so the failure is
+ * visible.
+ */
+async function waitForPluginsReady(baseURL, expected, earlyExit, timeoutMs = 20_000) {
+    const expectedRoomTypes = {};
+    for (const e of expected) {
+        if (e.roomTypes && e.roomTypes.length) expectedRoomTypes[e.id] = e.roomTypes;
+    }
+    const expectedIds = new Set(expected.map(e => e.id));
+
+    const start = Date.now();
+    let lastSnapshot = null;
+    while (Date.now() - start < timeoutMs) {
+        const winner = await Promise.race([
+            (async () => {
+                try {
+                    const resp = await fetch(`${baseURL}/api/plugins`);
+                    if (!resp.ok) return null;
+                    return { plugins: await resp.json() };
+                } catch {
+                    return null;
+                }
+            })(),
+            earlyExit.then(failure => ({ failure })),
+        ]);
+
+        if (winner?.failure) {
+            const { id, code, stderr } = winner.failure;
+            throw new Error(
+                `Plugin '${id}' exited with code ${code} before becoming ready.\n` +
+                `--- stderr ---\n${stderr || '(empty)'}\n--------------`
+            );
+        }
+
+        if (winner?.plugins) {
+            lastSnapshot = winner.plugins;
+            const seen = new Set(winner.plugins.map(p => p.id));
+            const missing = [...expectedIds].filter(id => !seen.has(id));
+            const wrongRoomTypes = Object.entries(expectedRoomTypes).filter(([id, rts]) => {
+                const p = winner.plugins.find(x => x.id === id);
+                return !p || !rts.every(rt => p.room_types?.includes(rt));
+            }).map(([id]) => id);
+            if (missing.length === 0 && wrongRoomTypes.length === 0) return winner.plugins;
+        }
+
+        await new Promise(r => setTimeout(r, 50));
+    }
+
+    const seen = lastSnapshot ? lastSnapshot.map(p => p.id).join(', ') : '(none)';
+    throw new Error(
+        `Plugins did not become ready within ${timeoutMs}ms.\n` +
+        `Expected: ${[...expectedIds].join(', ')}\nSeen on bus: ${seen}`
+    );
 }
 
 /**
  * Spawn an isolated backend (uvicorn) with a fresh SQLite DB per test.
  * Uses OS-assigned free ports to avoid conflicts between concurrent tests.
  *
- * Plugin processes are NOT started automatically — they're expensive (7
- * Python processes each) and most tests don't need them.  Fixtures that
- * need plugins call `_backend.startPlugins()` which lazily spawns them.
+ * The backend runs in plugin auto-approve mode (SKRIB_PLUGIN_AUTO_APPROVE=1)
+ * so no admin approval is needed — plugins are approved on first hello.
+ *
+ * Plugin processes are NOT spawned automatically (they're expensive — one
+ * Python process per bundled plugin). Fixtures that need plugins call
+ * `_backend.ensurePlugins()`, which spawns them and returns a Promise that
+ * resolves when *every* bundled plugin is registered on the bus.
  */
 export const test = base.extend({
 
@@ -139,6 +235,19 @@ export const test = base.extend({
         const dataDir = mkdtempSync(join(tmpdir(), 'skrib-e2e-'));
         tmark('ports & tempdir ready', timings);
 
+        // Bundled plugins we expect to register on the bus. The on-disk
+        // manifests don't declare `room_types` — that lives in the plugin
+        // class — so the fixture pins room-type expectations here. If you add
+        // a new bundled plugin that owns a room type, list it here.
+        const ROOM_TYPES_BY_ID = {
+            'four43.room-type-chat': ['chat'],
+            'four43.room-type-todo': ['todo'],
+        };
+        const bundled = discoverBundledPlugins(BACKEND_DIR).map(({ id }) => ({
+            id,
+            roomTypes: ROOM_TYPES_BY_ID[id] || [],
+        }));
+
         const proc = spawn(VENV_PYTHON, ['-m', 'uvicorn', 'skrib.main:app', '--host', '0.0.0.0', '--port', String(port)], {
             cwd: BACKEND_DIR,
             env: {
@@ -146,6 +255,9 @@ export const test = base.extend({
                 SKRIB_DATA_DIR: dataDir,
                 SKRIB_RP_ID: 'localhost',
                 SKRIB_PLUGIN_BUS_PORT: String(busPort),
+                // E2E tests never need the admin-approval dance — auto-approve
+                // every bundled plugin connection so startup is deterministic.
+                SKRIB_PLUGIN_AUTO_APPROVE: '1',
                 PYTHONPATH: BACKEND_DIR,
             },
             stdio: ['ignore', 'pipe', 'pipe'],
@@ -166,34 +278,46 @@ export const test = base.extend({
         await waitForServer(baseURL, 15_000);
         tmark('backend HTTP ready', timings);
 
-        // Lazy plugin process management — only started when a fixture needs them
-        let pluginProcs = null;
-        const ensurePlugins = () => {
-            if (!pluginProcs) {
-                tmark('startPlugins() called', timings);
-                pluginProcs = startPlugins(BACKEND_DIR, busPort, dataDir);
-                tmark('plugin procs spawned', timings);
-            }
-        };
+        // Plugin process management — spawn immediately so they connect to the
+        // bus while the test's user-registration UI flow runs. Awaiting
+        // ensurePlugins() resolves the moment every plugin is registered;
+        // tests that don't touch rooms can skip the await and they'll just be
+        // ready by the time anything cares.
+        tmark('startPlugins() called', timings);
+        const { procs: pluginProcs, earlyExit } = startPlugins(BACKEND_DIR, busPort, dataDir);
+        tmark('plugin procs spawned', timings);
+        const pluginsReady = waitForPluginsReady(baseURL, bundled, earlyExit).then(plugins => {
+            tmark('all plugins ready', timings);
+            return plugins;
+        });
+        // Surface plugin readiness errors instead of leaving an unhandled rejection.
+        pluginsReady.catch(err => process.stderr.write(`[plugin readiness] ${err.message}\n`));
+        const ensurePlugins = () => pluginsReady;
+        const pluginState = { procs: pluginProcs, earlyExit, ready: pluginsReady };
 
-        await use({ port, busPort, baseURL, dataDir, proc, ensurePlugins, timings });
+        await use({ port, busPort, baseURL, dataDir, proc, ensurePlugins, bundled, timings });
         tmark('test finished — tearing down', timings);
         printTimingReport(timings);
 
-        // Teardown: kill plugins (if started), then server, then remove temp data
-        if (pluginProcs) {
-            for (const p of pluginProcs) p.kill('SIGTERM');
+        // Surface any plugin that died unexpectedly during the test so its
+        // stderr appears in the report instead of being silently dropped.
+        for (const p of pluginState.procs) {
+            if (p.exitCode !== null && p.exitCode !== 0) {
+                process.stderr.write(
+                    `\n[plugin:${p.skribBuf.id}] exited with code ${p.exitCode} during test\n` +
+                    `--- stderr ---\n${p.skribBuf.stderr || '(empty)'}\n--------------\n`
+                );
+            }
         }
+        for (const p of pluginState.procs) p.kill('SIGTERM');
         proc.kill('SIGTERM');
         const exited = await Promise.race([
             new Promise(resolve => proc.on('exit', resolve)).then(() => true),
             new Promise(resolve => setTimeout(resolve, 5_000)).then(() => false),
         ]);
         if (!exited) proc.kill('SIGKILL');
-        if (pluginProcs) {
-            for (const p of pluginProcs) {
-                try { p.kill('SIGKILL'); } catch {}
-            }
+        for (const p of pluginState.procs) {
+            try { p.kill('SIGKILL'); } catch {}
         }
         try { rmSync(dataDir, { recursive: true, force: true }); } catch {}
     }, { scope: 'test', auto: true }],
@@ -204,7 +328,13 @@ export const test = base.extend({
     },
 
     // ---------- Page with a virtual WebAuthn authenticator ----------
-    authenticatedPage: async ({ browser, baseURL }, use) => {
+    authenticatedPage: async ({ _backend, browser, baseURL }, use) => {
+        // Ensure all bundled plugins are connected before any test can try to
+        // create a chat room — backend rooms.create rejects unknown room types
+        // with 400, so without plugins running the room creation UI silently
+        // fails.
+        await _backend.ensurePlugins();
+
         const context = await browser.newContext({ baseURL });
         const page = await context.newPage();
 
@@ -230,8 +360,20 @@ export const test = base.extend({
     },
 
     // ---------- Register a fresh user via the full UI flow ----------
-    registeredUser: async ({ browser, baseURL }, use) => {
+    // Ensures plugins are running too — every plugin-aware UI test (room
+    // creation, message input, reactions, etc.) needs the chat plugin
+    // connected and registered before the user reaches app.html.
+    registeredUser: async ({ _backend, browser, baseURL }, use) => {
+        const pluginsReady = _backend.ensurePlugins();
         const result = await registerNewUser(browser, baseURL);
+        await pluginsReady;
+        // If the user is logged in (auto-approved admin), reload so the
+        // frontend picks up plugin scripts that registered while registration
+        // was in flight. Pending users stay on the enroll/pending page.
+        if (result.sessionToken) {
+            await result.page.reload();
+            await result.page.waitForLoadState('networkidle');
+        }
         await use(result);
         await result.context.close();
     },
@@ -239,17 +381,17 @@ export const test = base.extend({
     // ---------- Two registered users: first is admin, second is approved ----------
     twoUsers: async ({ _backend, browser, baseURL }, use) => {
         const t = _backend.timings;
-        // Start plugins early so they connect to the bus while admin registers
-        _backend.ensurePlugins();
+        // Start plugins early so they're connecting in parallel with admin registration
+        const pluginsReady = _backend.ensurePlugins();
 
         // Register first user (auto-approved as admin)
         const admin = await registerNewUser(browser, baseURL);
         tmark('admin registered', t);
 
-        // Approve plugins (should be fast — they've been connecting in parallel),
-        // then reload so the frontend picks up the now-enabled plugin scripts
-        await approveAllPlugins(baseURL, admin.sessionToken);
-        tmark('plugins approved + chat room type ready', t);
+        // Wait for every bundled plugin to be on the bus, then reload so the
+        // frontend picks up the now-loaded plugin scripts.
+        await pluginsReady;
+        tmark('all bundled plugins ready', t);
         await admin.page.reload();
         await admin.page.waitForLoadState('networkidle');
         tmark('admin page reloaded', t);
@@ -281,15 +423,14 @@ export const test = base.extend({
 
     // ---------- Three registered, approved, and logged-in users ----------
     threeUsers: async ({ _backend, browser, baseURL }, use) => {
-        // Start plugins early so they connect to the bus while admin registers
-        _backend.ensurePlugins();
+        // Start plugins early so they're connecting in parallel with admin registration
+        const pluginsReady = _backend.ensurePlugins();
 
         // Register User A (auto-approved admin) — lands on app.html
         const admin = await registerNewUser(browser, baseURL);
 
-        // Approve plugins (should be fast — they've been connecting in parallel),
-        // then reload so the frontend picks up the now-enabled plugin scripts
-        await approveAllPlugins(baseURL, admin.sessionToken);
+        // Wait for every bundled plugin, then reload so the frontend picks up scripts
+        await pluginsReady;
         await admin.page.reload();
         await admin.page.waitForLoadState('networkidle');
 
@@ -347,54 +488,6 @@ export async function clearAllStorage(page) {
             }
         }
     });
-}
-
-/**
- * Approve all pending plugins via the admin API, then wait for room types
- * (specifically the "chat" room type) to be registered on the bus.
- *
- * This exercises the real approval flow: plugins connect → pending → admin
- * approves → secret generated → plugins activate → register room types.
- *
- * @param {string} baseURL  - Backend base URL
- * @param {string} sessionToken - Session token for an admin user
- * @param {number} [timeoutMs=15000] - Max time to wait
- */
-export async function approveAllPlugins(baseURL, sessionToken, timeoutMs = 15_000) {
-    const headers = {
-        'Authorization': `Bearer ${sessionToken}`,
-    };
-    const start = Date.now();
-
-    // Poll: approve any pending plugins, then check if chat room type is ready
-    while (Date.now() - start < timeoutMs) {
-        // Approve any pending plugins
-        try {
-            const pendingResp = await fetch(`${baseURL}/api/admin/plugins/pending`, { headers });
-            if (pendingResp.ok) {
-                const pending = await pendingResp.json();
-                for (const plugin of pending) {
-                    await fetch(
-                        `${baseURL}/api/admin/plugins/${encodeURIComponent(plugin.plugin_id)}/approve`,
-                        { method: 'POST', headers },
-                    );
-                }
-            }
-        } catch {}
-
-        // Check if the chat room type is registered (plugins are active)
-        try {
-            const pluginsResp = await fetch(`${baseURL}/api/plugins`);
-            if (pluginsResp.ok) {
-                const plugins = await pluginsResp.json();
-                const hasChatRoom = plugins.some(p => p.room_types?.includes('chat'));
-                if (hasChatRoom) return;
-            }
-        } catch {}
-
-        await new Promise(r => setTimeout(r, 50));
-    }
-    throw new Error(`Plugins did not register room types within ${timeoutMs}ms`);
 }
 
 /**

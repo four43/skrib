@@ -184,7 +184,15 @@ async def startup_event():
         return ApprovalStatus({"approved": "approved", "pending": "pending_approval",
                                "rejected": "rejected", "disabled": "rejected"}[status])
 
-    plugin_bus = PluginBusServer(approve_plugin=_approve_plugin, get_plugin_secret=get_plugin_secret)
+    # Tests can opt into a deterministic startup: every connecting plugin is
+    # auto-approved, no secret check. Production must NOT set this.
+    if os.environ.get("SKRIB_PLUGIN_AUTO_APPROVE"):
+        async def _auto_approve(plugin_id: str, manifest: dict) -> ApprovalStatus:
+            return ApprovalStatus.APPROVED
+        plugin_bus = PluginBusServer(approve_plugin=_auto_approve, get_plugin_secret=None)
+        print("[PluginBus] AUTO_APPROVE mode — every plugin connection is approved without secret check")
+    else:
+        plugin_bus = PluginBusServer(approve_plugin=_approve_plugin, get_plugin_secret=get_plugin_secret)
     bus_port = PLUGIN_BUS_PORT
     if os.environ.get("SKRIB_PLUGIN_BUS_PORT"):
         # Explicit bus port (e.g. E2E tests that start plugin processes)

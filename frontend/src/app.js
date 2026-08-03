@@ -174,7 +174,10 @@ async function loadPlugins() {
         const plugins = allPlugins.filter(p => p.enabled);
         console.log(`[Plugins] Found ${allPlugins.length} plugins (${plugins.length} enabled):`, plugins.map(p => p.name).join(', '));
 
-        // Extract available room types from plugins
+        // Extract available room types from plugins. Sort by room_type so the
+        // dropdown order is stable regardless of bus connection order — without
+        // this, the create-room default flips between "chat"/"todo" depending
+        // on which plugin process happened to register first.
         availableRoomTypes = [];
         for (const plugin of plugins) {
             if (plugin.room_types && plugin.room_types.length > 0) {
@@ -187,6 +190,7 @@ async function loadPlugins() {
                 }
             }
         }
+        availableRoomTypes.sort((a, b) => a.room_type.localeCompare(b.room_type));
 
         // Load each enabled plugin concurrently so one slow plugin can't block the rest
         const loadPromises = plugins.map(async (plugin) => {
