@@ -894,6 +894,629 @@ Co-Authored-By: Claude Opus 5 (1M context) <noreply@anthropic.com>"
 
 ---
 
+### Task 4A: Load plugins with the existing loader, and fail loudly
+
+Task 4's `_load_plugin_class` uses a bare `importlib.util.spec_from_file_location`, which
+raises `ImportError: attempted relative import with no known parent package` for 4 of the
+5 plugins targeted later — their `backend/plugin_bus.py` does `from . import services`.
+`skrib_plugin_sdk/loader.py:load_plugin_class` already solves exactly this by setting the
+plugin's `backend/` up as a real package. Worse, `InProcessHost.start()`'s per-plugin
+`except` turns the failure into a **silent** no-op, so a later task would appear to
+succeed while loading nothing.
+
+**Files:**
+- Modify: `backend/skrib/plugin_bus/inprocess_host.py`
+- Test: `backend/tests/unit/plugin_bus/test_inprocess_host.py` (append)
+
+**Interfaces:**
+- Consumes: `skrib_plugin_sdk.loader.load_plugin_class(plugin_dir: str, module_name: str = "plugin_bus", allowed_base: str | None = None)` — returns the loaded *module*; find the `SkribPlugin` subclass on it.
+- Produces: `_load_plugin_class(plugin_dir: Path)` unchanged in signature, correct in behaviour. `InProcessHost.start()` still returns `list[str]` of started ids, but now also records failures.
+
+- [ ] **Step 1: Write the failing test**
+
+Append to `backend/tests/unit/plugin_bus/test_inprocess_host.py`:
+
+```python
+import pytest
+
+from pathlib import Path
+
+from skrib.plugin_bus.inprocess_host import _load_plugin_class
+
+PLUGINS_DIR = Path(__file__).resolve().parents[3] / "plugins"
+
+
+@pytest.mark.parametrize("plugin_id", [
+    "four43.room-type-chat",
+    "four43.room-type-todo",
+    "four43.message-reactions",
+    "four43.emoji-picker",
+    "four43.chat-typing",
+])
+def test_every_in_process_candidate_actually_loads(plugin_id):
+    """Each plugin targeted for the in-process runtime must import cleanly.
+
+    These plugins use relative imports (`from . import services`), which a bare
+    spec_from_file_location cannot satisfy.
+    """
+    cls = _load_plugin_class(PLUGINS_DIR / plugin_id)
+
+    assert cls.id == plugin_id
+```
+
+- [ ] **Step 2: Run it and confirm it fails**
+
+Run: `cd backend && python -m pytest tests/unit/plugin_bus/test_inprocess_host.py -v -k actually_loads`
+Expected: 4 of 5 FAIL with `ImportError: attempted relative import with no known parent package`. `four43.chat-typing` passes (it has no relative imports).
+
+- [ ] **Step 3: Reuse the existing loader**
+
+In `backend/skrib/plugin_bus/inprocess_host.py`, replace the body of `_load_plugin_class`:
+
+```python
+def _load_plugin_class(plugin_dir: Path) -> Any:
+    """Return the SkribPlugin subclass defined in a plugin's backend/plugin_bus.py.
+
+    Delegates to the SDK loader, which sets the plugin's backend/ up as a real
+    package so its relative imports (`from . import services`) resolve. A bare
+    spec_from_file_location cannot do that.
+    """
+    from skrib_plugin_sdk.loader import load_plugin_class
+    from skrib_plugin_sdk.plugin import SkribPlugin
+
+    module = load_plugin_class(
+        str(plugin_dir),
+        allowed_base=str(Path(plugin_dir).parent),
+    )
+
+    for attr in vars(module).values():
+        if (
+            isinstance(attr, type)
+            and issubclass(attr, SkribPlugin)
+            and attr is not SkribPlugin
+        ):
+            return attr
+    raise ImportError(f"No SkribPlugin subclass found in {plugin_dir}/backend/plugin_bus.py")
+```
+
+Delete the now-unused `importlib.util` import if nothing else in the file uses it.
+
+- [ ] **Step 4: Make start() loud**
+
+A plugin that fails to load must not be fatal to core startup, but it must not be silent
+either. In `InProcessHost`, add `self._failures: dict[str, str] = {}` to `__init__`, and
+change `start()`'s except clause to record and shout:
+
+```python
+            except Exception as exc:
+                self._failures[plugin_id] = repr(exc)
+                logger.error(
+                    "[InProcess] FAILED to start %s — it will not handle any traffic: %r",
+                    plugin_id, exc, exc_info=True,
+                )
+                print(f"[Plugins] IN-PROCESS PLUGIN FAILED: {plugin_id}: {exc!r}")
+```
+
+Add a `failures` property returning `dict(self._failures)` so callers and tests can see them.
+
+- [ ] **Step 5: Run the tests**
+
+Run: `cd backend && python -m pytest tests/unit/plugin_bus/ -v`
+Expected: PASS, 211 passed (206 + 5 parametrized).
+
+- [ ] **Step 6: Commit**
+
+```bash
+cd /workspace
+git add backend/skrib/plugin_bus/inprocess_host.py \
+        backend/tests/unit/plugin_bus/test_inprocess_host.py
+git commit -m "fix: Load in-process plugins with the SDK loader, fail loudly
+
+A bare spec_from_file_location cannot satisfy the relative imports these
+plugins use, so 4 of the 5 in-process candidates raised ImportError.
+skrib_plugin_sdk/loader.py already sets each plugin's backend/ up as a
+real package; reuse it.
+
+start() also swallowed load failures, which would have made a later task
+look successful while loading nothing. Failures are now logged with a
+traceback, printed, and exposed via .failures.
+
+Co-Authored-By: Claude Opus 5 (1M context) <noreply@anthropic.com>"
+```
+
+---
+
+### Task 4B: In-process plugins get HTTP servers, settings schemas, and records
+
+Four plugins declare `http_port = 0` and serve CRUD routes through the middleware proxy.
+Task 4's host never started those servers, and never registered settings schemas. This
+task makes the host provide everything the bus server provides for its connections, so
+Task 4C's registry has a uniform record to expose.
+
+**Files:**
+- Modify: `backend/skrib/plugin_bus/inprocess_host.py`
+- Test: `backend/tests/unit/plugin_bus/test_inprocess_host.py` (append)
+
+**Interfaces:**
+- Consumes: `SkribPlugin._start_http_server() -> str | None` and `_stop_http_server()`, already defined in `backend/skrib_plugin_sdk/plugin.py` — they create the plugin's FastAPI app, call its `register_routes`, and run uvicorn on `http_port` (0 = auto-assign). Call them; do not reimplement.
+- Consumes: the settings service at `backend/skrib/plugin_bus/settings.py` — read it and use whatever function registers a schema for a plugin id (the bus server calls it when handling a `register.settings` frame; find that call site in `backend/skrib/plugin_bus/server.py` and use the same function).
+- Produces: `InProcessHost.plugin_records() -> list[dict]`. Each dict has exactly these keys, because Task 4C merges them with the bus server's equivalents:
+  `id`, `version`, `permissions` (list[str]), `room_types` (list[str]），`room_type_meta` (dict), `frontend_scripts` (list[str]), `frontend_styles` (list[str]), `http_base_url` (str | None), `runtime` (always `"in_process"`).
+
+- [ ] **Step 1: Write the failing test**
+
+Append to `backend/tests/unit/plugin_bus/test_inprocess_host.py`:
+
+```python
+@pytest.mark.asyncio
+async def test_started_plugin_gets_an_http_server_and_a_record(bridge, tmp_path, monkeypatch):
+    """A started in-process plugin exposes an http_base_url and a full record."""
+    host = InProcessHost(bridge, PLUGINS_DIR)
+    await host._start_one("four43.room-type-todo", PLUGINS_DIR / "four43.room-type-todo")
+    try:
+        records = {r["id"]: r for r in host.plugin_records()}
+        rec = records["four43.room-type-todo"]
+
+        assert rec["runtime"] == "in_process"
+        assert rec["room_types"] == ["todo"]
+        assert rec["http_base_url"].startswith("http://127.0.0.1:")
+        assert set(rec) == {
+            "id", "version", "permissions", "room_types", "room_type_meta",
+            "frontend_scripts", "frontend_styles", "http_base_url", "runtime",
+        }
+    finally:
+        await host.stop()
+
+
+@pytest.mark.asyncio
+async def test_stop_shuts_down_the_http_server(bridge):
+    """stop() must not leave a listening socket behind."""
+    host = InProcessHost(bridge, PLUGINS_DIR)
+    await host._start_one("four43.room-type-todo", PLUGINS_DIR / "four43.room-type-todo")
+    url = host.plugin_records()[0]["http_base_url"]
+    await host.stop()
+
+    assert host.plugin_records() == []
+    import httpx
+    with pytest.raises(Exception):
+        async with httpx.AsyncClient(timeout=1.0) as c:
+            await c.get(f"{url}/")
+```
+
+`four43.room-type-todo` is chosen because it declares `http_port = 0` and a single room
+type, so the assertions are unambiguous. Use the `bridge` fixture already in this file.
+
+- [ ] **Step 2: Run it and confirm it fails**
+
+Run: `cd backend && python -m pytest tests/unit/plugin_bus/test_inprocess_host.py -v -k "http_server or record"`
+Expected: FAIL — `AttributeError: 'InProcessHost' object has no attribute 'plugin_records'`.
+
+- [ ] **Step 3: Start the HTTP server in `_start_one`**
+
+In `_start_one`, after `await client.connect()` and before
+`self._bridge.register_inprocess(...)`, add:
+
+```python
+        # Bus plugins get their HTTP server started by SkribPlugin.run(); in-process
+        # plugins need the host to do it, because their CRUD routes are still served
+        # through the middleware proxy at /api/plugins/{id}/...
+        http_base_url = None
+        if plugin.http_port is not None:
+            http_base_url = await plugin._start_http_server()
+        self._http_urls[plugin.id] = http_base_url
+```
+
+Add `self._http_urls: dict[str, str | None] = {}` to `__init__`.
+
+- [ ] **Step 4: Register the settings schema**
+
+Still in `_start_one`, after `await plugin.on_connect()`:
+
+```python
+        # The bus server registers settings schemas when it handles a
+        # register.settings frame. In-process plugins never send one, so do it here.
+        if plugin.settings:
+            register_plugin_settings_schema(plugin.id, plugin.settings)
+```
+
+Import `register_plugin_settings_schema` from `backend/skrib/plugin_bus/settings.py` using
+whatever the real function name is — find it by locating where
+`backend/skrib/plugin_bus/server.py` handles `register.settings` and calling the same
+function with the same arguments. If the name differs, use the real one and note it in
+your report.
+
+- [ ] **Step 5: Add `plugin_records()`**
+
+```python
+    def plugin_records(self) -> list[dict]:
+        """Uniform records for every running in-process plugin.
+
+        Key set matches what the bus server exposes per connection, so the plugin
+        registry can merge both sources without special-casing either runtime.
+        """
+        records = []
+        for plugin_id, plugin in self._instances.items():
+            records.append({
+                "id": plugin_id,
+                "version": plugin.version,
+                "permissions": list(plugin.permissions),
+                "room_types": list(plugin.room_types),
+                "room_type_meta": dict(plugin.room_type_meta),
+                "frontend_scripts": list(plugin.frontend_scripts),
+                "frontend_styles": list(plugin.frontend_styles),
+                "http_base_url": self._http_urls.get(plugin_id),
+                "runtime": "in_process",
+            })
+        return records
+```
+
+- [ ] **Step 6: Stop the HTTP server in `stop()`**
+
+In `stop()`, inside the per-plugin loop and before `plugin._client.close()`:
+
+```python
+            try:
+                await plugin._stop_http_server()
+            except Exception:
+                logger.exception("[InProcess] Error stopping HTTP server for %s", plugin_id)
+```
+
+Also clear `self._http_urls` at the end of `stop()`, alongside `self._instances.clear()`.
+
+- [ ] **Step 7: Run the tests**
+
+Run: `cd backend && python -m pytest tests/unit/plugin_bus/ -v`
+Expected: PASS, 213 passed.
+
+- [ ] **Step 8: Commit**
+
+```bash
+cd /workspace
+git add backend/skrib/plugin_bus/inprocess_host.py \
+        backend/tests/unit/plugin_bus/test_inprocess_host.py
+git commit -m "feat: In-process plugins get HTTP servers and settings schemas
+
+Four plugins declare http_port = 0 and serve CRUD routes through the
+middleware proxy; the host never started those servers, so their routes
+would have 404'd. It also never registered settings schemas, which the
+bus server does when handling a register.settings frame.
+
+plugin_records() exposes the same key set the bus server exposes per
+connection, so the plugin registry can merge both runtimes uniformly.
+
+Co-Authored-By: Claude Opus 5 (1M context) <noreply@anthropic.com>"
+```
+
+---
+
+### Task 4C: One runtime-agnostic plugin registry
+
+Four call sites answer "is this plugin active, and what are its details?" by reaching into
+the bus server's connection map. That map is now only half the story, so each one silently
+excludes in-process plugins. Rather than teach four places about two runtimes, introduce
+one registry they all consult.
+
+**Files:**
+- Create: `backend/skrib/plugins/registry.py`
+- Modify: `backend/skrib/plugins/routes.py` (`_get_bus_plugins`, `list_plugins`, and the `/{plugin_id}/file/{file_path:path}` handler)
+- Modify: `backend/skrib/plugins/middleware.py` (`_get_proxy_url`)
+- Modify: `backend/skrib/ws/manager.py:296` (the `_dispatch_plugin_namespace` gate)
+- Modify: `backend/skrib/main.py` (construct the registry, put it on `app.state`)
+- Test: `backend/tests/unit/plugin_bus/test_plugin_registry.py`
+
+**Interfaces:**
+- Consumes: `InProcessHost.plugin_records()` from Task 4B; `PluginBusServer.room_type_map` and its per-connection attributes, read-only.
+- Produces: `PluginRegistry(bus_server, inprocess_host=None)` with
+  - `get(plugin_id: str) -> dict | None` — a record in the Task 4B key set plus `"runtime": "process" | "in_process"`, or `None` if not active
+  - `all() -> list[dict]`
+  - `is_active(plugin_id: str) -> bool`
+  and `app.state.plugin_registry`.
+
+**Do not modify `backend/skrib/plugin_bus/server.py`.** The registry reads it; it does not
+change.
+
+- [ ] **Step 1: Write the failing test**
+
+Create `backend/tests/unit/plugin_bus/test_plugin_registry.py`:
+
+```python
+"""The registry must present both runtimes through one interface."""
+import pytest
+
+from skrib.plugins.registry import PluginRegistry
+
+
+class _FakeConn:
+    def __init__(self, plugin_id):
+        self.plugin_id = plugin_id
+        self.version = "1.0.0"
+        self.permissions = {"bus.send"}
+        self.room_types = ["chat"]
+        self.room_type_meta = {}
+        self.frontend_scripts = []
+        self.frontend_styles = []
+        self.http_base_url = "http://127.0.0.1:9111"
+
+
+class _FakeBusServer:
+    def __init__(self, conns):
+        self._conns = conns
+        self.room_type_map = {"chat": "four43.bus-one"}
+
+    def get_plugin(self, plugin_id):
+        return self._conns.get(plugin_id)
+
+
+class _FakeHost:
+    def plugin_records(self):
+        return [{
+            "id": "four43.inproc-one",
+            "version": "2.0.0",
+            "permissions": ["bus.send"],
+            "room_types": ["todo"],
+            "room_type_meta": {},
+            "frontend_scripts": ["frontend/dist/plugin.js"],
+            "frontend_styles": [],
+            "http_base_url": "http://127.0.0.1:9222",
+            "runtime": "in_process",
+        }]
+
+
+def test_get_resolves_both_runtimes():
+    reg = PluginRegistry(_FakeBusServer({"four43.bus-one": _FakeConn("four43.bus-one")}), _FakeHost())
+
+    assert reg.get("four43.bus-one")["runtime"] == "process"
+    assert reg.get("four43.inproc-one")["runtime"] == "in_process"
+    assert reg.get("four43.nope") is None
+
+
+def test_is_active_covers_in_process_plugins():
+    """This is the manager.py:296 gate — an in-process plugin must pass it."""
+    reg = PluginRegistry(_FakeBusServer({}), _FakeHost())
+
+    assert reg.is_active("four43.inproc-one") is True
+    assert reg.is_active("four43.nope") is False
+
+
+def test_all_returns_both_and_does_not_duplicate():
+    reg = PluginRegistry(_FakeBusServer({"four43.bus-one": _FakeConn("four43.bus-one")}), _FakeHost())
+
+    ids = sorted(r["id"] for r in reg.all())
+    assert ids == ["four43.bus-one", "four43.inproc-one"]
+
+
+def test_records_share_one_key_set():
+    """routes.py merges both sources, so the shapes must agree exactly."""
+    reg = PluginRegistry(_FakeBusServer({"four43.bus-one": _FakeConn("four43.bus-one")}), _FakeHost())
+    shapes = {frozenset(r) for r in reg.all()}
+
+    assert len(shapes) == 1
+
+
+def test_works_with_no_in_process_host():
+    """The host is optional — a bus-only server must still resolve."""
+    reg = PluginRegistry(_FakeBusServer({"four43.bus-one": _FakeConn("four43.bus-one")}), None)
+
+    assert reg.is_active("four43.bus-one") is True
+    assert reg.is_active("four43.inproc-one") is False
+```
+
+- [ ] **Step 2: Run it and confirm it fails**
+
+Run: `cd backend && python -m pytest tests/unit/plugin_bus/test_plugin_registry.py -v`
+Expected: FAIL — `ModuleNotFoundError: No module named 'skrib.plugins.registry'`.
+
+- [ ] **Step 3: Write the registry**
+
+Create `backend/skrib/plugins/registry.py`:
+
+```python
+"""One runtime-agnostic view of active plugins.
+
+Before this existed, four separate call sites answered "is this plugin active,
+and what are its details?" by reaching into the bus server's connection map.
+That map only describes plugins running as separate processes, so each call site
+silently excluded in-process plugins. They all consult this instead.
+
+Adding a third runtime means changing this file, not four others.
+"""
+from __future__ import annotations
+
+import logging
+from typing import Any, Optional
+
+logger = logging.getLogger(__name__)
+
+RECORD_KEYS = (
+    "id", "version", "permissions", "room_types", "room_type_meta",
+    "frontend_scripts", "frontend_styles", "http_base_url", "runtime",
+)
+
+
+class PluginRegistry:
+    """Presents bus-connected and in-process plugins through one interface."""
+
+    def __init__(self, bus_server: Any, inprocess_host: Optional[Any] = None):
+        self._bus = bus_server
+        self._host = inprocess_host
+
+    def _record_from_conn(self, conn: Any) -> dict:
+        return {
+            "id": conn.plugin_id,
+            "version": getattr(conn, "version", ""),
+            "permissions": list(getattr(conn, "permissions", ()) or ()),
+            "room_types": list(getattr(conn, "room_types", ()) or ()),
+            "room_type_meta": dict(getattr(conn, "room_type_meta", {}) or {}),
+            "frontend_scripts": list(getattr(conn, "frontend_scripts", ()) or ()),
+            "frontend_styles": list(getattr(conn, "frontend_styles", ()) or ()),
+            "http_base_url": getattr(conn, "http_base_url", None),
+            "runtime": "process",
+        }
+
+    def get(self, plugin_id: str) -> dict | None:
+        """Return the active plugin's record, or None if it is not running."""
+        if self._host is not None:
+            for rec in self._host.plugin_records():
+                if rec["id"] == plugin_id:
+                    return rec
+        if self._bus is not None:
+            try:
+                conn = self._bus.get_plugin(plugin_id)
+            except Exception:
+                conn = None
+            if conn is not None:
+                return self._record_from_conn(conn)
+        return None
+
+    def all(self) -> list[dict]:
+        """Every active plugin, in-process first. Ids are unique."""
+        records: list[dict] = []
+        seen: set[str] = set()
+        if self._host is not None:
+            for rec in self._host.plugin_records():
+                records.append(rec)
+                seen.add(rec["id"])
+        if self._bus is not None:
+            for room_type_owner in self._iter_bus_plugin_ids():
+                if room_type_owner in seen:
+                    continue
+                conn = self._bus.get_plugin(room_type_owner)
+                if conn is not None:
+                    records.append(self._record_from_conn(conn))
+                    seen.add(room_type_owner)
+        return records
+
+    def _iter_bus_plugin_ids(self):
+        """Bus plugin ids, without reaching into the server's private state."""
+        ids = getattr(self._bus, "connected_plugin_ids", None)
+        if callable(ids):
+            return list(ids())
+        # Fall back to whatever the server exposes publicly.
+        return list(getattr(self._bus, "plugin_ids", ()) or ())
+
+    def is_active(self, plugin_id: str) -> bool:
+        return self.get(plugin_id) is not None
+```
+
+**Note on `_iter_bus_plugin_ids`:** `PluginBusServer` may not expose a public way to
+enumerate connected plugins. You may NOT add one — `server.py` is off limits. Read
+`server.py` and find what IS public (`room_type_map` is, via a property). If nothing
+enumerates connections publicly, keep `list_plugins`'s existing `_get_bus_plugins()` logic
+for the bus half and have `all()` delegate to it rather than duplicating it; adjust the
+test accordingly and explain in your report. Correctness beats the shape of my sketch.
+
+- [ ] **Step 4: Run the registry tests**
+
+Run: `cd backend && python -m pytest tests/unit/plugin_bus/test_plugin_registry.py -v`
+Expected: PASS.
+
+- [ ] **Step 5: Construct the registry at startup**
+
+In `backend/skrib/main.py`, after the `InProcessHost` is started (the
+`started_inprocess = await inprocess_host.start()` line added by Task 5 — if Task 5 has
+not run yet, add the registry construction immediately after `app.state.plugin_bus_bridge = bridge`
+and pass `inprocess_host=None` for now, leaving a `# wired in Task 5` comment):
+
+```python
+    from .plugins.registry import PluginRegistry
+    app.state.plugin_registry = PluginRegistry(plugin_bus, inprocess_host)
+```
+
+- [ ] **Step 6: Rewire the `_dispatch_plugin_namespace` gate**
+
+In `backend/skrib/ws/manager.py`, replace the gate at line ~296:
+
+```python
+            bridge = getattr(app.state, 'plugin_bus_bridge', None)
+            registry = getattr(app.state, 'plugin_registry', None)
+            if not bridge or not registry or not registry.is_active(plugin_id):
+                return False
+```
+
+Everything after this gate is already runtime-agnostic — `bridge.dispatch_room_action`
+routes through `_send_to_plugin`, which handles both runtimes — so this is the only change
+needed in this file.
+
+- [ ] **Step 7: Rewire the proxy gate**
+
+In `backend/skrib/plugins/middleware.py`, `_get_proxy_url`, replace the
+`plugin_bus.get_plugin(plugin_id)` lookup with the registry, keeping every existing
+security check:
+
+```python
+            from ..main import app as main_app
+            registry = getattr(main_app.state, 'plugin_registry', None)
+            if not registry:
+                return None
+            rec = registry.get(plugin_id)
+            if not rec or not rec["http_base_url"]:
+                return None
+            if not self._is_localhost_url(rec["http_base_url"]):
+                logger.warning("[Middleware] Rejecting non-localhost http_base_url for plugin '%s': %s",
+                               plugin_id, rec["http_base_url"])
+                return None
+            return f"{rec['http_base_url'].rstrip('/')}{sub_path}"
+```
+
+The old code also rejected plugins whose `conn.status != ApprovalStatus.APPROVED`. The
+registry only ever returns *active* plugins, so preserve that guarantee: make sure
+`PluginRegistry.get` does not return a record for a bus connection that is not approved.
+Add a test for it if the registry does not already enforce it.
+
+- [ ] **Step 8: Rewire the plugin listing and file serving**
+
+In `backend/skrib/plugins/routes.py`:
+- `list_plugins` builds its active set from `app.state.plugin_registry.all()` instead of
+  `_get_bus_plugins()`, so in-process plugins report `enabled=True` and carry their
+  registered `room_types` and frontend entries. The filesystem-discovery half stays: any
+  plugin on disk that the registry does not list still gets `enabled=False`.
+- The `/{plugin_id}/file/{file_path:path}` handler currently looks up `conn.http_base_url`
+  via `plugin_bus.get_plugin`. Use `registry.get(plugin_id)["http_base_url"]` instead,
+  keeping the `_is_localhost_url` check and the filesystem fallback exactly as they are.
+
+**Why this matters most:** `plugins/routes.py:130` sets `enabled = False` for anything not
+bus-connected, and the frontend only injects `<script>` tags for enabled plugins. Without
+this step an in-process chat plugin's frontend never loads and the app has no chat UI.
+
+- [ ] **Step 9: Run everything**
+
+Run: `cd backend && python -m pytest tests/unit/plugin_bus/ -v`
+Expected: PASS, 218 passed.
+
+Then confirm nothing regressed for bus plugins, which is the path all existing e2e tests
+still take:
+
+Run: `cd frontend && ./util/test-e2e tests/e2e/attachments.spec.js tests/e2e/typing-indicators.spec.js`
+Expected: same results as before this task — no in-process plugin exists yet, so the
+registry must be a pure pass-through to the bus server.
+
+- [ ] **Step 10: Commit**
+
+```bash
+cd /workspace
+git add backend/skrib/plugins/registry.py backend/skrib/plugins/routes.py \
+        backend/skrib/plugins/middleware.py backend/skrib/ws/manager.py \
+        backend/skrib/main.py backend/tests/unit/plugin_bus/test_plugin_registry.py
+git commit -m "feat: One runtime-agnostic plugin registry
+
+Four call sites answered 'is this plugin active?' by reaching into the bus
+server's connection map, which only describes out-of-process plugins. Each
+therefore excluded in-process plugins silently:
+
+- plugins/routes.py:130 marked them enabled=False, so the frontend would
+  never have injected their scripts — no chat UI at all.
+- ws/manager.py:296 dropped their own-namespace WS messages.
+- plugins/middleware.py:_get_proxy_url 404'd their HTTP CRUD routes.
+- the plugin file handler could not resolve their http_base_url.
+
+All four now consult PluginRegistry. Adding a third runtime means changing
+one file instead of four.
+
+Co-Authored-By: Claude Opus 5 (1M context) <noreply@anthropic.com>"
+```
+
+---
+
 ### Task 5: Start the host during app startup
 
 **Files:**
@@ -958,38 +1581,44 @@ Co-Authored-By: Claude Opus 5 (1M context) <noreply@anthropic.com>"
 
 ---
 
-### Task 6: Flip the four hot-path plugins to `in_process`
+### Task 6: Flip `room-type-chat` to `in_process`
 
-Chat, todo, reactions and emoji-picker interpret core data and do small, frequent writes. None of them talks to the outside world, so isolating them buys nothing and costs a round-trip per operation. Web-push and attachments stay on the bus: one does outbound HTTP to FCM/APNs, the other parses untrusted uploads with Pillow.
+**Deliberately narrowed to one plugin.** The msg-2 bug lives in the chat message
+path, so `room-type-chat` is the only flip needed to test the hypothesis. Every
+other plugin keeps working exactly as it does today, which means a regression
+anywhere else is unambiguously caused by this one manifest key rather than by
+five of them at once.
+
+Todo, reactions, emoji-picker and chat-typing are all still *intended* for the
+in-process runtime on the same reasoning — they interpret core data, do small
+frequent writes, and talk to nothing outside — but flipping them is follow-up
+work once the suite is green, tracked in `TODO.md`. Web-push and attachments stay
+on the bus permanently at this stage: one does outbound HTTP to FCM/APNs, the
+other parses untrusted uploads with Pillow.
 
 **Files:**
 - Modify: `backend/plugins/four43.room-type-chat/manifest.json`
-- Modify: `backend/plugins/four43.room-type-todo/manifest.json`
-- Modify: `backend/plugins/four43.message-reactions/manifest.json`
-- Modify: `backend/plugins/four43.emoji-picker/manifest.json`
 - Modify: `backend/plugins/four43.web-push/manifest.json`
 - Modify: `backend/plugins/four43.attachments/manifest.json`
-- Modify: `backend/plugins/four43.chat-typing/manifest.json`
 
 **Interfaces:**
-- Consumes: everything from Tasks 2–5.
-- Produces: four plugins served in-process; `chat-typing` also in-process for now (it will be deleted when the core signal channel lands, but until then it must keep working).
+- Consumes: everything from Tasks 2, 3, 4, 4A, 4B, 4C and 5.
+- Produces: `four43.room-type-chat` served in-process; every other plugin on the bus.
 
-- [ ] **Step 1: Add `runtime` to the in-process manifests**
+- [ ] **Step 1: Flip chat**
 
-Add `"runtime": "in_process"` as a top-level key to each of these five, keeping every existing key:
+Add `"runtime": "in_process"` as a top-level key to
+`backend/plugins/four43.room-type-chat/manifest.json`, keeping every existing key.
 
-- `four43.room-type-chat/manifest.json`
-- `four43.room-type-todo/manifest.json`
-- `four43.message-reactions/manifest.json`
-- `four43.emoji-picker/manifest.json`
-- `four43.chat-typing/manifest.json`
-
-- [ ] **Step 2: Add explicit `runtime: "process"` to the two that stay out**
+- [ ] **Step 2: Add explicit `runtime: "process"` to the two that stay out permanently**
 
 Add `"runtime": "process"` to `four43.web-push/manifest.json` and
 `four43.attachments/manifest.json`. It matches the default, but stating it
 makes the trust boundary legible in the file rather than implied by absence.
+
+Leave `four43.room-type-todo`, `four43.message-reactions`,
+`four43.emoji-picker` and `four43.chat-typing` untouched — they default to
+`process` and keep their current behaviour.
 
 - [ ] **Step 3: Verify the host picks up exactly five**
 
@@ -1004,13 +1633,9 @@ for pid, _ in discover_inprocess_plugins(Path('plugins')):
 "
 ```
 
-Expected, in this order:
+Expected exactly one line:
 ```
-four43.chat-typing
-four43.emoji-picker
-four43.message-reactions
 four43.room-type-chat
-four43.room-type-todo
 ```
 
 - [ ] **Step 4: Run the msg-2 reproducer**
@@ -1021,23 +1646,30 @@ Expected: PASS.
 - [ ] **Step 5: Run the plugin e2e batch**
 
 Run: `cd frontend && ./util/test-e2e tests/e2e/typing-indicators.spec.js tests/e2e/message-reactions.spec.js tests/e2e/emoji-picker.spec.js tests/e2e/todo-rooms.spec.js tests/e2e/attachments.spec.js`
-Expected: PASS. Baseline was 32/34 with one flake. Attachments is in this batch deliberately — it still runs over the bus, so it proves both runtimes coexist.
+Expected: PASS. Baseline was 32/34 with one flake. Every plugin in this batch still
+runs over the bus while chat runs in-process, so this batch is the proof that both
+runtimes coexist without interfering.
 
 - [ ] **Step 6: Commit**
 
 ```bash
 cd /workspace
 git add backend/plugins/*/manifest.json
-git commit -m "feat: Run the four hot-path plugins in-process
+git commit -m "feat: Run room-type-chat in-process
 
-chat, todo, reactions and emoji-picker interpret core data and do small
-frequent writes; none does outside-world I/O, so a process boundary
-bought nothing and cost a round-trip per operation. chat-typing joins
-them until the core signal channel replaces it.
+The msg-2 bug lives in the chat message path, where each message did N
+sequential bus round-trips before the handler returned. Batching those
+into one call did not fix it (see TODO.md), so the boundary itself is the
+cause. Chat now runs in the same interpreter as core.
 
-web-push and attachments stay on the bus and now say so explicitly:
-one does outbound HTTP to FCM/APNs, the other parses untrusted uploads
-with Pillow. Those are the two that actually want isolation.
+Narrowed to one plugin on purpose: every other plugin still runs over the
+bus, so any regression elsewhere is attributable to this single manifest
+key. Todo, reactions, emoji-picker and chat-typing are intended to follow
+once the suite is green.
+
+web-push and attachments stay on the bus and now say so explicitly: one
+does outbound HTTP to FCM/APNs, the other parses untrusted uploads with
+Pillow. Those are the two that actually want isolation.
 
 Co-Authored-By: Claude Opus 5 (1M context) <noreply@anthropic.com>"
 ```
