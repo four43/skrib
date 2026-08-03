@@ -69,65 +69,59 @@ def load_plugin_manifest(plugin_id: str) -> PluginInfo:
 # Plugin listing and admin endpoints (literal routes first)
 # ============================================================================
 
-def _get_bus_plugins() -> list[dict]:
-    """Get plugin info for bus-connected plugins."""
+def _plugin_info_from_registry(plugin_id: str, record: dict) -> Optional[PluginInfo]:
+    """Merge a registry record's dynamic fields onto the on-disk manifest.
+
+    Both runtimes' records share one key set (see plugins/registry.py), so
+    this one function builds a PluginInfo for either — a bus-connected
+    plugin or an in-process one — without needing to know which.
+    """
     try:
-        from ..main import app
-        plugin_bus = getattr(app.state, 'plugin_bus', None)
-        if not plugin_bus:
-            return []
-        result = []
-        for pid, conn in plugin_bus.plugins.items():
-            manifest = conn.manifest
-            # Prefer dynamically registered frontend assets (register.frontend frame);
-            # fall back to the on-disk manifest for plugins that don't use it.
-            entry = (conn.frontend_scripts[0] if conn.frontend_scripts
-                     else manifest.get("entry", ""))
-            styles = conn.frontend_styles or manifest.get("styles", [])
-            result.append({
-                "id": pid,
-                "name": manifest.get("name", pid),
-                "version": conn.version,
-                "description": manifest.get("description", ""),
-                "author": manifest.get("author", ""),
-                "entry": entry,
-                "permissions": list(conn.permissions),
-                "hooks": manifest.get("hooks", {}),
-                "enabled": True,
-                "room_types": conn.room_types,
-                "room_type_meta": conn.room_type_meta,
-                "styles": styles,
-                "bus_connected": True,
-            })
-        return result
-    except Exception:
-        return []
+        info = load_plugin_manifest(plugin_id)
+    except HTTPException:
+        return None
+    info.version = record["version"]
+    info.permissions = record["permissions"]
+    info.room_types = record["room_types"]
+    info.room_type_meta = record["room_type_meta"]
+    # Prefer dynamically registered frontend assets (a register.frontend frame,
+    # or an in-process plugin's own declarations); fall back to the on-disk
+    # manifest for plugins that don't use it.
+    if record["frontend_scripts"]:
+        info.entry = record["frontend_scripts"][0]
+    if record["frontend_styles"]:
+        info.styles = record["frontend_styles"]
+    info.enabled = True
+    return info
 
 
 @router.get("", response_model=List[PluginInfo])
 async def list_plugins():
-    """List all plugins — combines bus-connected and filesystem-discovered plugins."""
+    """List all plugins — combines active (bus-connected or in-process) and filesystem-discovered plugins."""
+    from ..main import app
+    registry = getattr(app.state, 'plugin_registry', None)
+
     plugins = []
+    active_ids = set()
+    for record in (registry.all() if registry else []):
+        plugin_id = record["id"]
+        info = _plugin_info_from_registry(plugin_id, record)
+        if info is None:
+            print(f"[Plugins] Active plugin {plugin_id} has no on-disk manifest, skipping")
+            continue
+        active_ids.add(plugin_id)
+        plugins.append(info)
 
-    # Bus-connected plugins (out-of-process, approved and running)
-    bus_ids = set()
-    for bus_info in _get_bus_plugins():
-        bus_ids.add(bus_info["id"])
-        try:
-            plugins.append(PluginInfo(**{k: v for k, v in bus_info.items() if k != "bus_connected"}))
-        except Exception as e:
-            print(f"[Plugins] Failed to add bus plugin {bus_info['id']}: {e}")
-
-    # Filesystem plugins not currently bus-connected (available but not running)
+    # Filesystem plugins not currently active (available but not running)
     if PLUGINS_DIR.exists():
         for plugin_dir in PLUGINS_DIR.iterdir():
             if plugin_dir.is_dir() and (plugin_dir / "manifest.json").exists():
                 plugin_id = plugin_dir.name
-                if plugin_id in bus_ids:
-                    continue  # Already listed from bus
+                if plugin_id in active_ids:
+                    continue  # Already listed as active
                 try:
                     plugin_info = load_plugin_manifest(plugin_id)
-                    plugin_info.enabled = False  # Not connected to bus
+                    plugin_info.enabled = False  # Not active
                     plugins.append(plugin_info)
                 except Exception as e:
                     print(f"[Plugins] Failed to load plugin {plugin_id}: {e}")
@@ -162,28 +156,28 @@ async def get_plugin_file(plugin_id: str, file_path: str):
         Path traversal is prevented.
     """
     print(f"[Plugins] Serving file: plugin={plugin_id} path={file_path}")
-    # Check if this is a bus-connected plugin first
+    # Check if this is an active (bus-connected or in-process) plugin first
     try:
         from ..main import app
         from .middleware import PluginAuthMiddleware
-        plugin_bus = getattr(app.state, 'plugin_bus', None)
-        if plugin_bus:
-            conn = plugin_bus.get_plugin(plugin_id)
-            if conn and conn.http_base_url and PluginAuthMiddleware._is_localhost_url(conn.http_base_url):
-                import httpx
-                url = f"{conn.http_base_url.rstrip('/')}/file/{file_path}"
-                async with httpx.AsyncClient(timeout=10.0) as client:
-                    resp = await client.get(url)
-                if resp.status_code == 200:
-                    from fastapi.responses import Response
-                    return Response(
-                        content=resp.content,
-                        media_type=resp.headers.get("content-type", "application/octet-stream"),
-                        headers={"Cache-Control": "no-cache"},
-                    )
-                # Fall through to filesystem serving if plugin HTTP server
-                # doesn't have this file (e.g. static assets live on disk)
-                print(f"[Plugins] Bus proxy returned {resp.status_code} for {file_path}, trying filesystem")
+        registry = getattr(app.state, 'plugin_registry', None)
+        rec = registry.get(plugin_id) if registry else None
+        http_base_url = rec["http_base_url"] if rec else None
+        if http_base_url and PluginAuthMiddleware._is_localhost_url(http_base_url):
+            import httpx
+            url = f"{http_base_url.rstrip('/')}/file/{file_path}"
+            async with httpx.AsyncClient(timeout=10.0) as client:
+                resp = await client.get(url)
+            if resp.status_code == 200:
+                from fastapi.responses import Response
+                return Response(
+                    content=resp.content,
+                    media_type=resp.headers.get("content-type", "application/octet-stream"),
+                    headers={"Cache-Control": "no-cache"},
+                )
+            # Fall through to filesystem serving if plugin HTTP server
+            # doesn't have this file (e.g. static assets live on disk)
+            print(f"[Plugins] Proxy returned {resp.status_code} for {file_path}, trying filesystem")
     except HTTPException:
         raise
     except Exception:

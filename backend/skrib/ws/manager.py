@@ -284,7 +284,10 @@ class UnifiedConnectionManager:
         This is the path feature plugins (typing, reactions, web-push) take —
         their frontends send messages on their own namespace and the bridge
         forwards them as ``room.action`` frames so the SDK's
-        ``@on_room_action`` decorators fire.
+        ``@on_room_action`` decorators fire. It works the same way whether
+        the plugin runs as a separate process or in-process: everything past
+        the gate below routes through ``bridge.dispatch_room_action``, which
+        ``_send_to_plugin`` already handles for both runtimes.
 
         Returns True if the message was dispatched (or rejected with an error
         sent to the client), False if no plugin matches the namespace.
@@ -292,8 +295,8 @@ class UnifiedConnectionManager:
         try:
             from ..main import app
             bridge = getattr(app.state, 'plugin_bus_bridge', None)
-            plugin_bus = getattr(app.state, 'plugin_bus', None)
-            if not bridge or not plugin_bus or not plugin_bus.get_plugin(plugin_id):
+            registry = getattr(app.state, 'plugin_registry', None)
+            if not bridge or not registry or not registry.is_active(plugin_id):
                 return False
         except Exception:
             return False

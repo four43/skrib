@@ -55,7 +55,8 @@ class TestProxyApprovalStatus:
         return bus
 
     def _setup(self, plugin_id, status_str, http_base_url):
-        """Build a test app with middleware and a mocked plugin bus."""
+        """Build a test app with middleware and a registry over a mocked bus."""
+        from skrib.plugins.registry import PluginRegistry
         mock_bus = self._mock_bus(plugin_id, status_str, http_base_url)
 
         # Mirror the real app: inner API app mounted at /api
@@ -70,17 +71,17 @@ class TestProxyApprovalStatus:
         outer.mount("/api", api)
 
         import skrib.main
-        saved = getattr(skrib.main.app.state, "plugin_bus", None)
-        skrib.main.app.state.plugin_bus = mock_bus
+        saved = getattr(skrib.main.app.state, "plugin_registry", None)
+        skrib.main.app.state.plugin_registry = PluginRegistry(mock_bus)
         return outer, saved
 
     @staticmethod
     def _teardown(saved):
         import skrib.main
         if saved is not None:
-            skrib.main.app.state.plugin_bus = saved
+            skrib.main.app.state.plugin_registry = saved
         else:
-            del skrib.main.app.state.plugin_bus
+            del skrib.main.app.state.plugin_registry
 
     def test_pending_plugin_not_proxied(self):
         """Pending plugin with http_base_url must NOT be proxied."""

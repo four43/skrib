@@ -115,22 +115,21 @@ class PluginAuthMiddleware:
 
         try:
             from ..main import app as main_app
-            from ..plugin_bus.protocol import ApprovalStatus
-            plugin_bus = getattr(main_app.state, 'plugin_bus', None)
-            if not plugin_bus:
+            registry = getattr(main_app.state, 'plugin_registry', None)
+            if not registry:
                 return None
-            conn = plugin_bus.get_plugin(plugin_id)
-            if not conn or not conn.http_base_url:
+            # registry.get() never returns a record for a pending/rejected bus
+            # connection — pending/rejected plugins may have shut down their
+            # HTTP servers after the SDK returned early, so that check has to
+            # happen before a URL is handed back, not here.
+            rec = registry.get(plugin_id)
+            if not rec or not rec["http_base_url"]:
                 return None
-            # Only proxy to approved plugins — pending/rejected plugins may
-            # have shut down their HTTP servers after the SDK returned early.
-            if conn.status != ApprovalStatus.APPROVED:
-                return None
-            if not self._is_localhost_url(conn.http_base_url):
+            if not self._is_localhost_url(rec["http_base_url"]):
                 logger.warning("[Middleware] Rejecting non-localhost http_base_url for plugin '%s': %s",
-                               plugin_id, conn.http_base_url)
+                               plugin_id, rec["http_base_url"])
                 return None
-            return f"{conn.http_base_url.rstrip('/')}{sub_path}"
+            return f"{rec['http_base_url'].rstrip('/')}{sub_path}"
         except Exception:
             return None
 

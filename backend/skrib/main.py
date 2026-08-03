@@ -214,6 +214,12 @@ async def startup_event():
     actual_port = plugin_bus_server.sockets[0].getsockname()[1] if plugin_bus_server.sockets else bus_port
     print(f"[PluginBus] Listening on ws://{PLUGIN_BUS_HOST}:{actual_port}")
 
+    # One runtime-agnostic view of active plugins, for the four call sites
+    # that used to reach into plugin_bus's connection map directly.
+    from .plugins.registry import PluginRegistry
+    inprocess_host = None  # wired in Task 5
+    app.state.plugin_registry = PluginRegistry(plugin_bus, inprocess_host)
+
     # Start backup scheduler
     from .backups.services import start_backup_scheduler
     await start_backup_scheduler()
