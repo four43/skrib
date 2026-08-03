@@ -48,7 +48,7 @@ Related, and cheaper once the above is fixed:
 Nothing ships from a red branch. `feat-plugins-new-process` is unmerged and ~20
 e2e tests have been red since 2026-05-04.
 
-- [ ] **Batch `get_notify_levels(room_id) -> dict`.** Currently
+- [x] **Batch `get_notify_levels(room_id) -> dict`.** Currently
       `get_notify_level` is called once per member in a loop inside the chat
       plugin's `handle_message`, so an N-member room does N sequential bus
       round-trips at ~10–50 ms each.
@@ -56,6 +56,15 @@ e2e tests have been red since 2026-05-04.
       was an API-granularity error and says nothing about the process boundary.
       Getting this order wrong means learning the wrong lesson from the timebox
       below.
+      **Done 2026-08-03 (dual-runtime-plugins Task 1).** Landed alone, then
+      re-ran `markdown-and-input.spec.js` "Headings render" — still red, same
+      failure (only "Heading 1" ever renders; message 2 never arrives). The
+      full affected batch is unchanged too: 11 failed / 36 passed, same 5/3/2/1
+      split across the four spec files as the baseline below. So the msg-2 bug
+      is **not** API granularity — the process boundary is implicated. Task 6
+      (move `room-type-chat` to `runtime: in_process`) is the fix, not a
+      cleanup. See `.superpowers/sdd/2026-08-03-dual-runtime-plugins/task-1-report.md`
+      for full command output.
 - [ ] **Timebox the "msg 2 fails after msg 1" bug to two focused sessions.**
       Green → merge and move on. Still red → that is the decision to move
       `room-type-chat` to `runtime: in_process`, taken without regret. An
