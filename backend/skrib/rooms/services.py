@@ -306,6 +306,23 @@ def get_notify_level(room_id: str, username: str) -> str:
         return row['notify_level'] if row else 'all'
 
 
+def get_notify_levels(room_id: str) -> dict[str, str]:
+    """Get notification levels for every member of a room, keyed by username.
+
+    One query instead of one per member. Missing values default to 'all',
+    matching get_notify_level().
+    """
+    with get_db() as conn:
+        cursor = conn.execute(
+            'SELECT username, notify_level FROM room_users WHERE room_id = ?',
+            (room_id,),
+        )
+        return {
+            row['username']: (row['notify_level'] or 'all')
+            for row in cursor.fetchall()
+        }
+
+
 def mark_room_read(room_id: str, username: str, message_id: int):
     """Update the user's last-read position in a room."""
     with get_db() as conn:

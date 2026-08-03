@@ -210,6 +210,8 @@ class PluginBusBridge:
             return self._core_api.get_room_info(params["room_id"])
         elif method == "get_notify_level":
             return self._core_api.get_notify_level(params["room_id"], params["username"])
+        elif method == "get_notify_levels":
+            return self._core_api.get_notify_levels(params["room_id"])
         elif method == "get_unread_count":
             return await self._core_api.get_unread_count(params["room_id"], params["username"])
         elif method == "mark_room_read":

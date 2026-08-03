@@ -129,16 +129,19 @@ class RoomTypeChatPlugin(SkribPlugin):
         await ctx.bus.broadcast_to_room(room_id, "message", data=message_data)
 
         # Notify other members for sidebar badges (best-effort).
+        # One batched core_api call, not one per member — N sequential
+        # round-trips inside a message handler is what made a second
+        # message queue behind the first.
         try:
-            members = await self.core_api.get_room_members(room_id) or []
-            for member in members:
-                if member != ctx.username:
-                    level = await self.core_api.get_notify_level(room_id, member)
-                    notify_action = "new_message" if level == "all" else "update"
-                    await ctx.bus.notify_user(
-                        member, notify_action,
-                        room_id=room_id, sender=ctx.username,
-                    )
+            levels = await self.core_api.get_notify_levels(room_id) or {}
+            for member, level in levels.items():
+                if member == ctx.username:
+                    continue
+                notify_action = "new_message" if level == "all" else "update"
+                await ctx.bus.notify_user(
+                    member, notify_action,
+                    room_id=room_id, sender=ctx.username,
+                )
         except Exception:
             pass  # Notifications are best-effort
 

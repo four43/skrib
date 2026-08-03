@@ -32,6 +32,11 @@ class CoreAPI:
         from ..rooms.services import get_notify_level
         return get_notify_level(room_id, username)
 
+    def get_notify_levels(self, room_id: str) -> dict:
+        """Get notification levels for all members of a room, keyed by username."""
+        from ..rooms.services import get_notify_levels
+        return get_notify_levels(room_id)
+
     async def get_unread_count(self, room_id: str, username: str) -> int:
         """Get unread message count for a user in a room."""
         from ..rooms.services import get_unread_count_for_room

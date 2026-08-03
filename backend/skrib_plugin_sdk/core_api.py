@@ -41,6 +41,9 @@ class CoreAPI:
     async def get_notify_level(self, room_id: str, username: str) -> str:
         return await self._call("get_notify_level", room_id=room_id, username=username)
 
+    async def get_notify_levels(self, room_id: str) -> dict:
+        return await self._call("get_notify_levels", room_id=room_id)
+
     async def get_unread_count(self, room_id: str, username: str) -> int:
         return await self._call("get_unread_count", room_id=room_id, username=username)
 
