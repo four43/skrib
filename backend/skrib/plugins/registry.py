@@ -9,9 +9,12 @@ Adding a third runtime means changing this file, not four others.
 """
 from __future__ import annotations
 
+import logging
 from typing import Any
 
 from ..plugin_bus.protocol import ApprovalStatus
+
+logger = logging.getLogger(__name__)
 
 RECORD_KEYS = (
     "id", "version", "permissions", "room_types", "room_type_meta",
@@ -73,25 +76,44 @@ class PluginRegistry:
         return None
 
     def all(self) -> list[dict]:
-        """Every active plugin, in-process first. Ids are unique."""
+        """Every active plugin, in-process first. Ids are unique.
+
+        Each source is enumerated independently: a defect in one (e.g. a
+        raising in-process host) must not hide the other source's plugins
+        from the listing — a broken host should cost you that host's
+        plugins, not every bus-connected one too.
+        """
         records: list[dict] = []
         seen: set[str] = set()
+
         if self._host is not None:
-            for rec in self._host.plugin_records():
-                records.append(rec)
-                seen.add(rec["id"])
-        if self._bus is not None:
-            # PluginBusServer.plugins is its one public, read-only view of
-            # connected plugins (a property returning a shallow copy of its
-            # connection map) — the same one routes.py's plugin listing
-            # already relied on before this registry existed.
-            for plugin_id, conn in self._bus.plugins.items():
-                if plugin_id in seen:
-                    continue
-                rec = self._record_from_conn(conn)
-                if rec is not None:
+            try:
+                host_records = self._host.plugin_records()
+            except Exception:
+                logger.exception("[PluginRegistry] in-process host failed to enumerate plugins")
+            else:
+                for rec in host_records:
                     records.append(rec)
-                    seen.add(plugin_id)
+                    seen.add(rec["id"])
+
+        if self._bus is not None:
+            try:
+                # PluginBusServer.plugins is its one public, read-only view of
+                # connected plugins (a property returning a shallow copy of its
+                # connection map) — the same one routes.py's plugin listing
+                # already relied on before this registry existed.
+                bus_connections = list(self._bus.plugins.items())
+            except Exception:
+                logger.exception("[PluginRegistry] bus server failed to enumerate plugins")
+            else:
+                for plugin_id, conn in bus_connections:
+                    if plugin_id in seen:
+                        continue
+                    rec = self._record_from_conn(conn)
+                    if rec is not None:
+                        records.append(rec)
+                        seen.add(plugin_id)
+
         return records
 
     def is_active(self, plugin_id: str) -> bool:

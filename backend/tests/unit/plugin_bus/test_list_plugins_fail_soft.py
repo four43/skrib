@@ -116,3 +116,55 @@ async def test_healthy_record_is_unaffected(plugins_dir, installed_registry):
     assert plugins[0].id == "four43.good"
     assert plugins[0].enabled is True
     assert plugins[0].room_types == ["chat"]
+
+
+async def test_none_record_among_healthy_ones_is_skipped(plugins_dir, installed_registry):
+    """A non-dict entry (e.g. ``None`` from a buggy host) must not crash the
+    listing — ``record.get(...)`` on it would raise ``AttributeError`` if
+    touched outside a guard."""
+    _write_manifest(plugins_dir, "four43.good")
+    installed_registry(_FakeRegistry([_record("four43.good"), None]))
+
+    plugins = await list_plugins()
+
+    assert [p.id for p in plugins] == ["four43.good"]
+    assert plugins[0].enabled is True
+
+
+async def test_raising_inprocess_host_still_lists_bus_plugins(plugins_dir, installed_registry):
+    """The real registry, wired with a raising in-process host and a working
+    bus, must still list the bus plugin — proving the fail-soft guarantee
+    holds per-source, not just for the endpoint as a whole."""
+    from skrib.plugin_bus.protocol import ApprovalStatus
+    from skrib.plugins.registry import PluginRegistry
+
+    _write_manifest(plugins_dir, "four43.bus-plugin")
+
+    class _RaisingHost:
+        def plugin_records(self):
+            raise RuntimeError("in-process host is broken")
+
+    class _Conn:
+        plugin_id = "four43.bus-plugin"
+        version = "1.0.0"
+        permissions = {"bus.send"}
+        room_types = ["chat"]
+        room_type_meta = {}
+        frontend_scripts = []
+        frontend_styles = []
+        http_base_url = None
+        status = ApprovalStatus.APPROVED
+
+    class _FakeBus:
+        room_type_map = {"chat": "four43.bus-plugin"}
+        plugins = {"four43.bus-plugin": _Conn()}
+
+        def get_plugin(self, plugin_id):
+            return self.plugins.get(plugin_id)
+
+    installed_registry(PluginRegistry(_FakeBus(), _RaisingHost()))
+
+    plugins = await list_plugins()
+
+    assert [p.id for p in plugins] == ["four43.bus-plugin"]
+    assert plugins[0].enabled is True

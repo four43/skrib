@@ -125,6 +125,9 @@ async def list_plugins():
     plugins = []
     active_ids = set()
     for record in (_active_records(registry) if registry else []):
+        if not isinstance(record, dict):
+            print(f"[Plugins] Skipping malformed active-plugin record (not a mapping): {record!r}")
+            continue
         plugin_id = record.get("id", "<unknown>")
         try:
             info = _plugin_info_from_registry(plugin_id, record)

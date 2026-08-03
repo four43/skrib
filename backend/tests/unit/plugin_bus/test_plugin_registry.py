@@ -188,6 +188,42 @@ class TestRoomTypeOwner:
         assert reg.room_type_owner("todo") == "four43.inproc-one"
 
 
+class TestAllGuardsSourcesIndependently:
+    """A defect in one source (e.g. a broken in-process host) must not hide
+    the other source's plugins from ``all()`` — see Task 4C's second
+    follow-up review.
+    """
+
+    class _RaisingHost:
+        def plugin_records(self):
+            raise RuntimeError("in-process host is broken")
+
+    class _RaisingBusServer:
+        room_type_map: dict = {}
+
+        @property
+        def plugins(self):
+            raise RuntimeError("bus server is broken")
+
+        def get_plugin(self, plugin_id):
+            raise RuntimeError("bus server is broken")
+
+    def test_raising_inprocess_host_still_lists_bus_plugins(self):
+        reg = PluginRegistry(
+            _FakeBusServer({"four43.bus-one": _FakeConn("four43.bus-one")}),
+            self._RaisingHost(),
+        )
+
+        ids = [r["id"] for r in reg.all()]
+        assert ids == ["four43.bus-one"]
+
+    def test_raising_bus_still_lists_inprocess_plugins(self):
+        reg = PluginRegistry(self._RaisingBusServer(), _FakeHost())
+
+        ids = [r["id"] for r in reg.all()]
+        assert ids == ["four43.inproc-one"]
+
+
 def test_record_matches_a_real_plugin_connection():
     """A hand-rolled fake conn double can silently drift from the real
     ``PluginConnection`` dataclass if a field is ever renamed. Build a real
