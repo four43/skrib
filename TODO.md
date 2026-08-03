@@ -65,10 +65,21 @@ e2e tests have been red since 2026-05-04.
       (move `room-type-chat` to `runtime: in_process`) is the fix, not a
       cleanup. See `.superpowers/sdd/2026-08-03-dual-runtime-plugins/task-1-report.md`
       for full command output.
-- [ ] **Timebox the "msg 2 fails after msg 1" bug to two focused sessions.**
+- [x] **Timebox the "msg 2 fails after msg 1" bug to two focused sessions.**
       Green → merge and move on. Still red → that is the decision to move
       `room-type-chat` to `runtime: in_process`, taken without regret. An
       unbounded "just fix it" is the plan that already failed for three months.
+
+      **Resolved 2026-08-03.** Still red after batching (above), so
+      `room-type-chat` moved to `runtime: in_process` (dual-runtime-plugins
+      Task 6) — and that fixed it. Full e2e sweep after the change: 326
+      passed, 2 failed, 2 flaky (both green on retry), against a baseline of
+      ~20 hard failures. Backend suite: 432 passed. **The msg-2 bug is fixed,
+      and the cause was the process boundary, not API granularity** — batching
+      the per-member `get_notify_level` calls into one round-trip changed
+      nothing on its own. The 2 remaining failures are
+      `link-previews.spec.js:35` and `:130`, confirmed pre-existing (see the
+      P3 note on splitting link previews out of the chat plugin).
 
   Reproducer: `markdown-and-input.spec.js` "Headings render" is the simplest —
   three sequential messages, no menu interaction.
@@ -94,15 +105,16 @@ e2e tests have been red since 2026-05-04.
   `markdown-and-input.spec.js:86,101`, `core.spec.js:96,376,415`,
   `websocket-reconnect.spec.js:51`.
 
-- [ ] Re-run the auth e2e batch — `registration-and-authentication.spec.js:107`
+- [x] Re-run the auth e2e batch — `registration-and-authentication.spec.js:107`
       and `:324` were likely fixed by the fixture change that makes `_backend`
       always spawn plugins. Cheapest signal available; do it before deep debugging.
-- [ ] Fix the page-reload teardown flake (`todo-rooms.spec.js:197` and similar,
+      **Done: 19 passed, 0 failed** in the 2026-08-03 sweep.
+- [x] Fix the page-reload teardown flake (`todo-rooms.spec.js:197` and similar,
       `page.reload: net::ERR_ABORTED` while the WS is closing). Passes on retry,
       low priority.
+      **Clear as of the 2026-08-03 sweep** — the plugin batch containing
+      `todo-rooms.spec.js` is 50 passed / 0 failed / 0 flaky.
 - [ ] Merge `feat-plugins-new-process` into `master`.
-- [ ] Land the Docker/devcontainer work currently uncommitted in the working tree
-      (`docs/spec/2026-08-02-docker-multistage-nonroot-design.md`).
 
 ---
 
@@ -171,6 +183,14 @@ Spec: `docs/spec/2026-08-02-core-log-and-signal.md`.
 
 Spec: `docs/spec/2026-08-02-extension-model.md`.
 
+- [ ] **Natural next step after dual-runtime-plugins:** flip the remaining
+      four `runtime: process` plugins — `four43.room-type-todo`,
+      `four43.message-reactions`, `four43.emoji-picker`, `four43.chat-typing`
+      — to `runtime: in_process`. They were deliberately left on the bus so
+      any regression from the `runtime` change would be attributable to one
+      manifest key; that key has now proven itself on `four43.room-type-chat`,
+      so each of these four is a one-line change. `four43.chat-typing`
+      disappears entirely instead once the P2 core signal channel lands.
 - [ ] `kind`, `runtime`, `applies_to`, `subscriptions` manifest fields.
 - [ ] **Move `subscriptions` out of Python class attributes into the manifest.**
       Today they live in code
@@ -180,14 +200,26 @@ Spec: `docs/spec/2026-08-02-extension-model.md`.
 - [ ] Declare claimed room types in the manifest and validate runtime
       `register.room_type` against it.
 - [ ] Same SDK for both runtimes; `runtime` selects hosting only.
+- [ ] **`skrib_plugin_sdk/loader.py` silently writes into a plugin's source
+      tree.** `load_plugin_class` does `Path.touch()` on a missing
+      `backend/__init__.py`. That was a narrow, process-startup-only side
+      effect before; `InProcessHost` now calls the same loader from core's
+      own boot path, so an ordinary server start can mutate a plugin's source
+      tree — including in the production image, where `/app` is writable by
+      `app-user`.
 - [ ] **Core-owned plugin supervision** — spawn, restart with backoff, health in
       the admin UI. Replaces `start-plugins` (fire-and-forget bash, no
       supervision) and retires `run-plugins.py` (swallows per-plugin exceptions).
       Also resolves the undocumented-and-unenforced seed-before-plugin-start
       ordering hazard.
 - [ ] **Split link previews out of the chat plugin** into their own
-      `runtime: process` plugin. Fetching arbitrary user-supplied URLs is the best
-      isolation candidate in the codebase and currently has none.
+      `runtime: process` plugin. Fetching arbitrary user-supplied URLs is the
+      best isolation candidate in the codebase and currently has none. The two
+      e2e failures left after the dual-runtime-plugins work
+      (`link-previews.spec.js:35` and `:130`, pre-existing — confirmed by
+      A/B testing the `runtime` key) live in exactly this code, which
+      strengthens the case for splitting it out rather than debugging it
+      further in place.
 - [ ] Move attachments to `runtime: process` (Pillow parsing untrusted uploads).
 - [ ] `web-push` subscribes to core log items instead of
       `four43.room-type-chat:message` by name.
@@ -196,6 +228,13 @@ Spec: `docs/spec/2026-08-02-extension-model.md`.
 - [ ] Audit which `core:*` lifecycle events actually reach subscribers; either
       route lifecycle events through `broadcast_to_subscribers` or drop the
       subscriptions that never fire.
+- [ ] **One confirmed instance of the audit above: `four43.web-push`'s
+      subscription never fires.** It declares
+      `subscriptions = ["four43.room-type-chat:message"]` and an `@on_event`
+      handler for it, but the chat plugin's only `emit_event` call is
+      `core:message_deleted` — it never emits
+      `four43.room-type-chat:message`. So push-on-new-message is dead code,
+      and `docs/reference/websocket-bus.md` documents the wiring as if it works.
 - [ ] Observability: per-plugin rate-limited-frame counter, surfaced in admin UI.
 - [ ] Fold themes into the same mechanism (`kind: theme`). **Schedule last** —
       churn with no user-visible benefit.
@@ -285,6 +324,15 @@ made moot by P2/P3; re-triage after those land.
 
 ---
 
+## Cross-cutting — test hygiene
+
+- [ ] `backend/tests/integration/test_rooms.py:80-81`'s `_create_room_direct` seeds the
+      in-memory `ROOMS` module global (`rooms/services.py:10`) directly, and
+      nothing ever clears it between tests. An autouse `ROOMS.clear()` fixture
+      is owed before this leaks a room id from one test into another.
+
+---
+
 ## Documentation debt
 
 - [x] Three-layer `docs/` structure with `docs/README.md` as the index.
@@ -297,7 +345,12 @@ made moot by P2/P3; re-triage after those land.
       `architecture.md`.
 - [ ] **`reference/plugin-system.md` needs surgery, not patches.** 38 KB
       describing the old boundary. Its §20 also claims e2e tests don't spawn
-      plugin processes, which the fixtures now always do.
+      plugin processes, which the fixtures now always do. Also now stale: it
+      still describes the bus server's connection map as the source of truth
+      for which plugins are active. `backend/skrib/plugins/registry.py` is
+      that answer now, unifying in-process and bus-connected plugins behind
+      one interface (see `docs/reference/architecture.md`'s Implementation
+      Files table).
 - [ ] Rewrite `reference/auth.md` registration flow once P1 lands. The two-page
       rationale (line 38, "so the browser's credential manager detects the
       passphrase field") is obsoleted by deleting the passphrase.

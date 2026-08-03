@@ -215,27 +215,34 @@ docker-compose up --build
 Two or three processes:
 
 ```bash
-# Terminal 1: Backend with auto-reload (also starts bus server on port 9000)
+# Terminal 1: Backend with auto-reload (also starts the bus server on port
+# 9000, and loads any runtime: in_process plugins in-process)
 cd backend && uvicorn skrib.main:app --reload --host 0.0.0.0 --port 8000
 
 # Terminal 2: Frontend with HMR
 cd frontend && npm run dev  # port 5173, proxies /api to :8000
 
-# Terminal 3 (optional): Out-of-process plugins
+# Terminal 3 (optional): the runtime: "process" plugins
 cd backend && ./util/start-plugins
 ```
 
-**Plugin processes are not optional.** There is no in-process fallback — every room
-action dispatches through the bus, and chat is itself a plugin. So a server started
-without `./util/start-plugins` has no messaging at all. `start-plugins` is
-fire-and-forget bash with PID files: no supervision, no restart on crash, no health
-check.
+**Basic messaging needs no external process.** Each plugin declares a
+`runtime` in its manifest: `in_process` plugins are loaded and hosted inside
+the backend by `InProcessHost` (started alongside the app in `main.py`);
+`process` plugins — the default when `runtime` is absent — run standalone and
+connect to the bus server. `four43.room-type-chat` is `runtime: "in_process"`,
+so a server started with no `start-plugins` at all still has working chat.
+
+`start-plugins` remains for the six plugins that still declare or default to
+`runtime: "process"` (`attachments`, `chat-typing`, `emoji-picker`,
+`message-reactions`, `room-type-todo`, `web-push`). It is still fire-and-forget
+bash with PID files: no supervision, no restart on crash, no health check.
 
 > **Changing.** `docs/spec/2026-08-02-extension-model.md` §5 moves plugin
 > lifecycle into the app, so core spawns and supervises `runtime: "process"`
 > plugins itself and an admin never needs to know that plugins are processes.
-> Trusted first-party plugins move in-process, so basic messaging stops depending
-> on any external process at all.
+> That supervision work is still outstanding — `start-plugins` is what runs
+> today, for whichever plugins are left on the bus.
 
 ### Configuration
 
@@ -269,9 +276,11 @@ Restart the server. A fresh database is created automatically.
 | `backend/skrib/dependencies.py` | Auth middleware (require_auth, require_admin) |
 | `backend/skrib/permissions.py` | Centralized permission checking |
 | `backend/skrib/plugin_bus/server.py` | Out-of-process plugin bus server (port 9000) |
-| `backend/skrib/plugin_bus/bridge.py` | Translates bus frames to/from WS manager |
+| `backend/skrib/plugin_bus/bridge.py` | Translates bus frames to/from WS manager; resolves in-process vs. bus-connected per room type |
+| `backend/skrib/plugin_bus/inprocess_host.py` | Loads and hosts `runtime: in_process` plugins inside the backend |
 | `backend/skrib/plugin_bus/approvals.py` | Plugin approval service |
 | `backend/skrib/plugin_bus/settings.py` | Plugin settings service |
+| `backend/skrib/plugins/registry.py` | Single runtime-agnostic answer to "which plugins are active" (in-process + bus-connected); replaces direct reads of the bus server's connection map |
 | `backend/skrib/admin/routes.py` | Admin plugin approval API |
 | `backend/skrib_plugin_sdk/` | Python SDK for out-of-process plugins |
 | `backend/util/start-plugins` | Dev script to start/stop all plugin processes |

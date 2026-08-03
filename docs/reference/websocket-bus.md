@@ -37,14 +37,23 @@ When a message arrives:
 1. Parse `type` as `namespace:action`
 2. If `system:*` — handled by core (ping/pong, connection management)
 3. If `room:join` or `room:leave` — handled by core (subscription management)
-4. If `room:*` (other actions) — look up the room's type and dispatch through the plugin bus via `bridge.dispatch_room_action(...)`. There is no in-process fallback; every room action goes over the bus.
+4. If `room:*` (other actions) — look up the room's type, resolve its owning
+   plugin via `bridge.get_bus_plugin_for_room_type(room_type)` — which checks
+   in-process plugins first, then the bus server's `room_type_map` — and
+   dispatch through `bridge.dispatch_room_action(...)`. `ws/handlers.py` is
+   runtime-agnostic: it calls the same two methods either way and never
+   branches on where the plugin actually runs.
 5. If `{plugin-id}:*` — route to the matching bus-connected feature plugin via `_dispatch_plugin_namespace` in `ws/manager.py`, which applies the same membership checks as `handle_room`.
 
-> **Changing.** `docs/spec/2026-08-02-extension-model.md` makes the process
-> boundary a per-plugin `runtime` manifest field, so step 4 will dispatch
-> in-process for trusted plugins and over the bus only for `runtime: "process"`
-> ones. `docs/spec/2026-08-02-core-log-and-signal.md` moves message persistence
-> into core, so `room:message` will no longer be a plugin round-trip at all.
+A plugin's `runtime` manifest key selects where it runs: `"in_process"`
+plugins are loaded and hosted inside the backend by `InProcessHost`;
+`"process"` — the default when `runtime` is absent — runs the plugin as a
+standalone process that connects here over the bus. `four43.room-type-chat` is
+the one `runtime: "in_process"` plugin today; the rest are `"process"`.
+
+> **Changing.** `docs/spec/2026-08-02-core-log-and-signal.md` moves message
+> persistence into core, so `room:message` will no longer be a plugin
+> round-trip at all, for either runtime.
 
 ## Connection Manager
 
