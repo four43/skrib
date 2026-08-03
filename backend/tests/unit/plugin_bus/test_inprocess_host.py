@@ -102,3 +102,34 @@ def test_reregister_inprocess_drops_stale_room_types(bridge):
 
     assert bridge.get_bus_plugin_for_room_type("chat") == "four43.room-type-chat"
     assert bridge.get_bus_plugin_for_room_type("chat-legacy") is None
+
+
+import json
+
+from skrib.plugin_bus.inprocess_host import discover_inprocess_plugins
+
+
+def test_discover_only_returns_in_process_plugins(tmp_path):
+    """Only manifests declaring runtime: in_process are discovered."""
+    for pid, runtime in [
+        ("four43.alpha", "in_process"),
+        ("four43.beta", "process"),
+        ("four43.gamma", None),  # omitted -> defaults to process
+    ]:
+        d = tmp_path / pid
+        d.mkdir()
+        manifest = {"id": pid, "version": "1.0.0", "permissions": []}
+        if runtime is not None:
+            manifest["runtime"] = runtime
+        (d / "manifest.json").write_text(json.dumps(manifest))
+
+    found = discover_inprocess_plugins(tmp_path)
+
+    assert [pid for pid, _ in found] == ["four43.alpha"]
+
+
+def test_discover_ignores_directories_without_manifests(tmp_path):
+    """A stray directory must not break discovery."""
+    (tmp_path / "four43.orphan").mkdir()
+
+    assert discover_inprocess_plugins(tmp_path) == []
