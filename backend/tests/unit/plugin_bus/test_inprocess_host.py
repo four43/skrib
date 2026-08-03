@@ -158,3 +158,65 @@ def test_every_in_process_candidate_actually_loads(plugin_id):
     cls = _load_plugin_class(PLUGINS_DIR / plugin_id)
 
     assert cls.id == plugin_id
+
+
+import logging
+
+from skrib.plugin_bus.inprocess_host import InProcessHost
+
+
+def _write_plugin(plugin_dir: Path, plugin_id: str, *, broken: bool) -> None:
+    """Write a minimal in-process plugin dir, healthy or one that blows up on import."""
+    backend_dir = plugin_dir / "backend"
+    backend_dir.mkdir(parents=True)
+    (plugin_dir / "manifest.json").write_text(
+        json.dumps({"id": plugin_id, "version": "1.0.0", "runtime": "in_process", "permissions": []})
+    )
+    if broken:
+        (backend_dir / "plugin_bus.py").write_text(
+            "raise RuntimeError('boom - intentionally broken for test')\n"
+        )
+    else:
+        (backend_dir / "plugin_bus.py").write_text(
+            "from skrib_plugin_sdk import SkribPlugin\n\n\n"
+            "class Plugin(SkribPlugin):\n"
+            f"    id = {plugin_id!r}\n"
+            "    version = '1.0.0'\n"
+        )
+
+
+@pytest.mark.asyncio
+async def test_start_records_failure_without_raising(tmp_path, bridge, caplog):
+    """A plugin that fails to load must not raise, but must not be silent either.
+
+    This pins the "fail loudly" half of the in-process host: a bare
+    `except Exception: pass` in start() would pass every other test in this
+    suite while silently loading nothing, and no one would find out until a
+    plugin mysteriously handled no traffic.
+    """
+    _write_plugin(tmp_path / "test.broken", "test.broken", broken=True)
+    host = InProcessHost(bridge, tmp_path)
+
+    with caplog.at_level(logging.ERROR):
+        started = await host.start()
+
+    assert "test.broken" not in started
+    assert "test.broken" in host.failures
+    assert host.failures["test.broken"]  # non-empty failure message
+    assert any(
+        record.levelno == logging.ERROR and "test.broken" in record.getMessage()
+        for record in caplog.records
+    )
+
+
+@pytest.mark.asyncio
+async def test_start_starts_healthy_plugin_despite_sibling_failure(tmp_path, bridge):
+    """One broken plugin must not prevent a healthy sibling from starting."""
+    _write_plugin(tmp_path / "test.broken", "test.broken", broken=True)
+    _write_plugin(tmp_path / "test.healthy", "test.healthy", broken=False)
+    host = InProcessHost(bridge, tmp_path)
+
+    started = await host.start()
+
+    assert started == ["test.healthy"]
+    assert set(host.failures) == {"test.broken"}
