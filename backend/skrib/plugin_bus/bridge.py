@@ -395,24 +395,38 @@ class PluginBusBridge:
             return inproc
         return self._server.room_type_map.get(room_type)
 
+    def _drop_inprocess_room_types(self, plugin_id: str) -> None:
+        """Remove any room-type entries currently owned by `plugin_id`."""
+        for rt in [
+            rt for rt, pid in self._inprocess_room_types.items() if pid == plugin_id
+        ]:
+            del self._inprocess_room_types[rt]
+
     def register_inprocess(self, plugin_id: str, deliver, room_types: list[str]) -> None:
-        """Register an in-process plugin's inbound frame sink and room types."""
+        """Register an in-process plugin's inbound frame sink and room types.
+
+        Clears any room types this plugin owned from a previous registration
+        first, so re-registering with a shrunk `room_types` list doesn't leave
+        a stale mapping to a room type it no longer owns.
+        """
         self._inprocess[plugin_id] = deliver
+        self._drop_inprocess_room_types(plugin_id)
         for rt in room_types:
             self._inprocess_room_types[rt] = plugin_id
 
     def unregister_inprocess(self, plugin_id: str) -> None:
         """Remove an in-process plugin and any room types it owned."""
         self._inprocess.pop(plugin_id, None)
-        for rt in [
-            rt for rt, pid in self._inprocess_room_types.items() if pid == plugin_id
-        ]:
-            del self._inprocess_room_types[rt]
+        self._drop_inprocess_room_types(plugin_id)
 
     async def _send_to_plugin(self, plugin_id: str, frame: dict) -> bool:
         """Send a frame to a plugin, in-process or over the bus."""
         deliver = self._inprocess.get(plugin_id)
         if deliver is not None:
-            await deliver(frame)
-            return True
+            try:
+                await deliver(frame)
+                return True
+            except Exception:
+                logger.exception("[Bridge] Failed to deliver to in-process plugin '%s'", plugin_id)
+                return False
         return await self._server.send_to_plugin(plugin_id, frame)

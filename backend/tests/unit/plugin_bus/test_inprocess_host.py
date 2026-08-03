@@ -67,3 +67,38 @@ def test_unregister_removes_room_types(bridge):
     bridge.unregister_inprocess("four43.room-type-chat")
 
     assert bridge.get_bus_plugin_for_room_type("chat") is None
+
+
+@pytest.mark.asyncio
+async def test_send_to_plugin_returns_false_when_inprocess_deliver_raises(bridge):
+    """An in-process handler exception must not propagate.
+
+    A raise here is exactly what would otherwise tear down the caller's
+    entire WebSocket connection (ws/routes.py's outer except Exception),
+    reproducing the msg-2 teardown symptom this plan exists to fix. The
+    in-process branch must fail the same way the bus branch already does:
+    catch, log, return False.
+    """
+    async def deliver(frame):
+        raise ValueError("boom")
+
+    bridge.register_inprocess("four43.room-type-chat", deliver, ["chat"])
+
+    sent = await bridge._send_to_plugin(
+        "four43.room-type-chat", {"type": "room.action", "action": "message"}
+    )
+
+    assert sent is False
+
+
+def test_reregister_inprocess_drops_stale_room_types(bridge):
+    """Re-registering a plugin with a shrunk room_types list must not leave
+    a stale mapping to a room type it no longer owns."""
+    async def deliver(frame):
+        pass
+
+    bridge.register_inprocess("four43.room-type-chat", deliver, ["chat", "chat-legacy"])
+    bridge.register_inprocess("four43.room-type-chat", deliver, ["chat"])
+
+    assert bridge.get_bus_plugin_for_room_type("chat") == "four43.room-type-chat"
+    assert bridge.get_bus_plugin_for_room_type("chat-legacy") is None
