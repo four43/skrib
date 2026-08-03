@@ -35,6 +35,16 @@ for plugin_dir in "$PLUGINS_DIR"/four43.*/; do
     [ -f "$plugin_dir/__main__.py" ] || continue
     plugin_name=$(basename "$plugin_dir")
 
+    # Skip plugins the backend loads itself. runtime defaults to "process".
+    manifest="$plugin_dir/manifest.json"
+    if [ -f "$manifest" ]; then
+        runtime=$(python3 -c "import json,sys; print(json.load(open(sys.argv[1])).get('runtime','process'))" "$manifest" 2>/dev/null || echo process)
+        if [ "$runtime" = "in_process" ]; then
+            echo "[Plugins] Skipping $(basename "$plugin_dir") (runtime: in_process — loaded by the backend)"
+            continue
+        fi
+    fi
+
     # Kill existing process if running
     pidfile="$PID_DIR/$plugin_name.pid"
     if [ -f "$pidfile" ]; then
