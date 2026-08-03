@@ -133,3 +133,28 @@ def test_discover_ignores_directories_without_manifests(tmp_path):
     (tmp_path / "four43.orphan").mkdir()
 
     assert discover_inprocess_plugins(tmp_path) == []
+
+
+from pathlib import Path
+
+from skrib.plugin_bus.inprocess_host import _load_plugin_class
+
+PLUGINS_DIR = Path(__file__).resolve().parents[3] / "plugins"
+
+
+@pytest.mark.parametrize("plugin_id", [
+    "four43.room-type-chat",
+    "four43.room-type-todo",
+    "four43.message-reactions",
+    "four43.emoji-picker",
+    "four43.chat-typing",
+])
+def test_every_in_process_candidate_actually_loads(plugin_id):
+    """Each plugin targeted for the in-process runtime must import cleanly.
+
+    These plugins use relative imports (`from . import services`), which a bare
+    spec_from_file_location cannot satisfy.
+    """
+    cls = _load_plugin_class(PLUGINS_DIR / plugin_id)
+
+    assert cls.id == plugin_id

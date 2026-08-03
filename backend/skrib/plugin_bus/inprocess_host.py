@@ -11,7 +11,6 @@ docs/spec/2026-08-02-extension-model.md §3.1.
 """
 from __future__ import annotations
 
-import importlib.util
 import json
 import logging
 from pathlib import Path
@@ -49,21 +48,19 @@ def discover_inprocess_plugins(plugins_dir: Path) -> list[tuple[str, Path]]:
 
 
 def _load_plugin_class(plugin_dir: Path) -> Any:
-    """Import ``backend/plugin_bus.py`` from a plugin dir and return its
-    SkribPlugin subclass."""
+    """Return the SkribPlugin subclass defined in a plugin's backend/plugin_bus.py.
+
+    Delegates to the SDK loader, which sets the plugin's backend/ up as a real
+    package so its relative imports (`from . import services`) resolve. A bare
+    spec_from_file_location cannot do that.
+    """
+    from skrib_plugin_sdk.loader import load_plugin_class
     from skrib_plugin_sdk.plugin import SkribPlugin
 
-    module_path = plugin_dir / "backend" / "plugin_bus.py"
-    if not module_path.is_file():
-        raise FileNotFoundError(f"No backend/plugin_bus.py in {plugin_dir}")
-
-    # Namespaced module name so two plugins cannot collide in sys.modules.
-    module_name = f"_skrib_inprocess_{plugin_dir.name.replace('.', '_')}"
-    spec = importlib.util.spec_from_file_location(module_name, module_path)
-    if spec is None or spec.loader is None:
-        raise ImportError(f"Cannot load {module_path}")
-    module = importlib.util.module_from_spec(spec)
-    spec.loader.exec_module(module)
+    module = load_plugin_class(
+        str(plugin_dir),
+        allowed_base=str(Path(plugin_dir).parent),
+    )
 
     for attr in vars(module).values():
         if (
@@ -72,7 +69,7 @@ def _load_plugin_class(plugin_dir: Path) -> Any:
             and attr is not SkribPlugin
         ):
             return attr
-    raise ImportError(f"No SkribPlugin subclass found in {module_path}")
+    raise ImportError(f"No SkribPlugin subclass found in {plugin_dir}/backend/plugin_bus.py")
 
 
 class InProcessHost:
@@ -82,12 +79,19 @@ class InProcessHost:
         self._bridge = bridge
         self._plugins_dir = Path(plugins_dir)
         self._instances: dict[str, Any] = {}
+        self._failures: dict[str, str] = {}
+
+    @property
+    def failures(self) -> dict[str, str]:
+        """Plugin id -> repr(exc) for every plugin that failed to start."""
+        return dict(self._failures)
 
     async def start(self) -> list[str]:
         """Load and register every in-process plugin. Returns started ids.
 
         A plugin that fails to load is logged and skipped; it must never be
-        fatal to core startup.
+        fatal to core startup. But it must never be silent either — a failure
+        is recorded in ``self.failures``, logged with a traceback, and printed.
         """
         started: list[str] = []
         for plugin_id, plugin_dir in discover_inprocess_plugins(self._plugins_dir):
@@ -95,8 +99,13 @@ class InProcessHost:
                 await self._start_one(plugin_id, plugin_dir)
                 started.append(plugin_id)
                 logger.info("[InProcess] %s started", plugin_id)
-            except Exception:
-                logger.exception("[InProcess] Failed to start %s", plugin_id)
+            except Exception as exc:
+                self._failures[plugin_id] = repr(exc)
+                logger.error(
+                    "[InProcess] FAILED to start %s — it will not handle any traffic: %r",
+                    plugin_id, exc, exc_info=True,
+                )
+                print(f"[Plugins] IN-PROCESS PLUGIN FAILED: {plugin_id}: {exc!r}")
         return started
 
     async def _start_one(self, plugin_id: str, plugin_dir: Path) -> None:
