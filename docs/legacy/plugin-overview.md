@@ -1,5 +1,17 @@
 # Plugin System Overview
 
+> **Superseded — retained for history.** Written 2026-02-25.
+>
+> A short orientation doc, superseded by `docs/reference/plugin-system.md`.
+>
+> Historically notable as the origin of the process-isolation decision: *"At some
+> point these should be able to run in a separate process or separate docker
+> container, potentially even on a separate server."* That aspiration was
+> eventually implemented for every plugin including chat, which is what
+> `docs/spec/2026-08-02-extension-model.md` corrects.
+
+---
+
 Skrīb uses a plugin architecture to extend functionality without modifying core code. Plugins can add new room types (e.g., chat, whiteboard), cross-cutting features (e.g., typing indicators, reactions), REST endpoints, and frontend UI.
 
 ## Plugin Structure

@@ -97,6 +97,20 @@ SQLite with WAL (Write-Ahead Logging) mode for concurrent read access. Configure
 
 Each plugin has its own database at `data/plugins/{plugin_id}.db` with plugin-managed schema.
 
+**Known fault in the current split:** `room_users.last_read_message_id`
+(`database.py:172`) is a core column pointing at the `messages` table, which lives
+in the *chat plugin's* database file
+(`plugins/four43.room-type-chat/backend/plugin_bus.py:21`). No foreign key is
+possible across database files, unread counting requires a cross-process
+round-trip, and message search cannot exist in core because core has no messages.
+
+> **Changing.** `docs/spec/2026-08-02-core-log-and-signal.md` moves message
+> storage into a core per-room append-only **item log**, and adds a transient
+> **signal** channel for ephemeral room traffic (typing, WebRTC signalling). After
+> that, `last_read_message_id` becomes a real foreign key, room types become
+> renderers over the log rather than owners of storage, and
+> `four43.chat-typing` is deleted.
+
 ### Middleware Stack
 
 Applied in order in `main.py`:
@@ -211,7 +225,17 @@ cd frontend && npm run dev  # port 5173, proxies /api to :8000
 cd backend && ./util/start-plugins
 ```
 
-In-process plugins still work without starting plugin processes. The bus is used when plugins connect to port 9000.
+**Plugin processes are not optional.** There is no in-process fallback — every room
+action dispatches through the bus, and chat is itself a plugin. So a server started
+without `./util/start-plugins` has no messaging at all. `start-plugins` is
+fire-and-forget bash with PID files: no supervision, no restart on crash, no health
+check.
+
+> **Changing.** `docs/spec/2026-08-02-extension-model.md` §5 moves plugin
+> lifecycle into the app, so core spawns and supervises `runtime: "process"`
+> plugins itself and an admin never needs to know that plugins are processes.
+> Trusted first-party plugins move in-process, so basic messaging stops depending
+> on any external process at all.
 
 ### Configuration
 

@@ -37,8 +37,14 @@ When a message arrives:
 1. Parse `type` as `namespace:action`
 2. If `system:*` — handled by core (ping/pong, connection management)
 3. If `room:join` or `room:leave` — handled by core (subscription management)
-4. If `room:*` (other actions) — look up the room's type, find the registered room-type plugin, call `handle_room_action(action, data, username, room_id, ws)`
-5. If `{plugin-id}:*` — route to the matching feature plugin's WebSocket handler
+4. If `room:*` (other actions) — look up the room's type and dispatch through the plugin bus via `bridge.dispatch_room_action(...)`. There is no in-process fallback; every room action goes over the bus.
+5. If `{plugin-id}:*` — route to the matching bus-connected feature plugin via `_dispatch_plugin_namespace` in `ws/manager.py`, which applies the same membership checks as `handle_room`.
+
+> **Changing.** `docs/spec/2026-08-02-extension-model.md` makes the process
+> boundary a per-plugin `runtime` manifest field, so step 4 will dispatch
+> in-process for trusted plugins and over the bus only for `runtime: "process"`
+> ones. `docs/spec/2026-08-02-core-log-and-signal.md` moves message persistence
+> into core, so `room:message` will no longer be a plugin round-trip at all.
 
 ## Connection Manager
 
@@ -83,7 +89,16 @@ The WebSocket manager includes an internal event system for cross-namespace comm
 | `off_event(event, callback)` | Remove an event listener |
 | `register_reply_to(ws)` | Create an opaque token for plugin error responses back to the originating socket |
 
-Plugins use this to observe core events without tight coupling. For example, the Web Push plugin listens for `four43.room-type-chat:message` events to send push notifications.
+Plugins use this to observe core events. Note that the coupling is not as loose as
+it looks: the Web Push plugin subscribes to `four43.room-type-chat:message` **by
+name** (`plugins/four43.web-push/backend/plugin_bus.py:18`), so push notifications
+only work for one room type. Once core owns the item log
+(`docs/spec/2026-08-02-core-log-and-signal.md`), it subscribes to core log items
+instead and works for every room type.
+
+Also note that plugin `subscriptions` are declared as Python class attributes, not
+in the manifest, so an approving admin cannot see what a plugin listens to. That
+moves into the manifest per `docs/spec/2026-08-02-extension-model.md` §1.
 
 ## Client-Side Implementation
 

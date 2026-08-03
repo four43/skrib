@@ -1,5 +1,15 @@
 # API & Plugin System Cleanup TODO
 
+> **Superseded — retained for history.** Written 2026-02-22.
+>
+> Folded into the combined `TODO.md` at the repository root.
+>
+> Worth noting how long item 1 survived: it reported that the WebSocket namespace
+> separator is `:` in code but `.` in the docs, on 2026-02-22. It was still wrong in
+> `CLAUDE.md` — the file loaded into every session — until 2026-08-02.
+
+---
+
 ## High Severity
 
 ### 1. WebSocket namespace separator: `:` vs `.`

@@ -1,5 +1,22 @@
 # Enterprise Features
 
+> **Superseded — retained for history.** Written 2026-04-02.
+>
+> Superseded and retired by `docs/spec/2026-08-02-roadmap-phases.md` §2.
+>
+> Four features listed here are **permanently cut**, because they require the server
+> to read message plaintext and E2E encryption is an inviolable pillar: DLP content
+> scanning (Tier 1), eDiscovery *production* of message content (Tier 1),
+> compliance archiving / journaling (Tier 3), and information barriers as enforced
+> at search (Tier 3). Only legal hold acknowledged that tension when this was
+> written.
+>
+> Its priority table is also inverted for Skrīb's actual users: it scheduled SSO and
+> audit logging at Phase 1 and threads and search at Phase 3, which is procurement
+> order rather than user order.
+
+---
+
 What enterprises expect from a team messaging platform, and where Skrib stands today.
 
 ## Already Covered

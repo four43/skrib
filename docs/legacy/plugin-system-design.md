@@ -1,5 +1,19 @@
 # Plugin System Design
 
+> **Superseded — retained for history.** Written 2026-02-18.
+>
+> The original plugin-system design. Superseded twice: first by the
+> out-of-process migration (`ed3534f`..`47cbd8d`), then by
+> `docs/spec/2026-08-02-extension-model.md`, which moves the process boundary to a
+> per-plugin `runtime` manifest field and relocates message storage into core.
+>
+> Its "Phase 6: Plugin Marketplace (Future)" section is the only place in the whole
+> doc set that ever posited third-party plugin authors — which is why the
+> containment model built from this design had no user. Current reference:
+> `docs/reference/plugin-system.md`.
+
+---
+
 ## Overview
 
 Design a plugin architecture that allows extending Skrīb with new room types, features, and UI customization without modifying core code.

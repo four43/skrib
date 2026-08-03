@@ -100,6 +100,35 @@ Permission checks are centralized in `backend/skrib/permissions.py`:
 - **Isolated storage**: Each plugin has its own SQLite database, no access to core tables.
 - **Auth middleware**: Plugin HTTP routes go through dedicated authentication that injects trusted headers.
 
+## WebSocket Authentication
+
+`WS /api/ws?token={sessionToken}`. The server validates the token exactly as it
+validates an HTTP bearer token. An invalid token closes the connection with code
+`1008`.
+
+## Server-Side Storage
+
+The server stores encrypted key material but **never** holds:
+
+- user private keys (only wrapped blobs),
+- room key plaintext (only RSA-encrypted per-user blobs),
+- message plaintext (only AES-GCM ciphertext).
+
+### Users table — security-relevant columns
+
+| Column | Purpose |
+|---|---|
+| `credential_id` | WebAuthn credential identifier |
+| `public_key` | WebAuthn credential public key, for signature verification |
+| `encryption_public_key` | RSA-OAEP public key JWK, for encrypting room keys to this user |
+| `encrypted_private_key` | PRF-wrapped private key backup |
+| `passphrase_encrypted_private_key` | Passphrase-wrapped private key backup |
+
+### Challenges table
+
+WebAuthn challenges are single-use. Each is stored with its type (`registration`
+or `login`) and a timestamp, then deleted after verification.
+
 ## Threat Model
 
 | Threat | Mitigation |
@@ -113,6 +142,24 @@ Permission checks are centralized in `backend/skrib/permissions.py`:
 | Unauthorized room access via join requests | Join requests only for public rooms; approval required by room ops/owners/admins |
 | Lost device | PRF-based automatic key recovery, passphrase manual fallback |
 | XSS via message content | Messages decrypted and HTML-escaped before rendering |
+
+### Residual risks, stated plainly
+
+- **Server compromise.** An attacker with server access sees only ciphertext and
+  wrapped key blobs. Passphrase-wrapped keys are protected by PBKDF2 at 600 K
+  iterations.
+- **Weak passphrase.** The passphrase-wrapped blob lives on the server, so a
+  server-side attacker can attempt offline brute force. 600 K iterations make this
+  expensive but not impossible against a weak passphrase. This is one reason
+  user-invented passphrases are being removed in favour of generated phrases and
+  PRF — see `docs/spec/2026-08-02-onboarding-invite-links.md` §4.
+- **Domain changes.** Changing origin (a different subdomain, say) makes IndexedDB
+  and PRF recovery unavailable. Passphrase recovery is the bridge.
+- **Lost authenticator.** WebAuthn is the only auth method, so losing the
+  authenticator means losing login. The passphrase alone is not sufficient — it
+  recovers the *encryption* key only after a successful WebAuthn assertion.
+- **CORS** defaults to permissive (`*`) for development and must be restricted in
+  production.
 
 ## Implementation Files
 

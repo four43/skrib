@@ -4,14 +4,25 @@ Real-time collaboration app with WebAuthn/Passkey auth. FastAPI backend, vanilla
 
 ## Detailed Documentation
 
-Read these files on demand when working on specific areas:
+`docs/README.md` is the map. Docs live in three layers with different rules:
+`docs/spec/` holds dated decision records (immutable — supersede, don't edit),
+`docs/reference/` holds living docs (edit in place, must be true of `master`), and
+`docs/legacy/` holds superseded material.
+
+**Read `docs/spec/2026-08-02-roadmap-phases.md` before starting significant work** —
+it states the three pillars (E2E encryption as inviolable, extensibility, user
+experience), the current phase order, and what was deliberately cut.
+
+Read these on demand when working on specific areas:
 
 - **Backend API & structure**: `backend/README.md`
 - **Frontend Web App architecture**: `frontend/README.md`
-  - **WebAuthn testing via Playwright**: `docs/playwright-webauthn-testing.md`
-- **Feature planning**: `docs/planning-feature-list.md`
-- **E2E encryption design**: `docs/end-to-end-encryption.md`
-- **Plugin system & bus architecture**: `docs/plugin-system.md`
+  - **WebAuthn testing via Playwright**: `docs/reference/playwright-webauthn-testing.md`
+- **E2E encryption**: `docs/reference/end-to-end-encryption.md`
+- **Plugin system & bus architecture**: `docs/reference/plugin-system.md`
+- **Rooms, membership, roles**: `docs/reference/rooms-and-membership.md`
+- **Auth flows**: `docs/reference/auth.md`
+- **Live task list**: `TODO.md`
 - **Plugins**: Each plugin has a `README.md` — read on demand when working on a specific plugin:
   - `backend/plugins/four43.room-type-chat/README.md` — Chat messaging (room type)
   - `backend/plugins/four43.room-type-todo/README.md` — Todo lists (room type)
@@ -30,9 +41,13 @@ backend/skrib/       # FastAPI app
   auth/                  # WebAuthn registration/login
   rooms/                 # Chat rooms, DMs, IRC features (topic, roles)
   ws/                    # Unified WebSocket bus (single connection per client)
-  messages/              # Message search
+  room_folders/          # Nestable folder structure for rooms
+  users/                 # User model, roles, profiles, avatars
+  server/                # Server settings, invite tokens
+  themes/                # Theme discovery and serving
+  backups/               # Backup archives + scheduler
   admin/                 # Plugin approval admin API
-  plugins/               # Plugin registry, routes, middleware, core API, settings
+  plugins/               # Plugin routes, middleware, settings
   plugin_bus/            # Out-of-process plugin bus (server, bridge, protocol, approvals, settings)
   database.py            # SQLite + WAL mode
   dependencies.py        # Auth middleware
@@ -86,16 +101,25 @@ frontend/src/            # Vanilla JS (Vite build)
 ## Unified WebSocket Bus
 
 - Single WS connection per client at `WS /api/ws?token=...`
-- Two namespaces: `system.*` (connection-level) and `room.*` (all room traffic)
-- **User-scoped** events (`room.update`, `room.new_message`) go to all of a user's tabs
-- **Room-scoped** events (`room.message`, `room.topic`) go only to tabs that sent `room.join`
-- Client sends `room.join`/`room.leave` when switching rooms (no WS teardown)
-- Messages sent via `room.message` (from client) or HTTP `POST /rooms/{room_id}/messages`
+- **The namespace separator is a colon, not a dot.** Message types are
+  `namespace:action` — `system:connected`, `room:message`. The dispatcher splits on
+  `:` (`ws/handlers.py:44`, `ws/manager.py:263`).
+- Three namespaces: `system:*` (connection-level), `room:*` (all room traffic), and
+  `{plugin-id}:*` (e.g. `four43.chat-typing:start`)
+- **User-scoped** events (`room:update`, `room:new_message`) go to all of a user's tabs
+- **Room-scoped** events (`room:message`, `room:topic`) go only to tabs that sent `room:join`
+- Client sends `room:join`/`room:leave` when switching rooms (no WS teardown)
+- Messages sent via `room:message` (from client) or HTTP `POST /rooms/{room_id}/messages`
 - Implementation in `backend/skrib/ws/` (manager.py, handlers.py, routes.py)
 
 ## Out-of-Process Plugin Bus
 
-Plugins run as separate processes communicating over a WebSocket bus on port 9000. **The full reference for the bus protocol, permissions model, SDK API, and approval workflow is in `docs/plugin-system.md`** — read that file before designing or modifying plugin behaviour. This section is just the orientation map:
+Plugins run as separate processes communicating over a WebSocket bus on port 9000. **The full reference for the bus protocol, permissions model, SDK API, and approval workflow is in `docs/reference/plugin-system.md`** — read that file before designing or modifying plugin behaviour. This section is just the orientation map:
+
+> **This is changing.** `docs/spec/2026-08-02-extension-model.md` makes the process
+> boundary a per-plugin `runtime: in_process | process` manifest field, with the same
+> SDK either way, and `docs/spec/2026-08-02-core-log-and-signal.md` moves message
+> storage into core. Read both before extending the bus.
 
 - **Bus server** (`backend/skrib/plugin_bus/server.py`) — accepts plugin connections, enforces permissions, rate-limits, routes frames
 - **Bridge** (`backend/skrib/plugin_bus/bridge.py`) — translates bus frames to/from the UnifiedConnectionManager and CoreAPI

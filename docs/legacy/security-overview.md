@@ -1,5 +1,17 @@
 # Security Overview
 
+> **Superseded — retained for history.** Written 2026-02-22.
+>
+> Superseded. Its unique content has been merged into current reference docs:
+> WebSocket auth, the security-relevant `users` columns, the challenges table, and
+> the residual-risk notes are now in `docs/reference/security.md`; the crypto
+> material is in `docs/reference/end-to-end-encryption.md`.
+>
+> Retained only because it was one of three overlapping security documents and the
+> merge history is worth being able to check.
+
+---
+
 This document describes the cryptographic architecture, authentication flows, and key recovery strategies used in Skrib.
 
 ## Authentication: WebAuthn / Passkeys

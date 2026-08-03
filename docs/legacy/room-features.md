@@ -1,5 +1,16 @@
 # Room Features
 
+> **Superseded — retained for history.** Written 2026-02-25.
+>
+> **Contains a claim that is now wrong.** This document describes rooms as coming in
+> "two kinds: channels and DMs." Skrīb no longer distinguishes them — `GET /rooms`
+> returns one list, and room behaviour comes from the room type, not from whether it
+> is a DM.
+>
+> Current reference: `docs/reference/rooms-and-membership.md`.
+
+---
+
 Rooms are the core collaboration unit in Skrib. There are two kinds: **channels** (named group rooms) and **DMs** (direct messages between specific users).
 
 ## Channels

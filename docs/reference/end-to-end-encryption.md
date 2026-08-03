@@ -72,6 +72,18 @@ Encrypted messages are stored as JSON envelopes:
 
 Messages in the database have `content_type: "encrypted"` and `key_epoch` fields.
 
+### Envelope ownership
+
+**The envelope belongs to core, never to a room type or plugin.** Core assembles
+and parses it; a room type chooses only the plaintext schema it encrypts *inside*
+the envelope, and never touches the envelope itself.
+
+This is a hard constraint, not a convention. End-to-end encryption is an
+inviolable pillar, so a single room type that assembled its own envelope — or
+selected its own cipher — could silently produce server-readable content. Plugin
+authors must not be in a position to get crypto wrong. See
+`docs/spec/2026-08-02-core-log-and-signal.md` §1.4.
+
 ## Key Distribution
 
 When a user is invited to a room (via `/invite` command or Add Member modal):
@@ -90,6 +102,41 @@ Room keys use an epoch-based rotation system:
 - New messages are encrypted with the latest epoch
 - Older messages can still be decrypted using their recorded epoch
 - A new epoch is created when members change or when security requires rotation
+
+### Rotation on Member Removal
+
+When a member leaves or is removed, the key rotates **forward**. Historical
+messages are never re-encrypted.
+
+1. A remaining online member generates a new AES room key.
+2. That member encrypts it for each **remaining** member's public key.
+3. The new encrypted blobs are uploaded.
+4. The server increments `key_epoch` on the room.
+5. New messages use the new key, tagged with the new epoch.
+6. The departed member never receives the new epoch key and cannot read
+   anything sent after their removal.
+
+**Remaining members retain every epoch key they have ever held**, so their
+history stays readable. `room_keys` rows for continuing members are never
+pruned. The departed member's rows are deleted.
+
+#### Why history is not re-encrypted
+
+- The departed member *had* the old key while they were a member, so they could
+  already have kept plaintext copies of everything they decrypted.
+- Re-encrypting stored ciphertext does not revoke knowledge already gained.
+- It would mean decrypting and re-encrypting every historical message, for no
+  security benefit.
+
+Signal, Matrix, and WhatsApp all take the same approach: rotate forward, and
+accept that past access is past access.
+
+#### Epoch behaviour
+
+- Each item records the `key_epoch` it was encrypted under, so clients know which
+  key to use.
+- Clients hold all epoch keys for rooms they belong to.
+- Departed members never receive new epoch keys.
 
 ### Auto-Regeneration
 

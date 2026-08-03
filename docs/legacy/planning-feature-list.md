@@ -1,5 +1,17 @@
 # Multi-Room Chat Application - Feature Planning Document
 
+> **Superseded — retained for history.** Written 2026-02-18.
+>
+> The original 40+ feature brainstorm that started the project. Retained as history;
+> it is not a plan and was never prioritised.
+>
+> Live prioritisation is in `docs/spec/2026-08-02-roadmap-phases.md`. Note that this
+> document predates the decision that E2E encryption is inviolable, so several
+> entries here (server-side message search, in particular) are now permanently
+> impossible.
+
+---
+
 ## Core Infrastructure Features
 
 ### 1. Real-time Messaging

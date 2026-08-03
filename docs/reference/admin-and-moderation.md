@@ -41,10 +41,18 @@ In `invite_only` mode:
 - **List invites**: View active invite tokens
 - **Share**: Invite link includes the token as a query parameter
 
+> **Changing.** `docs/spec/2026-08-02-onboarding-invite-links.md` reworks this
+> substantially: `invite_only` becomes the seeded default, the link carries a
+> key-wrapping secret **in the URL fragment** rather than a token in the query
+> string (a query parameter would be sent to the server and would break the
+> zero-knowledge property), and the link stays valid until the user completes
+> enrollment rather than being single-use.
+
 ### Plugin Management
 
 - **List plugins**: View all discovered plugins with their manifests and enabled status
 - **Enable/disable**: Toggle plugins via `PATCH /api/plugins/{plugin_id}` (requires server restart for full effect)
+- **Approve/reject/disable**: Bus-connected plugins additionally require admin approval before they can send any frame, via `GET/POST/DELETE /api/admin/plugins/*`. A change to a plugin's security-relevant manifest fields re-triggers approval. See `docs/reference/plugin-system.md` §11.
 
 ## Theme System
 

@@ -1,5 +1,17 @@
 # Plugin Isolation: Architecture Roadmap
 
+> **Superseded — retained for history.** Written 2026-03-01.
+>
+> The five-phase plugin-isolation roadmap. Phases through process isolation were
+> executed; the roadmap is now replaced by
+> `docs/spec/2026-08-02-extension-model.md` and the phase list in
+> `docs/spec/2026-08-02-roadmap-phases.md`.
+>
+> Its Obsidian `register*` auto-cleanup observation (line ~250) is still a good idea
+> and carries forward into `TODO.md`.
+
+---
+
 ## Context
 
 The [plugin-overview.md](../docs/plugin-overview.md) describes 3 things provided to plugins:

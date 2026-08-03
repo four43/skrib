@@ -1,3 +1,15 @@
+> **Superseded — retained for history.** Written 2026-02-18.
+>
+> **Contains a claim that is incompatible with the E2E pillar.** It states the server
+> "should parse [@mentions] at send time to generate notifications" and store them
+> for querying. The server cannot read message content, so mention detection and
+> mention badges are computed client-side on sync. See
+> `docs/spec/2026-08-02-core-log-and-signal.md` §4.2.
+>
+> The token patterns themselves (`@user`, `#room`, `:emoji:`, `/command`) were
+> implemented and are documented in `docs/reference/rooms-and-membership.md`.
+
+---
 
 
 ## Token Patterns to Support

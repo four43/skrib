@@ -1,5 +1,16 @@
 # End-to-End Encryption for Chat Rooms
 
+> **Superseded — retained for history.** Written 2026-02-18.
+>
+> The original E2EE design exploration, including a key-derivation-from-WebAuthn
+> approach that was rejected in favour of hybrid RSA-OAEP + AES-GCM.
+>
+> Its key-rotation rationale ("why history is not re-encrypted", epoch behaviour)
+> has been merged into `docs/reference/end-to-end-encryption.md`. Nothing else here
+> is current.
+
+---
+
 Good news: You can implement E2EE for both DMs and chat rooms using the WebAuthn keys you already have! Here's how it works:
 
 ## Core Concept
