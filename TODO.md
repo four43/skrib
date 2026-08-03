@@ -235,6 +235,15 @@ Spec: `docs/spec/2026-08-02-extension-model.md`.
       `core:message_deleted` — it never emits
       `four43.room-type-chat:message`. So push-on-new-message is dead code,
       and `docs/reference/websocket-bus.md` documents the wiring as if it works.
+- [ ] **A tenth bus-only call site: `notify_plugin_config_updated` never
+      reaches an in-process plugin.**
+      `backend/skrib/plugin_bus/settings.py:198` calls
+      `plugin_bus.send_to_plugin` directly instead of going through
+      `PluginRegistry`/the bridge, so a settings change for an in-process
+      plugin silently never sends a `config.updated` frame. Fully latent
+      today: no bundled plugin declares `settings`, and no SDK code handles
+      a `config.updated` frame yet, so there's nothing observable to break.
+      Fix when the first in-process plugin adopts settings.
 - [ ] Observability: per-plugin rate-limited-frame counter, surfaced in admin UI.
 - [ ] Fold themes into the same mechanism (`kind: theme`). **Schedule last** —
       churn with no user-visible benefit.

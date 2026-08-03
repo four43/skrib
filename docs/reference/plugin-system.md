@@ -48,6 +48,49 @@ A plugin can do both — for example, the chat plugin owns the `chat` room type 
 
 ---
 
+## 1a. Two runtimes, one SDK
+
+Everything above describes a plugin as a separate process on the bus. That's still
+true for most plugins, but a manifest may instead declare:
+
+```json
+"runtime": "in_process"
+```
+
+`runtime` defaults to `"process"` when the key is absent, so every existing
+manifest keeps behaving exactly as documented above. An `in_process` plugin is
+imported straight into Skrib core's Python interpreter and driven by
+`InProcessHost` (`backend/skrib/plugin_bus/inprocess_host.py`) instead of
+connecting over the WebSocket bus. Concretely:
+
+- **The SDK is identical either way.** A plugin's `SkribPlugin` subclass in
+  `backend/plugin_bus.py` is written the same way regardless of `runtime` — it
+  doesn't call the bus client directly, so it can't tell which transport it's
+  running over. `InProcessHost` wires it to an `InProcessClient` (an in-memory
+  stand-in for the WebSocket client) instead of a real socket.
+- **No approval, no permission enforcement, no separate process.** An in-process
+  plugin is trusted first-party code: it shares fate with core (a crash can take
+  the whole server down) and skips the bus's per-frame permission checks
+  entirely. Only ship first-party plugins this way.
+- **`ws/handlers.py` doesn't know or care.** It resolves the owning plugin via
+  `PluginBusBridge.get_bus_plugin_for_room_type` and dispatches through
+  `dispatch_room_action` — both check the in-process registration before falling
+  back to the bus, so room-action dispatch is runtime-agnostic.
+- **`PluginRegistry` is the only authority on "is this plugin active".**
+  (`backend/skrib/plugins/registry.py`, exposed as `app.state.plugin_registry`.)
+  It merges `InProcessHost`'s running plugins with the bus server's approved
+  connections into one list of records. Code that instead reads the bus server's
+  connection map directly (`plugin_bus.plugins`, `plugin_bus.get_plugin(...)`) only
+  ever sees `process` plugins and silently drops every in-process one — that
+  exact mistake recurred repeatedly while this model was built. Always go through
+  the registry.
+- Today only `four43.room-type-chat` runs `in_process`; the other six bundled
+  plugins run `process`. `backend/util/start-plugins` and
+  `backend/util/run-plugins.py` both skip `in_process` plugins when spawning
+  subprocesses — see §20.
+
+---
+
 ## 2. Plugin layout
 
 A plugin lives under `backend/plugins/{plugin-id}/` with this layout:
@@ -738,10 +781,11 @@ Clients send `{"type": "room:typing", "room_id": "general"}`. The plugin emits `
 
 ## 20. Testing
 
-- **Unit tests** (`backend/tests/unit/plugin_bus/`) cover the bus server, bridge, protocol, SDK, approvals, settings, middleware. Run with `cd backend && python -m pytest tests/unit/plugin_bus -v`.
-- **E2E tests** (`frontend/tests/e2e/`) start only the uvicorn backend — they don't spawn plugin processes today. Plugin behaviour is exercised via the bus tests; integration with real plugin processes is currently a manual step.
-- To run with all bundled plugins as separate subprocesses: `cd backend && ./util/start-plugins`. To stop: `./util/start-plugins --stop`.
-- For a single-process debugging session (one event loop, all plugins): `cd backend && python util/run-plugins.py`.
+- **Unit tests** (`backend/tests/unit/plugin_bus/`) cover the bus server, bridge, protocol, SDK, approvals, settings, middleware, `InProcessHost`, and `PluginRegistry`. Run with `cd backend && python -m pytest tests/unit/plugin_bus -v`.
+- **E2E tests** (`frontend/tests/e2e/`) spawn a real subprocess for every bundled plugin whose manifest declares `runtime: "process"` (six today) and wait for each to connect before running — see `discoverBundledPlugins`/`waitForPluginsReady` in `frontend/tests/e2e/fixtures.js`. Plugins declaring `runtime: "in_process"` (`four43.room-type-chat`) are **not** spawned as subprocesses — they're loaded in-interpreter by the backend itself as part of normal startup, so there's nothing for the harness to wait on.
+- To run with all bundled `process` plugins as separate subprocesses: `cd backend && ./util/start-plugins`. To stop: `./util/start-plugins --stop`.
+- For a single-process debugging session (one event loop, all `process` plugins): `cd backend && python util/run-plugins.py`.
+- Both launchers skip `runtime: in_process` plugins — see §1a.
 
 ---
 

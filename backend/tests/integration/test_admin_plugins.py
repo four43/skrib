@@ -3,8 +3,10 @@ import base64
 import json
 import secrets
 from datetime import datetime
+from unittest.mock import MagicMock
 
 from skrib.database import get_db
+from skrib.plugins.registry import PluginRegistry
 
 
 # ---------------------------------------------------------------------------
@@ -28,6 +30,52 @@ def _create_user(username: str, role: str = "user") -> str:
 
 def _auth(token: str) -> dict:
     return {"Authorization": f"Bearer {token}"}
+
+
+class _FakeInProcessHost:
+    """Mirrors InProcessHost.plugin_records() — see
+    skrib.plugin_bus.inprocess_host.InProcessHost."""
+
+    def __init__(self, records):
+        self._records = records
+
+    def plugin_records(self):
+        return self._records
+
+
+def _inprocess_record(plugin_id: str) -> dict:
+    return {
+        "id": plugin_id,
+        "version": "1.0.0",
+        "permissions": [],
+        "room_types": ["chat"],
+        "room_type_meta": {},
+        "frontend_scripts": [],
+        "frontend_styles": [],
+        "http_base_url": None,
+        "runtime": "in_process",
+    }
+
+
+def _install_inprocess_registry(plugin_id: str):
+    """Make ``plugin_id`` resolve as an active in-process plugin.
+
+    Returns the previous registry so the caller can restore it in a
+    ``finally`` block, matching the pattern in test_rooms.py.
+    """
+    from skrib.main import app
+    saved = getattr(app.state, "plugin_registry", None)
+    host = _FakeInProcessHost([_inprocess_record(plugin_id)])
+    app.state.plugin_registry = PluginRegistry(MagicMock(), host)
+    return saved
+
+
+def _restore_registry(saved):
+    from skrib.main import app
+    if saved is not None:
+        app.state.plugin_registry = saved
+    else:
+        del app.state.plugin_registry
 
 
 def _create_plugin_approval(plugin_id: str, status: str = "pending",
@@ -155,6 +203,34 @@ class TestPluginActions:
         resp = client.post("/api/admin/plugins/test.pending/disable",
                            headers=_auth(token))
         assert resp.status_code == 400
+
+    def test_reject_in_process_plugin_is_rejected(self, client):
+        """An in-process plugin (e.g. four43.room-type-chat) may still carry
+        a stale approval record from before it moved in-process. Rejecting
+        it would call bus.deactivate_plugin as a no-op and return 200 while
+        the plugin keeps handling every room — see admin/routes.py."""
+        token = _create_user("admin", role="admin")
+        _create_plugin_approval("four43.inproc-chat", status="approved")
+        saved = _install_inprocess_registry("four43.inproc-chat")
+        try:
+            resp = client.post("/api/admin/plugins/four43.inproc-chat/reject",
+                               headers=_auth(token))
+            assert resp.status_code == 400
+            assert "in-process" in resp.json()["detail"].lower()
+        finally:
+            _restore_registry(saved)
+
+    def test_disable_in_process_plugin_is_rejected(self, client):
+        token = _create_user("admin", role="admin")
+        _create_plugin_approval("four43.inproc-chat", status="approved")
+        saved = _install_inprocess_registry("four43.inproc-chat")
+        try:
+            resp = client.post("/api/admin/plugins/four43.inproc-chat/disable",
+                               headers=_auth(token))
+            assert resp.status_code == 400
+            assert "in-process" in resp.json()["detail"].lower()
+        finally:
+            _restore_registry(saved)
 
     def test_actions_require_admin(self, client):
         token = _create_user("alice")

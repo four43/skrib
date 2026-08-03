@@ -17,6 +17,39 @@ def _get_bus_server():
         return None
 
 
+def _get_registry():
+    """Get the runtime-agnostic plugin registry from app state."""
+    try:
+        from ..main import app
+        return getattr(app.state, "plugin_registry", None)
+    except Exception:
+        return None
+
+
+def _reject_if_in_process(plugin_id: str) -> None:
+    """Raise 400 if ``plugin_id`` is an active in-process plugin.
+
+    An in-process plugin can still carry a stale approval record — e.g. one
+    left over from before it moved in-process, or created afresh on every
+    startup by some approval flows. Rejecting or disabling it would call
+    ``bus.deactivate_plugin`` as a no-op (that only ever affects bus
+    connections) and return 200, leaving the admin UI showing the plugin as
+    disabled while it keeps handling every room exactly as before. In-process
+    plugins are enabled or disabled by their manifest's ``runtime`` key, not
+    by approval state, so refuse the action instead of silently no-opping.
+    """
+    registry = _get_registry()
+    record = registry.get(plugin_id) if registry else None
+    if record is not None and record.get("runtime") == "in_process":
+        raise HTTPException(
+            status_code=400,
+            detail=(
+                f"Plugin '{plugin_id}' runs in-process and is enabled or "
+                "disabled via its manifest, not by approval state."
+            ),
+        )
+
+
 # ---------------------------------------------------------------------------
 # List endpoints
 # ---------------------------------------------------------------------------
@@ -91,6 +124,8 @@ async def reject_plugin(plugin_id: str, admin: str = Depends(require_admin)):
     if not record:
         raise HTTPException(status_code=404, detail=f"Plugin '{plugin_id}' not found")
 
+    _reject_if_in_process(plugin_id)
+
     if not approvals.reject_plugin(plugin_id):
         raise HTTPException(status_code=500, detail="Failed to reject plugin")
 
@@ -113,6 +148,8 @@ async def disable_plugin(plugin_id: str, admin: str = Depends(require_admin)):
 
     if record["status"] != "approved":
         raise HTTPException(status_code=400, detail="Can only disable approved plugins")
+
+    _reject_if_in_process(plugin_id)
 
     if not approvals.disable_plugin(plugin_id):
         raise HTTPException(status_code=500, detail="Failed to disable plugin")

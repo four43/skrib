@@ -47,8 +47,8 @@ backend/skrib/       # FastAPI app
   themes/                # Theme discovery and serving
   backups/               # Backup archives + scheduler
   admin/                 # Plugin approval admin API
-  plugins/               # Plugin routes, middleware, settings
-  plugin_bus/            # Out-of-process plugin bus (server, bridge, protocol, approvals, settings)
+  plugins/               # Plugin routes, middleware, settings, registry (runtime-agnostic active-plugin lookup)
+  plugin_bus/            # Bus (server, bridge, protocol, approvals, settings) + in-process host
   database.py            # SQLite + WAL mode
   dependencies.py        # Auth middleware
   main.py                # App entry & router registration
@@ -112,25 +112,37 @@ frontend/src/            # Vanilla JS (Vite build)
 - Messages sent via `room:message` (from client) or HTTP `POST /rooms/{room_id}/messages`
 - Implementation in `backend/skrib/ws/` (manager.py, handlers.py, routes.py)
 
-## Out-of-Process Plugin Bus
+## Plugin Bus — Dual Runtime
 
-Plugins run as separate processes communicating over a WebSocket bus on port 9000. **The full reference for the bus protocol, permissions model, SDK API, and approval workflow is in `docs/reference/plugin-system.md`** — read that file before designing or modifying plugin behaviour. This section is just the orientation map:
-
-> **This is changing.** `docs/spec/2026-08-02-extension-model.md` makes the process
-> boundary a per-plugin `runtime: in_process | process` manifest field, with the same
-> SDK either way, and `docs/spec/2026-08-02-core-log-and-signal.md` moves message
-> storage into core. Read both before extending the bus.
+Each plugin's manifest declares `"runtime": "in_process" | "process"` (defaults to
+`"process"` when absent). `process` plugins run as separate OS processes talking to
+a WebSocket bus on port 9000; `in_process` plugins are imported straight into the
+backend's interpreter and loaded by `InProcessHost`
+(`backend/skrib/plugin_bus/inprocess_host.py`). The SDK is identical either way — a
+plugin's `backend/plugin_bus.py` doesn't know or care which runtime it's running
+under. Only first-party, trusted code should ever declare `in_process`: it shares
+fate with the server (a crash can take core down with it) and its permissions are
+not enforced the way a bus connection's are. Today only `four43.room-type-chat`
+runs in-process; the other six run over the bus. **The full reference for the bus
+protocol, permissions model, SDK API, and approval workflow is in
+`docs/reference/plugin-system.md`** — read that file before designing or modifying
+plugin behaviour. This section is just the orientation map:
 
 - **Bus server** (`backend/skrib/plugin_bus/server.py`) — accepts plugin connections, enforces permissions, rate-limits, routes frames
-- **Bridge** (`backend/skrib/plugin_bus/bridge.py`) — translates bus frames to/from the UnifiedConnectionManager and CoreAPI
+- **In-process host** (`backend/skrib/plugin_bus/inprocess_host.py`) — discovers, loads, and owns the lifecycle of `runtime: in_process` plugins
+- **Bridge** (`backend/skrib/plugin_bus/bridge.py`) — translates frames to/from the UnifiedConnectionManager and CoreAPI for both runtimes; `get_bus_plugin_for_room_type` and `dispatch_room_action` are runtime-agnostic, so `ws/handlers.py` dispatches every room action without knowing where the owning plugin runs
+- **Registry** (`backend/skrib/plugins/registry.py`) — `PluginRegistry` is the **only** place code should ask "is this plugin active, and what are its details". Anything that instead reads the bus server's connection map directly only sees `process` plugins and silently drops every in-process one — this exact mistake produced ten separate latent bugs across this feature's review cycles. New code needing plugin state must go through `app.state.plugin_registry`, not `plugin_bus`.
 - **Protocol** (`backend/skrib/plugin_bus/protocol.py`) — frame types, validation, permissions
-- **Approvals** (`backend/skrib/plugin_bus/approvals.py`) — admin must approve new plugins before activation; manifest changes re-trigger approval
+- **Approvals** (`backend/skrib/plugin_bus/approvals.py`) — admin must approve new `process` plugins before activation; manifest changes re-trigger approval. In-process plugins need no approval — they are trusted first-party code.
 - **Settings** (`backend/skrib/plugin_bus/settings.py`) — typed plugin settings (server-scoped and user-scoped)
-- **SDK** (`backend/skrib_plugin_sdk/`) — Python SDK for writing out-of-process plugins
-- **Admin API** (`backend/skrib/admin/routes.py`) — `GET/POST/DELETE /api/admin/plugins/*` for approval management
+- **SDK** (`backend/skrib_plugin_sdk/`) — Python SDK for writing plugins, used by both runtimes
+- **Admin API** (`backend/skrib/admin/routes.py`) — `GET/POST/DELETE /api/admin/plugins/*` for approval management (rejects/disables are refused for an in-process plugin — see its manifest instead)
 - **Settings API** (`backend/skrib/plugins/settings_routes.py`) — `GET/PATCH /api/plugins/{id}/settings/*`
 
-Each plugin has a `backend/plugin_bus.py` (SDK class) and `__main__.py` (entry point). There is no in-process fallback — `ws/handlers.py` dispatches every room action through the bus.
+Each `process` plugin has a `backend/plugin_bus.py` (SDK class) and `__main__.py`
+(entry point). `backend/util/start-plugins` and `backend/util/run-plugins.py` both
+skip `runtime: in_process` plugins when spawning processes — don't add a launcher
+that doesn't.
 
 ## Plugins — Frontend Build
 

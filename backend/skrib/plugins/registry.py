@@ -67,6 +67,9 @@ class PluginRegistry:
         """
         if self._host is not None:
             for rec in self._host.plugin_records():
+                if not isinstance(rec, dict) or not rec.get("id"):
+                    logger.warning("[PluginRegistry] Skipping malformed in-process record: %r", rec)
+                    continue
                 if rec["id"] == plugin_id:
                     return rec
         if self._bus is not None:

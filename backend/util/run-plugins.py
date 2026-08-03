@@ -4,9 +4,15 @@ Used by the VSCode "Plugins: Start All" launch config. All plugins
 run as concurrent tasks in one process, which is convenient for
 development and debugging (breakpoints, logs in one terminal).
 
+Plugins declaring ``runtime: in_process`` in their manifest are skipped —
+the backend's ``InProcessHost`` already loads those in-interpreter, and this
+launcher would otherwise start a second, bus-connected copy of the same
+plugin (see util/start-plugins, which applies the same skip).
+
 For production, use util/start-plugins which runs each as a separate process.
 """
 import asyncio
+import json
 import os
 import sys
 import signal
@@ -22,13 +28,39 @@ PLUGINS_DIR = os.path.join(backend_dir, "plugins")
 BUS_URL = os.getenv("SKRIB_BUS_URL", "ws://127.0.0.1:9000")
 
 
+def _runtime_of(plugin_dir):
+    """Return a plugin's declared runtime, defaulting to "process".
+
+    Mirrors util/start-plugins: a missing or unreadable manifest, or one
+    with no "runtime" key, is treated as "process" so an unmodified
+    manifest keeps its current behaviour.
+    """
+    manifest_path = os.path.join(plugin_dir, "manifest.json")
+    try:
+        with open(manifest_path) as f:
+            manifest = json.load(f)
+    except (OSError, json.JSONDecodeError):
+        return "process"
+    return manifest.get("runtime", "process")
+
+
 def discover_plugins():
-    """Find all plugin directories that have a __main__.py."""
+    """Find all plugin directories that have a __main__.py.
+
+    Skips ``runtime: in_process`` plugins — the backend's ``InProcessHost``
+    already loads those in-interpreter, so spawning a second, bus-connected
+    copy here would mean two processes fighting over the same plugin
+    database.
+    """
     plugins = []
     for name in sorted(os.listdir(PLUGINS_DIR)):
         plugin_dir = os.path.join(PLUGINS_DIR, name)
-        if os.path.isfile(os.path.join(plugin_dir, "__main__.py")):
-            plugins.append((name, plugin_dir))
+        if not os.path.isfile(os.path.join(plugin_dir, "__main__.py")):
+            continue
+        if _runtime_of(plugin_dir) == "in_process":
+            print(f"[Plugins] Skipping {name} (runtime: in_process — loaded by the backend)")
+            continue
+        plugins.append((name, plugin_dir))
     return plugins
 
 

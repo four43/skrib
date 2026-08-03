@@ -359,6 +359,45 @@ class TestAllGuardsPerItemWithinASource:
         assert ids == ["four43.bus-healthy", "four43.inproc-one"]
 
 
+class TestGetGuardsPerItem:
+    """``get()`` walks ``plugin_records()`` the same way ``all()`` and
+    ``room_type_owner()`` do, but historically indexed ``rec["id"]``
+    unguarded — the identical narrowing bug fixed per-item in those two
+    methods (Task 4C, rounds 2 and 3), a fourth time. A malformed record
+    anywhere in the list (not just first or last) must not stop ``get()``
+    from resolving a healthy one — see rooms/routes.py and server/routes.py,
+    which call this with no try/except.
+    """
+
+    class _HostWithJunkAmongHealthyRecords:
+        def plugin_records(self):
+            return [
+                None,  # e.g. a buggy host appending before populating
+                {
+                    "id": "four43.inproc-healthy",
+                    "version": "1.0.0",
+                    "permissions": [],
+                    "room_types": ["todo"],
+                    "room_type_meta": {},
+                    "frontend_scripts": [],
+                    "frontend_styles": [],
+                    "http_base_url": None,
+                    "runtime": "in_process",
+                },
+            ]
+
+    def test_junk_record_does_not_break_lookup_of_a_healthy_one(self):
+        reg = PluginRegistry(
+            _FakeBusServer({}, room_type_map={}),
+            self._HostWithJunkAmongHealthyRecords(),
+        )
+
+        record = reg.get("four43.inproc-healthy")
+
+        assert record is not None
+        assert record["id"] == "four43.inproc-healthy"
+
+
 def test_record_matches_a_real_plugin_connection():
     """A hand-rolled fake conn double can silently drift from the real
     ``PluginConnection`` dataclass if a field is ever renamed. Build a real
