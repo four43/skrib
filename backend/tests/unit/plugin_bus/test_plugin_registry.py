@@ -187,6 +187,82 @@ class TestRoomTypeOwner:
 
         assert reg.room_type_owner("todo") == "four43.inproc-one"
 
+    def test_junk_inprocess_record_does_not_break_lookup_of_healthy_ones(self):
+        """The identical unguarded ``rec["room_types"]``/``rec["id"]`` pattern
+        that ``all()`` needed per-item guarding for (Task 4C, fix round 3)
+        also exists here — a malformed record must be skipped and logged,
+        not raise mid-loop and hide every record after it. Reachable from
+        rooms/routes.py's room-creation validation as soon as any in-process
+        plugin exists.
+        """
+
+        class _HostWithJunkAmongHealthyRecords:
+            def plugin_records(self):
+                return [
+                    None,  # e.g. a buggy host appending before populating
+                    {
+                        "id": "four43.inproc-healthy",
+                        "version": "1.0.0",
+                        "permissions": [],
+                        "room_types": ["todo"],
+                        "room_type_meta": {},
+                        "frontend_scripts": [],
+                        "frontend_styles": [],
+                        "http_base_url": None,
+                        "runtime": "in_process",
+                    },
+                ]
+
+        reg = PluginRegistry(
+            _FakeBusServer({}, room_type_map={}),
+            _HostWithJunkAmongHealthyRecords(),
+        )
+
+        assert reg.room_type_owner("todo") == "four43.inproc-healthy"
+
+    def test_record_missing_room_types_does_not_break_lookup_of_healthy_ones(self):
+        """A record that is a dict and has an ``id`` — passing the isinstance/id
+        guard — but lacks a ``room_types`` key entirely is a distinct malformed
+        shape from ``None``. The guard must not stop at ``rec.get("id")`` and
+        then index ``rec["room_types"]`` unguarded on the very next line, or
+        this record still raises ``KeyError`` and hides every record after it,
+        including a healthy one that owns the room type actually being looked up.
+        """
+
+        class _HostWithRecordMissingRoomTypes:
+            def plugin_records(self):
+                return [
+                    {
+                        "id": "four43.inproc-no-room-types",
+                        "version": "1.0.0",
+                        "permissions": [],
+                        # no "room_types" key at all
+                        "room_type_meta": {},
+                        "frontend_scripts": [],
+                        "frontend_styles": [],
+                        "http_base_url": None,
+                        "runtime": "in_process",
+                    },
+                    {
+                        "id": "four43.inproc-healthy",
+                        "version": "1.0.0",
+                        "permissions": [],
+                        "room_types": ["todo"],
+                        "room_type_meta": {},
+                        "frontend_scripts": [],
+                        "frontend_styles": [],
+                        "http_base_url": None,
+                        "runtime": "in_process",
+                    },
+                ]
+
+        reg = PluginRegistry(
+            _FakeBusServer({}, room_type_map={}),
+            _HostWithRecordMissingRoomTypes(),
+        )
+
+        assert reg.room_type_owner("todo") == "four43.inproc-healthy"
+
 
 class TestAllGuardsSourcesIndependently:
     """A defect in one source (e.g. a broken in-process host) must not hide

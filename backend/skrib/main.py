@@ -214,10 +214,24 @@ async def startup_event():
     actual_port = plugin_bus_server.sockets[0].getsockname()[1] if plugin_bus_server.sockets else bus_port
     print(f"[PluginBus] Listening on ws://{PLUGIN_BUS_HOST}:{actual_port}")
 
+    # Start in-process plugins. These need no external process and no
+    # approval — they are trusted first-party code sharing this interpreter.
+    # Must come after the bridge exists (register_inprocess is a bridge call)
+    # and before the registry is constructed (it needs the host to present
+    # in-process plugins alongside bus-connected ones).
+    from pathlib import Path
+    from .plugin_bus.inprocess_host import InProcessHost
+
+    inprocess_host = InProcessHost(bridge, Path(__file__).parent.parent / "plugins")
+    app.state.inprocess_host = inprocess_host
+    started_inprocess = await inprocess_host.start()
+    if started_inprocess:
+        print(f"[Plugins] in-process: {', '.join(started_inprocess)}")
+    _t("inprocess host started")
+
     # One runtime-agnostic view of active plugins, for the four call sites
     # that used to reach into plugin_bus's connection map directly.
     from .plugins.registry import PluginRegistry
-    inprocess_host = None  # wired in Task 5
     app.state.plugin_registry = PluginRegistry(plugin_bus, inprocess_host)
 
     # Start backup scheduler
@@ -235,6 +249,11 @@ async def shutdown_event():
     ws.bus.stop_heartbeat()
     from .backups.services import stop_backup_scheduler
     stop_backup_scheduler()
+
+    # Stop in-process plugins before the bridge they are registered with
+    inprocess_host = getattr(app.state, "inprocess_host", None)
+    if inprocess_host is not None:
+        await inprocess_host.stop()
 
     # Stop Plugin Bus bridge and server
     if hasattr(app.state, 'plugin_bus_bridge'):

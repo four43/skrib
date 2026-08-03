@@ -150,7 +150,10 @@ class PluginRegistry:
         """
         if self._host is not None:
             for rec in self._host.plugin_records():
-                if room_type in rec["room_types"]:
+                if not isinstance(rec, dict) or not rec.get("id"):
+                    logger.warning("[PluginRegistry] Skipping malformed in-process record: %r", rec)
+                    continue
+                if room_type in (rec.get("room_types") or ()):
                     return rec["id"]
         if self._bus is not None:
             return self._bus.room_type_map.get(room_type)
