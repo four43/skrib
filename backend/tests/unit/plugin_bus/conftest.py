@@ -5,6 +5,22 @@ from datetime import datetime
 import pytest
 
 
+@pytest.fixture(autouse=True)
+def _reset_inprocess_settings_schemas():
+    """Prevent one test's in-process settings schema from leaking into the next.
+
+    ``register_inprocess_settings_schema`` (skrib/plugin_bus/settings.py) writes
+    into a module-level dict, since in-process plugins have no per-connection
+    object to hang the schema off of the way bus-connected plugins do. Most
+    tests clean up via ``host.stop()``, but a future test that doesn't would
+    otherwise silently change ``get_settings_schema()`` for every later test in
+    this process.
+    """
+    yield
+    from skrib.plugin_bus.settings import clear_inprocess_settings_schemas
+    clear_inprocess_settings_schemas()
+
+
 @pytest.fixture
 def seeded_room():
     """Create a room with three members: alice, bob, carol.

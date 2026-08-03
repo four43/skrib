@@ -53,6 +53,19 @@ def unregister_inprocess_settings_schema(plugin_id: str) -> None:
     _inprocess_settings_schemas.pop(plugin_id, None)
 
 
+def clear_inprocess_settings_schemas() -> None:
+    """Remove every registered in-process settings schema.
+
+    ``_inprocess_settings_schemas`` is module-level state, so a test that
+    registers a schema without going through ``InProcessHost.stop()`` would
+    otherwise leak an entry into every later test in the same pytest process,
+    silently changing ``get_settings_schema()`` for unrelated tests. An
+    autouse fixture in tests/unit/plugin_bus/conftest.py calls this after
+    every test.
+    """
+    _inprocess_settings_schemas.clear()
+
+
 def get_settings_schema(plugin_id: str) -> list[dict]:
     """Get the settings schema for a plugin, in-process or bus-connected.
 

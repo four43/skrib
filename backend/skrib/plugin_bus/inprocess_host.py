@@ -146,16 +146,28 @@ class InProcessHost:
             http_base_url = await plugin._start_http_server()
         self._http_urls[plugin.id] = http_base_url
 
-        await client.connect()
-        self._bridge.register_inprocess(plugin.id, client.deliver, plugin.room_types)
-        await plugin.on_connect()
+        try:
+            await client.connect()
+            self._bridge.register_inprocess(plugin.id, client.deliver, plugin.room_types)
+            await plugin.on_connect()
 
-        # The bus server registers settings schemas when it handles a
-        # register.settings frame. In-process plugins never send one, so do it here.
-        if plugin.settings:
-            register_inprocess_settings_schema(plugin.id, plugin.settings)
+            # The bus server registers settings schemas when it handles a
+            # register.settings frame. In-process plugins never send one, so do it here.
+            if plugin.settings:
+                register_inprocess_settings_schema(plugin.id, plugin.settings)
 
-        self._instances[plugin.id] = plugin
+            self._instances[plugin.id] = plugin
+        except Exception:
+            # A failure past this point happens after the HTTP server (if any) is
+            # already listening. start()'s per-plugin try/except records the
+            # failure and moves on to the next plugin — this plugin never reaches
+            # self._instances, and only stop() ever calls _stop_http_server(), only
+            # for instances it holds. Without this cleanup the socket would stay
+            # bound with no code path left to close it for the rest of the
+            # process's life.
+            del self._http_urls[plugin.id]
+            await plugin._stop_http_server()
+            raise
 
     def plugin_records(self) -> list[dict]:
         """Uniform records for every running in-process plugin.

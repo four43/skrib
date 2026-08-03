@@ -292,3 +292,72 @@ async def test_start_registers_settings_schema(tmp_path, bridge):
         ]
     finally:
         await host.stop()
+
+
+@pytest.mark.asyncio
+async def test_failure_after_http_server_starts_leaves_no_orphaned_port(tmp_path, bridge, monkeypatch):
+    """A plugin whose on_connect() raises after its HTTP server started must
+    not leak a bound port.
+
+    start() catches per-plugin exceptions and continues (see
+    test_start_records_failure_without_raising), so without cleanup here a
+    half-started plugin would leave a listening socket with nothing left to
+    close it while the rest of the server runs on normally.
+    """
+    plugin_dir = tmp_path / "test.failsafterhttp"
+    backend_dir = plugin_dir / "backend"
+    backend_dir.mkdir(parents=True)
+    (plugin_dir / "manifest.json").write_text(json.dumps(
+        {"id": "test.failsafterhttp", "version": "1.0.0", "runtime": "in_process", "permissions": []}
+    ))
+    (backend_dir / "plugin_bus.py").write_text(
+        "from skrib_plugin_sdk import SkribPlugin\n\n\n"
+        "class Plugin(SkribPlugin):\n"
+        "    id = 'test.failsafterhttp'\n"
+        "    version = '1.0.0'\n"
+        "    http_port = 0\n\n"
+        "    async def on_connect(self):\n"
+        "        raise RuntimeError('boom - fails after the http server is already up')\n"
+    )
+
+    # Spy on the real run_http_server so the test can learn which port was
+    # bound, without changing what it does.
+    import skrib_plugin_sdk.http as sdk_http
+    original_run_http_server = sdk_http.run_http_server
+    ports: list[int] = []
+
+    async def spying_run_http_server(app, host="127.0.0.1", port=0):
+        server, actual_port = await original_run_http_server(app, host=host, port=port)
+        ports.append(actual_port)
+        return server, actual_port
+
+    monkeypatch.setattr(sdk_http, "run_http_server", spying_run_http_server)
+
+    host = InProcessHost(bridge, tmp_path)
+    started = await host.start()
+
+    assert "test.failsafterhttp" not in started
+    assert "test.failsafterhttp" in host.failures
+    assert ports, "the http server never started — test setup is wrong"
+
+    import httpx
+    with pytest.raises(Exception):
+        async with httpx.AsyncClient(timeout=1.0) as c:
+            await c.get(f"http://127.0.0.1:{ports[0]}/")
+
+
+class TestInprocessSettingsSchemaResetBetweenTests:
+    """Two tests, relying on pytest's default (non-randomized) file order,
+    to prove the autouse reset fixture in conftest.py actually runs — a
+    single test calling the reset function directly wouldn't prove that."""
+
+    def test_a_registers_a_schema_without_cleanup(self):
+        from skrib.plugin_bus.settings import register_inprocess_settings_schema
+
+        register_inprocess_settings_schema("test.leaky", [{"key": "x"}])
+        # Intentionally no unregister call — the autouse fixture must do it.
+
+    def test_b_registry_is_empty_at_start(self):
+        from skrib.plugin_bus.settings import get_settings_schema
+
+        assert get_settings_schema("test.leaky") == []

@@ -389,6 +389,10 @@ class PluginBusBridge:
         In-process plugins are checked first. ws/handlers.py calls this and
         then dispatch_room_action, both of which are runtime-agnostic, so it
         needs no knowledge of where a plugin runs.
+
+        This ordering assumes a manifest declares exactly one `runtime`, so
+        the same plugin id is never both in-process and bus-connected at
+        once — nothing here enforces that, it's just relied upon.
         """
         inproc = self._inprocess_room_types.get(room_type)
         if inproc is not None:
