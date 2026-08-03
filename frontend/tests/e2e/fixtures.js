@@ -11,7 +11,7 @@
 import { test as base, expect } from '@playwright/test';
 import { spawn, execSync } from 'child_process';
 import { createServer } from 'net';
-import { mkdtempSync, rmSync, existsSync, readdirSync } from 'fs';
+import { mkdtempSync, rmSync, existsSync, readdirSync, readFileSync } from 'fs';
 import { tmpdir } from 'os';
 import { join, resolve } from 'path';
 
@@ -88,17 +88,30 @@ function getFreePort() {
 }
 
 /**
- * Discover bundled plugin directories — anything under backend/plugins/ with
- * a __main__.py and a manifest.json. Returns [{ id, dir }].
+ * Discover bundled plugin directories that need their own process — anything
+ * under backend/plugins/ with a __main__.py, a manifest.json, and a manifest
+ * runtime that is not "in_process". Returns [{ id, dir }].
+ *
+ * runtime: "in_process" plugins are loaded by the backend itself (see
+ * skrib/plugin_bus/inprocess_host.py), so there is no process to spawn and
+ * nothing for waitForPluginsReady to wait on.
  */
 function discoverBundledPlugins(backendDir) {
     const pluginsDir = join(backendDir, 'plugins');
     const out = [];
     for (const name of readdirSync(pluginsDir).filter(d => d.startsWith('four43.'))) {
         const dir = join(pluginsDir, name);
-        if (existsSync(join(dir, '__main__.py')) && existsSync(join(dir, 'manifest.json'))) {
-            out.push({ id: name, dir });
+        if (!existsSync(join(dir, '__main__.py'))) continue;
+        const manifestPath = join(dir, 'manifest.json');
+        if (!existsSync(manifestPath)) continue;
+        let manifest;
+        try {
+            manifest = JSON.parse(readFileSync(manifestPath, 'utf8'));
+        } catch {
+            continue;
         }
+        if ((manifest.runtime || 'process') === 'in_process') continue;
+        out.push({ id: name, dir });
     }
     return out;
 }
