@@ -2,6 +2,7 @@
   "id": "four43.room-type-chat",
   "name": "Chat Room",
   "version": "1.0.0",
+  "runtime": "in_process",
   "description": "Provides text-based chat rooms. Handles message storage, delivery, and history.",
   "author": "Four43",
   "entry": "frontend/dist/plugin.js",

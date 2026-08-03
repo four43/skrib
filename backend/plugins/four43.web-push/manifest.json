@@ -2,6 +2,7 @@
   "id": "four43.web-push",
   "name": "Web Push Notifications",
   "version": "1.0.0",
+  "runtime": "process",
   "description": "Sends Web Push notifications for new messages when the app is not in focus.",
   "author": "Four43",
   "entry": "frontend/dist/plugin.js",

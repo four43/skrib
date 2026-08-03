@@ -2,6 +2,7 @@
   "id": "four43.attachments",
   "name": "File Attachments",
   "version": "1.0.0",
+  "runtime": "process",
   "description": "Upload, encrypt, and share file attachments in chat rooms",
   "author": "Four43",
   "entry": "frontend/dist/plugin.js",
